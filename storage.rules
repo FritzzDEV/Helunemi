@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /friend-cards/{accountId}/{assetName} {
+      allow read: if resource.metadata.published == 'true'
+        || (request.auth != null && resource.metadata.ownerFirebaseUid == request.auth.uid);
+      // Uploads and metadata changes go through the authenticated Solaris server.
+      allow write: if false;
+    }
+    match /friend-cards/{accountId}/fonts/{assetName} {
+      allow read: if resource.metadata.published == 'true'
+        || (request.auth != null && resource.metadata.ownerFirebaseUid == request.auth.uid);
+      allow write: if false;
+    }
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
