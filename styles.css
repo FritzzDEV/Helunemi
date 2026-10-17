@@ -1293,6 +1293,7 @@ dialog::backdrop{background:var(--backdrop)}
 .friend-frame-preset-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:.3rem}
 .friend-frame-preset-row strong{overflow:hidden;color:var(--ink);font-size:.68rem;text-overflow:ellipsis;white-space:nowrap}
 .friend-layer-username{font-family:inherit}
+.friend-layer-caption small,.friend-layer-caption>span{color:inherit}
 .friend-layer-image{object-fit:var(--layer-image-fit,contain);object-position:var(--layer-image-position,50% 50%);border-radius:var(--layer-image-radius,0)}
 .friend-layer-shape{border-radius:var(--layer-radius,8%)}
 .friend-layer-button{font-family:inherit}
@@ -1301,6 +1302,78 @@ dialog::backdrop{background:var(--backdrop)}
 .friend-layer-image-tools input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
 .friend-font-upload{position:relative;justify-self:start;margin:.45rem 0;cursor:pointer}
 .friend-font-upload input[type=file]{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+
+/* The Friend-Card editor owns the full viewport while it is open. */
+body.friend-card-edit-mode{position:fixed;inset:0;width:100%;height:100dvh;overflow:hidden}
+body.friend-card-edit-mode>.top,body.friend-card-edit-mode>.foot,body.friend-card-edit-mode>.community-launcher{display:none!important}
+body.friend-card-edit-mode>#app{width:100%;max-width:none;height:100dvh;max-height:100dvh;margin:0;padding:0;overflow:hidden}
+body.friend-card-edit-mode>.toast{z-index:1500}
+body.friend-card-edit-mode .friend-card-editor-page{position:fixed;z-index:1000;inset:0;width:100%;height:100dvh;margin:0;padding:0;background:var(--bg)}
+body.friend-card-edit-mode .friend-card-editor-form{width:100%;height:100%;margin:0}
+body.friend-card-edit-mode .friend-card-workspace{grid-template-rows:auto minmax(0,1fr);gap:.35rem;width:100%;height:100dvh;min-height:0;margin:0;padding:0;overflow:hidden;border:0;border-radius:0;box-shadow:none}
+body.friend-card-edit-mode .friend-editor-toolbar{min-height:3.6rem;flex-wrap:nowrap;gap:.45rem;padding:.45rem .65rem;overflow:hidden}
+body.friend-card-edit-mode .friend-editor-back{flex:none;min-height:2.1rem;padding:.35rem .5rem;font-size:.72rem}
+body.friend-card-edit-mode .friend-editor-title{min-width:110px;max-width:190px;margin:0}
+body.friend-card-edit-mode .friend-editor-title .section-eyebrow{display:none}
+body.friend-card-edit-mode .friend-editor-title input{width:100%;font-size:.85rem}
+body.friend-card-edit-mode .friend-editor-history{min-width:0;flex:none}
+body.friend-card-edit-mode .friend-editor-history>span{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.62rem}
+body.friend-card-edit-mode .friend-editor-toolbar-actions{flex:none;flex-wrap:nowrap}
+body.friend-card-edit-mode .friend-editor-toolbar-actions .btn{min-height:2.1rem;padding:.32rem .5rem;font-size:.68rem;white-space:nowrap}
+body.friend-card-edit-mode .friend-card-editor-message{max-width:100%;margin:0;padding:0 .4rem;font-size:.7rem;white-space:nowrap}
+body.friend-card-edit-mode .friend-card-editor-layout.friend-design-workspace{grid-template-columns:minmax(205px,23vw) minmax(0,1fr) minmax(245px,27vw);gap:.45rem;min-height:0;height:100%;padding:.1rem .45rem .45rem;overflow:hidden}
+body.friend-card-edit-mode .friend-editor-panel{grid-template-rows:auto auto minmax(0,1fr);gap:.45rem;min-height:0;max-height:none;padding:.55rem;overflow:auto;scrollbar-width:none}
+body.friend-card-edit-mode .friend-editor-panel::-webkit-scrollbar,body.friend-card-edit-mode .friend-editor-panel *::-webkit-scrollbar{display:none}
+body.friend-card-edit-mode .friend-editor-panel{scrollbar-width:none}
+body.friend-card-edit-mode .friend-editor-left{grid-template-rows:auto auto minmax(0,1fr)}
+body.friend-card-edit-mode .friend-editor-right{grid-template-rows:auto minmax(0,1fr)}
+body.friend-card-edit-mode .friend-panel-collapse{display:none}
+body.friend-card-edit-mode .friend-editor-panel-head{padding-bottom:.35rem}
+body.friend-card-edit-mode .friend-editor-panel-head .section-eyebrow{display:none}
+body.friend-card-edit-mode .friend-editor-panel-head h2{margin:0;font-size:.82rem}
+body.friend-card-edit-mode .friend-editor-panel-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.25rem}
+body.friend-card-edit-mode .friend-editor-panel-tabs button{min-height:1.85rem;padding:.2rem;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--muted);font-size:.68rem;font-weight:700;cursor:pointer}
+body.friend-card-edit-mode .friend-editor-panel-tabs button[aria-pressed="true"]{border-color:var(--focus);background:color-mix(in srgb,var(--focus) 12%,var(--bg));color:var(--ink)}
+body.friend-card-edit-mode .friend-editor-panel-body{min-height:0;overflow:auto;scrollbar-width:none}
+body.friend-card-edit-mode .friend-editor-panel-body::-webkit-scrollbar{display:none}
+body.friend-card-edit-mode .friend-editor-pane{display:grid;align-content:start;gap:.4rem}
+body.friend-card-edit-mode .friend-editor-pane[hidden]{display:none}
+body.friend-card-edit-mode .friend-editor-section{gap:.4rem;padding:.5rem}
+body.friend-card-edit-mode .friend-editor-section>label,body.friend-card-edit-mode .friend-properties-content>label{gap:.2rem;font-size:.67rem}
+body.friend-card-edit-mode .friend-editor-section input:not([type="color"]):not([type="checkbox"]):not([type="file"]),body.friend-card-edit-mode .friend-editor-section select,body.friend-card-edit-mode .friend-properties-content input:not([type="color"]),body.friend-card-edit-mode .friend-properties-content textarea,body.friend-card-edit-mode .friend-properties-content select{min-height:1.85rem;padding:.32rem .42rem;font-size:.72rem}
+body.friend-card-edit-mode .friend-editor-section input[type="color"],body.friend-card-edit-mode .friend-properties-content input[type="color"]{width:2.1rem;height:2.1rem;min-height:2.1rem;padding:.1rem;border-radius:6px}
+body.friend-card-edit-mode .friend-color-control{gap:.2rem}
+body.friend-card-edit-mode .friend-color-picker{display:grid;grid-template-columns:2.1rem minmax(0,1fr);gap:.35rem;min-height:2.1rem;padding:.12rem;border-radius:7px}
+body.friend-card-edit-mode .friend-color-picker .friend-color-hex{min-width:0;min-height:1.8rem;padding:.25rem .35rem;border:0;border-radius:5px;background:transparent;color:var(--ink);font:700 .7rem ui-monospace,Consolas,monospace;letter-spacing:.02em}
+body.friend-card-edit-mode .friend-color-picker input[type="color"]{width:2rem;height:2rem;min-height:2rem;aspect-ratio:1;padding:.12rem;border-radius:6px}
+body.friend-card-edit-mode .friend-editor-center{grid-template-rows:auto minmax(0,1fr) auto;gap:.3rem;min-height:0;height:100%}
+body.friend-card-edit-mode .friend-canvas-toolbar{flex-wrap:wrap;justify-content:center;gap:.25rem;padding:.25rem}
+body.friend-card-edit-mode .friend-tool-mode{justify-content:center;gap:.1rem}
+body.friend-card-edit-mode .friend-tool-mode button,body.friend-card-edit-mode .friend-canvas-zoom button{min-height:1.65rem;padding:.18rem .32rem;font-size:.62rem}
+body.friend-card-edit-mode .friend-tool-mode kbd{padding:0 .18rem;border:1px solid var(--line);border-radius:3px;font:600 .58rem ui-monospace,Consolas,monospace}
+body.friend-card-edit-mode .friend-canvas-scroll{min-height:0;height:100%;padding:.4rem;overflow:hidden}
+body.friend-card-edit-mode .friend-canvas-size{max-width:100%;transform:scale(var(--friend-editor-zoom,1))}
+body.friend-card-edit-mode #friend-card-editor-stage .friend-card{height:auto;max-height:100%;}
+body.friend-card-edit-mode .friend-canvas-hint{margin:0;font-size:.62rem;text-align:center}
+body.friend-card-edit-mode .friend-properties-content{gap:.4rem}
+body.friend-card-edit-mode .friend-properties-heading{padding-bottom:.35rem}
+body.friend-card-edit-mode .friend-property-grid{gap:.35rem}
+body.friend-card-edit-mode .friend-layer-position-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+body.friend-card-edit-mode .friend-layer-position-grid>label{min-width:0;font-size:.62rem}
+body.friend-card-edit-mode .friend-properties-content textarea{min-height:3.2rem;resize:none}
+body.friend-card-edit-mode .friend-property-details{padding:.3rem 0;border-top:1px solid var(--line)}
+body.friend-card-edit-mode .friend-property-details summary{color:var(--muted);font-size:.7rem;font-weight:700;cursor:pointer}
+body.friend-card-edit-mode .friend-property-details .friend-property-grid{margin-top:.35rem}
+body.friend-card-edit-mode .friend-layer-controls{gap:.25rem;padding-top:.35rem}
+body.friend-card-edit-mode .friend-layer-controls .btn{min-height:1.7rem;padding:.25rem .35rem;font-size:.61rem}
+body.friend-card-edit-mode .friend-editor-section h3{font-size:.7rem}
+body.friend-card-edit-mode .friend-tool-grid button{min-height:1.85rem;padding:.25rem;font-size:.68rem}
+body.friend-card-edit-mode .friend-drawing-settings{gap:.3rem;margin-top:.35rem}
+body.friend-card-edit-mode .friend-drawing-settings .friend-color-control{grid-column:1/-1;grid-template-columns:minmax(0,1fr)}
+body.friend-card-edit-mode .friend-drawing-settings .friend-color-picker{max-width:8rem}
+@media(max-width:1100px){body.friend-card-edit-mode .friend-card-editor-layout.friend-design-workspace{grid-template-columns:minmax(185px,22vw) minmax(0,1fr) minmax(215px,25vw)}body.friend-card-edit-mode .friend-editor-toolbar-actions>[data-friend-export],body.friend-card-edit-mode .friend-import-label,body.friend-card-edit-mode .friend-editor-toolbar-actions>[data-friend-png]{display:none}}
+@media(max-width:760px){body.friend-card-edit-mode .friend-editor-toolbar{flex-wrap:wrap;min-height:0;max-height:5rem;gap:.25rem;padding:.3rem}.friend-card-edit-mode .friend-editor-title{max-width:120px}.friend-card-edit-mode .friend-editor-history>span{display:none}.friend-card-edit-mode .friend-card-editor-layout.friend-design-workspace{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(170px,30vh)}.friend-card-edit-mode .friend-editor-center{grid-column:1/-1;grid-row:1}.friend-card-edit-mode .friend-editor-left{grid-column:1;grid-row:2}.friend-card-edit-mode .friend-editor-right{grid-column:2;grid-row:2}.friend-card-edit-mode .friend-editor-panel{padding:.35rem}.friend-card-edit-mode .friend-editor-panel-tabs button{min-height:1.6rem;font-size:.61rem}}
+@media(max-width:430px){body.friend-card-edit-mode .friend-editor-back{font-size:0}.friend-card-edit-mode .friend-editor-back::after{content:'← Profile';font-size:.68rem}.friend-card-edit-mode .friend-editor-title{max-width:90px}.friend-card-edit-mode .friend-editor-title input{font-size:.7rem}.friend-card-edit-mode .friend-editor-toolbar-actions .btn{padding:.25rem .35rem;font-size:.61rem}}
 .friend-font-list{display:grid;gap:.35rem}
 .friend-font-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.45rem;border:1px solid var(--line);border-radius:9px;background:var(--bg)}
 .friend-font-row>span{display:grid;min-width:0;gap:.1rem}

@@ -391,12 +391,13 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
   const layers = value.layers.slice(0, 80).map((layer, index) => {
     if (!layer || typeof layer !== 'object' || !types.has(layer.type)) return null;
     const type = layer.type;
+    const layerWidth = numeric(layer.width, 20, 1, 100);
     const path = typeof layer.path === 'string' && layer.path.length <= 16000 && /^[MmLlHhVvCcSsQqTtAaZz0-9., +\-]*$/.test(layer.path) ? layer.path : '';
     const fontFamily = uploadedFontIds.has(layer.fontId) ? `SolarisFont-${layer.fontId}` : new Set(['DM Sans','Unbounded','Arial','Georgia','Trebuchet MS','Verdana','Courier New','serif','sans-serif','monospace']).has(layer.fontFamily) ? layer.fontFamily : 'DM Sans';
     return {
-      id: idSafe(layer.id) || `layer${index + 1}`, type, label: text(layer.label || type, 80),
+      id: idSafe(layer.id) || `layer${index + 1}`, type, label: type === 'avatar' ? 'Profile picture' : type === 'username' ? 'Username' : text(layer.label || type, 80),
       field: ['avatar','username','likes','dislikes','favoriteThing','lookingFor','personalityTags','button'].includes(layer.field) ? layer.field : '',
-      x: numeric(layer.x, 0, 0, 100), y: numeric(layer.y, 0, 0, 100), width: numeric(layer.width, 20, 1, 100), height: numeric(layer.height, 10, 1, 100),
+      x: numeric(layer.x, 0, 0, 100), y: numeric(layer.y, 0, 0, 100), width: layerWidth, height: type === 'avatar' ? layerWidth : numeric(layer.height, 10, 1, 100),
       rotation: numeric(layer.rotation, 0, -180, 180), fontSize: numeric(layer.fontSize, 3.2, 1, 14), lineHeight: numeric(layer.lineHeight, 1.2, .8, 2.2), letterSpacing: numeric(layer.letterSpacing, 0, -.5, 2), italic: layer.italic === true, opacity: numeric(layer.opacity, 100, 0, 100),
       color: safeColor(layer.color, cardDefaults.textColor), fill: safeColor(layer.fill, cardDefaults.backgroundColor),
       align: ['left','center','right'].includes(layer.align) ? layer.align : 'left', weight: Number(layer.weight) === 700 ? 700 : 500, radius: numeric(layer.radius, 8, 0, 100), shapeStyle: ['circle','rounded','rectangle'].includes(layer.shapeStyle) ? layer.shapeStyle : 'rounded',
