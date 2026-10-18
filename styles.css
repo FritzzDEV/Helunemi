@@ -1434,3 +1434,59 @@ body.friend-card-edit-mode.friend-transform-active #friend-card-editor-stage{cur
 .friend-sticker-library-item>button:last-child{position:absolute;top:.16rem;right:.16rem;display:grid;place-items:center;width:1.25rem;height:1.25rem;padding:0;border:0;border-radius:50%;background:#372036b3;color:#fff;font-size:.85rem;cursor:pointer}
 .friend-canvas-scroll.is-panning{cursor:grabbing;user-select:none;touch-action:none}
 .friend-canvas-scroll:not(.is-panning){cursor:grab}
+/* Fixed editor panels: tabs stay inside the viewport and their contents scroll invisibly. */
+body.friend-card-edit-mode .friend-card-editor-layout.friend-design-workspace,
+body.friend-card-edit-mode .friend-editor-left,
+body.friend-card-edit-mode .friend-editor-right,
+body.friend-card-edit-mode .friend-editor-center,
+body.friend-card-edit-mode .friend-editor-panel-body,
+body.friend-card-edit-mode .friend-editor-pane,
+body.friend-card-edit-mode .friend-editor-subtab-body,
+body.friend-card-edit-mode .friend-editor-subpane,
+body.friend-card-edit-mode .friend-editor-properties-scroll,
+body.friend-card-edit-mode .friend-properties-panes,
+body.friend-card-edit-mode .friend-properties-content{min-height:0;max-height:100%}
+body.friend-card-edit-mode .friend-card-editor-layout.friend-design-workspace{align-items:stretch;height:100%;overflow:hidden}
+body.friend-card-edit-mode .friend-editor-left,
+body.friend-card-edit-mode .friend-editor-right{height:100%;align-self:stretch;overflow:hidden}
+body.friend-card-edit-mode .friend-editor-panel{grid-template-rows:auto auto minmax(0,1fr);height:100%;max-height:100%;min-height:0;overflow:hidden}
+body.friend-card-edit-mode .friend-editor-panel-body{height:100%;max-height:100%;overflow:hidden}
+body.friend-card-edit-mode .friend-editor-pane{height:100%;max-height:100%;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+body.friend-card-edit-mode .friend-editor-pane::-webkit-scrollbar,
+body.friend-card-edit-mode .friend-editor-subpane::-webkit-scrollbar,
+body.friend-card-edit-mode .friend-editor-properties-scroll::-webkit-scrollbar{display:none}
+body.friend-card-edit-mode .friend-editor-layer-pane{grid-template-rows:auto minmax(0,1fr);height:100%;overflow:hidden}
+body.friend-card-edit-mode .friend-editor-subtab-body{height:100%;overflow:hidden}
+body.friend-card-edit-mode .friend-editor-subpane{height:100%;max-height:100%;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+body.friend-card-edit-mode .friend-editor-properties-scroll{height:100%;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+body.friend-card-edit-mode [data-left-pane-content][hidden],
+body.friend-card-edit-mode [data-layer-pane-content][hidden],
+body.friend-card-edit-mode [data-property-pane-content][hidden]{display:none!important}
+.friend-properties-shell{display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:.45rem;min-width:0;min-height:0;height:100%;max-height:100%;overflow:hidden}
+.friend-properties-heading{display:flex;align-items:center;gap:.55rem;min-width:0;padding-bottom:.35rem;border-bottom:1px solid var(--line)}
+.friend-properties-heading>div{display:grid;gap:.12rem;min-width:0}
+.friend-properties-heading strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.friend-properties-heading small{color:var(--muted);font-size:.68rem;text-transform:capitalize}
+.friend-properties-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.25rem}
+.friend-properties-tabs button{min-width:0;min-height:1.8rem;padding:.2rem;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--muted);font-size:.68rem;font-weight:700;cursor:pointer}
+.friend-properties-tabs button[aria-pressed="true"]{border-color:var(--focus);background:color-mix(in srgb,var(--focus) 13%,var(--bg));color:var(--ink)}
+.friend-properties-panes{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);overflow:hidden}
+.friend-properties-panes>.friend-properties-content{grid-column:1;grid-row:1;min-width:0;min-height:0;max-height:100%;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+.friend-properties-panes>.friend-properties-content::-webkit-scrollbar{display:none}
+.friend-property-assets{align-content:start}
+.friend-card-layer .friend-layer-button{position:absolute;inset:0;display:grid;place-items:center;flex:none;width:100%;height:100%;min-width:0;min-height:0;box-sizing:border-box;margin:0;overflow:hidden;border-radius:var(--layer-radius,8px);font-size:1em;line-height:1.1;white-space:normal;overflow-wrap:anywhere}
+.friend-card-layer.friend-layer-button{overflow:visible}
+.friend-card-layer.friend-layer-button>.friend-layer-button{pointer-events:auto}
+body.friend-card-edit-mode .friend-layer-avatar{pointer-events:auto;cursor:move}
+body.friend-card-edit-mode .friend-layer-avatar>*{pointer-events:none;-webkit-user-drag:none;user-select:none}
+body.friend-card-edit-mode .friend-layer-avatar img{pointer-events:none;-webkit-user-drag:none;user-select:none}
+.friend-card-layer.friend-layer-shape>.friend-layer-shape{display:block;width:100%;height:100%;background:var(--layer-fill,#f5a300);border-radius:0;box-shadow:inset 0 0 0 1px #0002}
+.friend-card-layer.friend-shape-triangle>.friend-layer-shape{clip-path:polygon(50% 0,0 100%,100% 100%)!important}
+.friend-card-layer.friend-shape-diamond>.friend-layer-shape{clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)!important}
+.friend-card-layer.friend-shape-star>.friend-layer-shape{clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 95%,50% 72%,21% 95%,32% 57%,2% 35%,39% 35%)!important}
+.friend-card-layer.friend-shape-hexagon>.friend-layer-shape{clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)!important}
+.friend-card-layer.friend-shape-circle>.friend-layer-shape{border-radius:50%}
+.friend-card-layer.friend-shape-rounded>.friend-layer-shape{border-radius:var(--layer-radius,8px)}
+.friend-card-layer.friend-shape-square>.friend-layer-shape{border-radius:0}
+body.friend-card-edit-mode .friend-editor-left{grid-template-rows:auto auto minmax(0,1fr)}
+body.friend-card-edit-mode .friend-editor-right{grid-template-rows:auto minmax(0,1fr)}
