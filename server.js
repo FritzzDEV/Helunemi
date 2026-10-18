@@ -400,11 +400,16 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
       x: numeric(layer.x, 0, 0, 100), y: numeric(layer.y, 0, 0, 100), width: layerWidth, height: type === 'avatar' ? layerWidth : numeric(layer.height, 10, 1, 100),
       rotation: numeric(layer.rotation, 0, -180, 180), fontSize: numeric(layer.fontSize, 3.2, 1, 14), lineHeight: numeric(layer.lineHeight, 1.2, .8, 2.2), letterSpacing: numeric(layer.letterSpacing, 0, -.5, 2), italic: layer.italic === true, opacity: numeric(layer.opacity, 100, 0, 100),
       color: safeColor(layer.color, cardDefaults.textColor), fill: safeColor(layer.fill, cardDefaults.backgroundColor),
-      align: ['left','center','right'].includes(layer.align) ? layer.align : 'left', weight: Number(layer.weight) === 700 ? 700 : 500, radius: numeric(layer.radius, 8, 0, 100), shapeStyle: ['circle','rounded','rectangle'].includes(layer.shapeStyle) ? layer.shapeStyle : 'rounded',
+      align: ['left','center','right'].includes(layer.align) ? layer.align : 'left', weight: Number(layer.weight) === 700 ? 700 : 500, radius: numeric(layer.radius, 8, 0, 100), shapeStyle: ['circle','rounded','rectangle','square','triangle','diamond','star','hexagon'].includes(layer.shapeStyle) ? layer.shapeStyle : 'rounded',
       text: text(layer.text, 500), fontFamily, fontId: uploadedFontIds.has(layer.fontId) ? layer.fontId : '', image: ['sticker','frame-piece'].includes(type) ? friendCardAsset(layer.image, 800_000, ownerId) : '', imageFit: ['contain','cover','fill'].includes(layer.imageFit) ? layer.imageFit : 'contain', imagePositionX: numeric(layer.imagePositionX, 50, 0, 100), imagePositionY: numeric(layer.imagePositionY, 50, 0, 100), imageMask: ['square','rounded','circle'].includes(layer.imageMask) ? layer.imageMask : 'square', path,
-      strokeWidth: numeric(layer.strokeWidth, 8, 1, 100), visible: layer.visible !== false, locked: layer.locked === true
+      strokeWidth: numeric(layer.strokeWidth, 8, 1, 100), visible: ['avatar','username'].includes(type) ? true : layer.visible !== false, visibilityMode: ['avatar','username'].includes(type) ? 'both' : ['preview','full','both'].includes(layer.visibilityMode) ? layer.visibilityMode : 'both', locked: layer.locked === true
     };
   }).filter(Boolean);
+  const protectedLayers = [
+    { id: 'required-avatar', type: 'avatar', label: 'Profile picture', field: 'avatar', x: 5, y: 7, width: 18, height: 18, color: cardDefaults.textColor, visible: true, visibilityMode: 'both', locked: false },
+    { id: 'required-username', type: 'username', label: 'Username', field: 'username', x: 27, y: 9, width: 68, height: 12, fontSize: 5, color: cardDefaults.titleColor, visible: true, visibilityMode: 'both', locked: false, weight: 700 }
+  ];
+  for (const required of protectedLayers) if (!layers.some(layer => layer.type === required.type)) layers.push(required);
   const frameSource = value.frame && typeof value.frame === 'object' ? value.frame : {};
   const cornerNames = ['topLeft','topRight','bottomLeft','bottomRight'], sideNames = ['top','bottom','left','right'], pieceNames = [...cornerNames,...sideNames];
   const frameImages = (source, names) => Object.fromEntries(names.map(name => [name, friendCardAsset(source?.[name], 800_000, ownerId)]));

@@ -1271,12 +1271,6 @@ dialog::backdrop{background:var(--backdrop)}
 @media(max-width:650px){.friend-card-editor-layout.friend-design-workspace{grid-template-columns:minmax(0,1fr)}.friend-card-editor-layout.friend-design-workspace>.friend-editor-right{grid-column:auto;grid-template-columns:1fr;max-height:none}.friend-editor-panel{max-height:420px}.friend-editor-toolbar{grid-template-columns:1fr}.friend-editor-toolbar-actions{display:flex;flex-wrap:wrap}.friend-canvas-scroll{min-height:340px}}
 .friend-layer-rotate{position:absolute;top:-1.35rem;left:calc(50% - .48rem);z-index:2000;display:grid;place-items:center;width:.95rem;height:.95rem;padding:0;border:2px solid white;border-radius:50%;background:#7850c9;color:#fff;font-size:.62rem;line-height:1;box-shadow:0 1px 5px #0005;cursor:grab;touch-action:none}
 .friend-layer-rotate:active{cursor:grabbing}
-.friend-drawing-settings{display:grid;grid-template-columns:1fr 1fr;gap:.45rem;margin-top:.55rem}
-.friend-drawing-settings label{display:grid;gap:.28rem;color:var(--muted);font-size:.7rem;font-weight:700}
-.friend-drawing-settings label:first-child{grid-column:1/-1;grid-template-columns:auto 2.5rem;align-items:center}
-.friend-drawing-settings input[type=color]{width:2.5rem;height:1.75rem;padding:.1rem;border:1px solid var(--line);border-radius:7px;background:var(--surface)}
-.friend-drawing-settings input[type=range]{width:100%;accent-color:var(--ember)}
-.friend-drawing-settings output{color:var(--ink);font-size:.67rem;font-weight:600}
 .friend-frame-assets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem}
 .frame-piece-row{display:grid;grid-template-columns:minmax(70px,1fr) auto auto auto auto;align-items:center;gap:.3rem;min-width:0;padding:.35rem;border:1px solid var(--line);border-radius:9px;background:var(--bg)}
 .frame-piece-row>span{overflow:hidden;color:var(--ink);font-size:.69rem;font-weight:650;text-overflow:ellipsis;white-space:nowrap}
@@ -1368,9 +1362,6 @@ body.friend-card-edit-mode .friend-layer-controls{gap:.25rem;padding-top:.35rem}
 body.friend-card-edit-mode .friend-layer-controls .btn{min-height:1.7rem;padding:.25rem .35rem;font-size:.61rem}
 body.friend-card-edit-mode .friend-editor-section h3{font-size:.7rem}
 body.friend-card-edit-mode .friend-tool-grid button{min-height:1.85rem;padding:.25rem;font-size:.68rem}
-body.friend-card-edit-mode .friend-drawing-settings{gap:.3rem;margin-top:.35rem}
-body.friend-card-edit-mode .friend-drawing-settings .friend-color-control{grid-column:1/-1;grid-template-columns:minmax(0,1fr)}
-body.friend-card-edit-mode .friend-drawing-settings .friend-color-picker{max-width:8rem}
 @media(max-width:1100px){body.friend-card-edit-mode .friend-card-editor-layout.friend-design-workspace{grid-template-columns:minmax(185px,22vw) minmax(0,1fr) minmax(215px,25vw)}body.friend-card-edit-mode .friend-editor-toolbar-actions>[data-friend-export],body.friend-card-edit-mode .friend-import-label,body.friend-card-edit-mode .friend-editor-toolbar-actions>[data-friend-png]{display:none}}
 @media(max-width:760px){body.friend-card-edit-mode .friend-editor-toolbar{flex-wrap:wrap;min-height:0;max-height:5rem;gap:.25rem;padding:.3rem}.friend-card-edit-mode .friend-editor-title{max-width:120px}.friend-card-edit-mode .friend-editor-history>span{display:none}.friend-card-edit-mode .friend-card-editor-layout.friend-design-workspace{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(170px,30vh)}.friend-card-edit-mode .friend-editor-center{grid-column:1/-1;grid-row:1}.friend-card-edit-mode .friend-editor-left{grid-column:1;grid-row:2}.friend-card-edit-mode .friend-editor-right{grid-column:2;grid-row:2}.friend-card-edit-mode .friend-editor-panel{padding:.35rem}.friend-card-edit-mode .friend-editor-panel-tabs button{min-height:1.6rem;font-size:.61rem}}
 @media(max-width:430px){body.friend-card-edit-mode .friend-editor-back{font-size:0}.friend-card-edit-mode .friend-editor-back::after{content:'← Profile';font-size:.68rem}.friend-card-edit-mode .friend-editor-title{max-width:90px}.friend-card-edit-mode .friend-editor-title input{font-size:.7rem}.friend-card-edit-mode .friend-editor-toolbar-actions .btn{padding:.25rem .35rem;font-size:.61rem}}
@@ -1379,6 +1370,62 @@ body.friend-card-edit-mode .friend-drawing-settings .friend-color-picker{max-wid
 .friend-font-row>span{display:grid;min-width:0;gap:.1rem}
 .friend-font-row strong{overflow:hidden;color:var(--ink);font-size:.74rem;text-overflow:ellipsis;white-space:nowrap}
 .friend-font-row small{color:var(--muted);font-size:.65rem}
+
+/* Keep each editor panel inside its viewport; long tabs scroll within their own area. */
+body.friend-card-edit-mode .friend-editor-panel,
+body.friend-card-edit-mode .friend-editor-panel *{box-sizing:border-box;min-width:0}
+body.friend-card-edit-mode .friend-editor-panel{overflow:hidden}
+body.friend-card-edit-mode .friend-editor-panel-body{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);overflow:hidden}
+body.friend-card-edit-mode .friend-editor-pane{grid-column:1;grid-row:1;min-width:0;min-height:0;max-height:100%;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--line) 65%,transparent) transparent}
+body.friend-card-edit-mode .friend-editor-pane[hidden]{display:none}
+body.friend-card-edit-mode .friend-editor-layer-pane{grid-template-rows:auto minmax(0,1fr);overflow:hidden}
+body.friend-card-edit-mode .friend-editor-subtabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.2rem;padding-bottom:.35rem;border-bottom:1px solid var(--line)}
+body.friend-card-edit-mode .friend-editor-subtabs button{min-width:0;min-height:1.8rem;padding:.2rem;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--muted);font-size:.62rem;font-weight:700;line-height:1.15;cursor:pointer}
+body.friend-card-edit-mode .friend-editor-subtabs button[aria-pressed="true"]{border-color:var(--focus);background:color-mix(in srgb,var(--focus) 13%,var(--bg));color:var(--ink)}
+body.friend-card-edit-mode .friend-editor-subtab-body{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);min-width:0;min-height:0;overflow:hidden}
+body.friend-card-edit-mode .friend-editor-subpane{grid-column:1;grid-row:1;display:grid;align-content:start;gap:.35rem;min-width:0;min-height:0;max-height:100%;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--line) 65%,transparent) transparent}
+body.friend-card-edit-mode .friend-editor-subpane[hidden]{display:none}
+body.friend-card-edit-mode .friend-editor-right{grid-template-rows:auto minmax(0,1fr);overflow:hidden}
+body.friend-card-edit-mode .friend-editor-properties-scroll{min-height:0;max-height:100%;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--line) 65%,transparent) transparent}
+body.friend-card-edit-mode .friend-properties-content,
+body.friend-card-edit-mode .friend-properties-content .friend-property-grid,
+body.friend-card-edit-mode .friend-property-grid>label{min-width:0;max-width:100%}
+body.friend-card-edit-mode .friend-properties-content .friend-property-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+body.friend-card-edit-mode .friend-properties-content .friend-property-grid>label{display:grid;gap:.2rem;min-width:0;color:var(--muted);font-size:.67rem;font-weight:700}
+body.friend-card-edit-mode .friend-properties-content input,
+body.friend-card-edit-mode .friend-properties-content select,
+body.friend-card-edit-mode .friend-properties-content textarea{width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+body.friend-card-edit-mode .friend-properties-content input[type="range"]{padding:0}
+body.friend-card-edit-mode .friend-color-control{display:grid;grid-template-columns:minmax(0,1fr);min-width:0;max-width:100%}
+body.friend-card-edit-mode .friend-color-picker{display:grid;grid-template-columns:2.1rem minmax(0,1fr);align-items:center;width:100%;min-width:0;max-width:100%;overflow:hidden}
+body.friend-card-edit-mode .friend-color-picker input[type="color"]{width:2rem;min-width:2rem;max-width:2rem;aspect-ratio:1}
+body.friend-card-edit-mode .friend-color-picker .friend-color-hex{width:100%;min-width:0;max-width:100%}
+body.friend-card-edit-mode .friend-layer-position-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+body.friend-card-edit-mode .friend-layer-row{min-width:0;max-width:100%}
+body.friend-card-edit-mode .friend-layer-select{min-width:0;overflow:hidden}
+body.friend-card-edit-mode .friend-layer-select>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.friend-card-edit-mode .friend-layer-protected{display:grid;place-items:center;width:1.65rem;flex:none;color:var(--focus);font-size:.65rem}
+body.friend-card-edit-mode .friend-layer-protected-note{align-self:center;color:var(--muted);font-size:.62rem;font-weight:700}
+body.friend-card-edit-mode .friend-tool-grid.friend-shape-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+body.friend-card-edit-mode .friend-tool-grid button{min-width:0;max-width:100%;white-space:normal;line-height:1.2}
+body.friend-card-edit-mode .friend-card-workspace{user-select:none;-webkit-user-select:none}
+body.friend-card-edit-mode .friend-card-workspace input,
+body.friend-card-edit-mode .friend-card-workspace textarea,
+body.friend-card-edit-mode .friend-card-workspace select{user-select:text;-webkit-user-select:text}
+body.friend-card-edit-mode #friend-card-editor-stage,
+body.friend-card-edit-mode #friend-card-editor-stage *{user-select:none;-webkit-user-select:none}
+body.friend-card-edit-mode .friend-card-layer img,
+body.friend-card-edit-mode .friend-layer-avatar,
+body.friend-card-edit-mode .friend-layer-avatar img{pointer-events:none;-webkit-user-drag:none;user-select:none}
+.friend-shape-triangle .friend-layer-shape{clip-path:polygon(50% 0,0 100%,100% 100%);border-radius:0}
+.friend-shape-diamond .friend-layer-shape{clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);border-radius:0}
+.friend-shape-star .friend-layer-shape{clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 95%,50% 72%,21% 95%,32% 57%,2% 35%,39% 35%);border-radius:0}
+.friend-shape-hexagon .friend-layer-shape{clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);border-radius:0}
+.friend-shape-square .friend-layer-shape{border-radius:0}
+.friend-shape-circle .friend-layer-shape{border-radius:50%}
+.friend-shape-rounded .friend-layer-shape{border-radius:var(--layer-radius,12%)}
+body.friend-card-edit-mode.friend-transform-active #friend-card-editor-stage{cursor:crosshair}
+@media(max-width:760px){body.friend-card-edit-mode .friend-editor-subtabs button{font-size:.55rem;padding:.15rem}.friend-card-edit-mode .friend-editor-properties-scroll{padding-right:.1rem}}
 .friend-sticker-library{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.35rem;margin-top:.55rem}
 .friend-sticker-library-item{position:relative;min-width:0}
 .friend-sticker-library-item>button:first-child{display:grid;justify-items:center;gap:.18rem;width:100%;padding:.3rem;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--ink);cursor:pointer}
