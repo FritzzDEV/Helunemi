@@ -39,10 +39,12 @@
   let communityData = {friends:[],friendRequestsSent:[],friendRequestsReceived:[],bugReports:[]};
   let communityPane = 'home';
   let communityConversationId = '';
+  let communitySettingsConversationId = '';
   let communityRefreshTimer = null;
   let communityRecorder = null;
   let communityRecorderChunks = [];
-  let communityChatSettings = {background:'#111017',ownBubble:'#342442',friendBubble:'#24212a',text:'#f7f2ff',fontSize:15,fontFamily:'DM Sans',animation:'pop',compact:false,wallpaper:''};
+  const defaultCommunityChatSettings = {background:'#111017',ownBubble:'#342442',friendBubble:'#24212a',text:'#f7f2ff',fontSize:15,fontFamily:'DM Sans',animation:'pop',compact:false,wallpaper:''};
+  let communityChatSettings = {...defaultCommunityChatSettings};
   let firebaseSetupKnown = false;
   let firebaseEnabled = false;
   let firebaseMissingSettings = [];
@@ -940,7 +942,12 @@
   async function loadCommunityConversation(id) {
     const main = $('[data-community-main]'), person = communityData.friends.find(friend => friend.id === id);
     if (!main || !person) return;
+    if (communitySettingsConversationId !== id) {
+      communitySettingsConversationId = id;
+      loadCommunityChatSettings();
+    }
     main.classList.add('is-chat-view');
+    applyCommunityChatSettings();
     main.innerHTML = `<header class="community-pane-heading">${avatar(person.username,'community-avatar',person.avatarImage)}<div><h2>${esc(person.username)}</h2><p><i class="chat-online-dot${person.online ? ' is-online' : ''}"></i><span data-friend-presence>${person.online ? 'Online' : 'Offline'}</span> · ${esc(person.primaryRole)}</p></div><a href="account.html?user=${encodeURIComponent(person.id)}">View profile ↗</a><button class="chat-settings-button" type="button" data-chat-settings aria-label="Chat appearance settings">⚙</button></header><div class="community-message-list" aria-live="polite"></div><div class="chat-composer-wrap"><div class="chat-sticker-panel" data-chat-sticker-panel hidden><span>Send a sticker</span><div>${['✨','🌞','💖','🥺','🌙','🎮','🎉','🐈','❄️','⭐','💬','🫶'].map(sticker => `<button type="button" data-chat-sticker="${sticker}" aria-label="Send sticker ${sticker}">${sticker}</button>`).join('')}<button type="button" data-chat-file-open="sticker" aria-label="Upload a sticker image" title="Upload your own sticker">＋</button></div></div><form class="community-composer" id="community-message-form"><div class="chat-composer-tools"><button type="button" data-chat-file-open="image" aria-label="Send image" title="Send image">▧</button><button type="button" data-chat-file-open="gif" aria-label="Send GIF" title="Send GIF">GIF</button><button type="button" data-chat-sticker-toggle aria-label="Choose sticker" title="Choose sticker">✦</button><button type="button" data-chat-voice aria-label="Record voice message" title="Record voice message">🎙</button><input type="file" data-chat-file="image" accept="image/png,image/jpeg,image/webp" hidden><input type="file" data-chat-file="gif" accept="image/gif" hidden><input type="file" data-chat-file="sticker" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div><label class="visually-hidden" for="community-message-input">Message ${esc(person.username)}</label><textarea id="community-message-input" name="text" rows="1" maxlength="2000" placeholder="Message ${esc(person.username)}…"></textarea><button class="btn btn-primary" type="submit" aria-label="Send message">Send <span aria-hidden="true">↑</span></button><span class="chat-voice-status" data-chat-voice-status aria-live="polite"></span></form></div><aside class="chat-settings-panel" data-chat-settings-panel hidden></aside>`;
     try { const result = await api(`/api/community/messages?with=${encodeURIComponent(id)}`); renderCommunityMessages(result.messages || []); }
     catch (error) { main.querySelector('.community-message-list').innerHTML = `<p class="community-inline-error">${esc(error.message)}</p>`; }
@@ -949,6 +956,7 @@
     const main = $('[data-community-main]');
     if (!main) return;
     main.classList.remove('is-chat-view');
+    if (communityPane !== 'chat' || !currentUser || !communityConversationId) clearCommunityChatSettingsScope(main);
     if (!currentUser) {
       main.innerHTML = `<div class="community-welcome community-gate"><span class="community-welcome-mark">✦</span><p class="section-eyebrow">SOLARIS COMMUNITY</p><h1>Make a little room for connection.</h1><p>Sign in to chat with friends, accept requests, and send a bug report to the studio.</p><div><a class="btn btn-primary" href="account.html?mode=login">Log in</a><a class="btn btn-ghost" href="account.html?mode=signup">Sign up</a></div></div>`;
       return;
@@ -975,21 +983,34 @@
   function renderCommunityUI() {
     ensureCommunityMessenger(); renderCommunitySidebar(); renderCommunityPane();
   }
+  function communityChatSettingsKey() {
+    return `solaris-chat-settings:${encodeURIComponent(currentUser?.id || 'guest')}:${encodeURIComponent(communityConversationId || 'none')}`;
+  }
+  function clearCommunityChatSettingsScope(main = $('[data-community-main]')) {
+    communitySettingsConversationId = '';
+    communityChatSettings = {...defaultCommunityChatSettings};
+    if (!main) return;
+    ['--chat-bg','--chat-own-bubble','--chat-friend-bubble','--chat-message-text','--chat-font-size','--chat-font-family','--chat-wallpaper-image'].forEach(property => main.style.removeProperty(property));
+    main.classList.remove('chat-compact');
+    delete main.dataset.chatAnimation;
+  }
   function applyCommunityChatSettings() {
-    const root = document.documentElement, settings = communityChatSettings;
-    root.style.setProperty('--chat-bg',settings.background);
-    root.style.setProperty('--chat-own-bubble',settings.ownBubble);
-    root.style.setProperty('--chat-friend-bubble',settings.friendBubble);
-    root.style.setProperty('--chat-message-text',settings.text);
-    root.style.setProperty('--chat-font-size',`${settings.fontSize}px`);
-    root.style.setProperty('--chat-font-family',settings.fontFamily);
-    root.style.setProperty('--chat-wallpaper-image',settings.wallpaper ? `url("${settings.wallpaper}")` : 'none');
-    document.body.classList.toggle('chat-compact',settings.compact);
-    document.body.dataset.chatAnimation = settings.animation;
+    const panel = $('[data-community-main]'), settings = communityChatSettings;
+    if (!panel || !panel.classList.contains('is-chat-view')) return;
+    panel.style.setProperty('--chat-bg',settings.background);
+    panel.style.setProperty('--chat-own-bubble',settings.ownBubble);
+    panel.style.setProperty('--chat-friend-bubble',settings.friendBubble);
+    panel.style.setProperty('--chat-message-text',settings.text);
+    panel.style.setProperty('--chat-font-size',`${settings.fontSize}px`);
+    panel.style.setProperty('--chat-font-family',settings.fontFamily);
+    panel.style.setProperty('--chat-wallpaper-image',settings.wallpaper ? `url("${settings.wallpaper}")` : 'none');
+    panel.classList.toggle('chat-compact',settings.compact);
+    panel.dataset.chatAnimation = settings.animation;
   }
   function loadCommunityChatSettings() {
+    communityChatSettings = {...defaultCommunityChatSettings};
     try {
-      const saved = JSON.parse(localStorage.getItem(`solaris-chat-settings:${currentUser?.id || 'guest'}`) || '{}');
+      const saved = JSON.parse(localStorage.getItem(communityChatSettingsKey()) || '{}');
       communityChatSettings = {...communityChatSettings,...saved};
       if (!/^#[\da-f]{6}$/i.test(communityChatSettings.background)) communityChatSettings.background = '#111017';
       if (!/^#[\da-f]{6}$/i.test(communityChatSettings.ownBubble)) communityChatSettings.ownBubble = '#342442';
@@ -1003,7 +1024,7 @@
     applyCommunityChatSettings();
   }
   function saveCommunityChatSettings() {
-    try { localStorage.setItem(`solaris-chat-settings:${currentUser?.id || 'guest'}`,JSON.stringify(communityChatSettings)); }
+    try { localStorage.setItem(communityChatSettingsKey(),JSON.stringify(communityChatSettings)); }
     catch (_) { toast('These appearance settings could not be saved in this browser.'); }
     applyCommunityChatSettings();
   }
@@ -1015,7 +1036,7 @@
   async function initializeCommunityPage() {
     communityPane = 'home';
     communityConversationId = '';
-    loadCommunityChatSettings();
+    clearCommunityChatSettingsScope();
     renderCommunityUI();
     if (!currentUser) return;
     const requestedFriend = new URLSearchParams(location.search).get('with') || '';
