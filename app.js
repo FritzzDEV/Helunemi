@@ -33,13 +33,16 @@
   const paragraphs = value => String(value || '').split(/\n\s*\n/).map(part => part.trim()).filter(Boolean).map(part => `<p>${esc(part)}</p>`).join('');
   const app = $('#app');
   const page = document.body.dataset.page || 'home';
-  const titles = {home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork'};
+  const titles = {home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat'};
   let currentUser = null;
   let memberProfiles = [];
   let communityData = {friends:[],friendRequestsSent:[],friendRequestsReceived:[],bugReports:[]};
   let communityPane = 'home';
   let communityConversationId = '';
   let communityRefreshTimer = null;
+  let communityRecorder = null;
+  let communityRecorderChunks = [];
+  let communityChatSettings = {background:'#111017',ownBubble:'#342442',friendBubble:'#24212a',text:'#f7f2ff',fontSize:15,fontFamily:'DM Sans',animation:'pop',compact:false,wallpaper:''};
   let firebaseSetupKnown = false;
   let firebaseEnabled = false;
   let firebaseMissingSettings = [];
@@ -883,7 +886,7 @@
     if (currentUser?.id === member.id) return '';
     if (!currentUser) return `<a class="community-add-friend" href="account.html?mode=login">Log in to add friend</a>`;
     const id = esc(member.id), friends = communityData.friends || [], sent = communityData.friendRequestsSent || [], received = communityData.friendRequestsReceived || [];
-    if (friends.some(person => person.id === member.id)) return '<button class="community-add-friend is-done" type="button" disabled>Friends ✓</button>';
+    if (friends.some(person => person.id === member.id)) return `<a class="community-add-friend is-done" href="chat.html?with=${encodeURIComponent(member.id)}">Message</a>`;
     if (sent.some(person => person.id === member.id)) return '<button class="community-add-friend is-pending" type="button" disabled>Request sent</button>';
     if (received.some(person => person.id === member.id)) return `<button class="community-add-friend" type="button" data-community-respond="${id}" data-community-accept="true">Accept request</button>`;
     return `<button class="community-add-friend" type="button" data-community-add-friend="${id}">Add Friend</button>`;
@@ -899,20 +902,16 @@
     return currentUser?.accountRole === 'owner' || ['assistant','ai-assistant','developer'].includes(currentUser?.primaryRole);
   }
   function ensureCommunityMessenger() {
-    if (!$('#community-launcher')) {
-      const launch = document.createElement('button');
-      launch.id = 'community-launcher'; launch.className = 'community-launcher'; launch.type = 'button'; launch.setAttribute('aria-label','Open Solaris Community chat');
-      launch.innerHTML = '<img src="assets/golden-spiral-sun-icon.png" alt=""><span>Community</span>';
-      launch.addEventListener('click',openCommunityMessenger);
-      document.body.append(launch);
+    if (page === 'chat') {
+      document.body.classList.add('community-page-body');
+      $('#community-launcher')?.remove();
+      return;
     }
-    if (!$('#community-dialog')) {
-      const dialog = document.createElement('dialog');
-      dialog.id = 'community-dialog'; dialog.className = 'community-dialog'; dialog.setAttribute('aria-label','Solaris Community');
-      dialog.innerHTML = '<div class="community-shell"><header class="community-header"><a href="index.html" class="community-brand"><img src="assets/golden-spiral-sun-icon.png" alt=""><span>Solaris Community</span></a><div class="community-header-actions"><span class="community-presence"><i></i>Studio community</span><button type="button" class="community-close" data-close-community aria-label="Close community">×</button></div></header><div class="community-layout"><aside class="community-sidebar" data-community-sidebar></aside><main class="community-main" data-community-main></main></div></div>';
-      dialog.addEventListener('click',event => { if (event.target === dialog) dialog.close(); });
-      dialog.addEventListener('close',() => { clearInterval(communityRefreshTimer); communityRefreshTimer = null; });
-      document.body.append(dialog);
+    if (!$('#community-launcher')) {
+      const launch = document.createElement('a');
+      launch.id = 'community-launcher'; launch.className = 'community-launcher'; launch.href = 'chat.html'; launch.setAttribute('aria-label','Open Solaris Community chat');
+      launch.innerHTML = '<img src="assets/golden-spiral-sun-icon.png" alt=""><span>Community</span>';
+      document.body.append(launch);
     }
   }
   function renderCommunitySidebar() {
@@ -924,24 +923,32 @@
     }
     const requests = communityData.friendRequestsReceived || [];
     const friends = communityData.friends || [];
-    sidebar.innerHTML = `<p class="community-sidebar-kicker">YOUR SPACE</p><button class="community-nav-item${communityPane === 'home' ? ' is-active' : ''}" type="button" data-community-pane="home"><span>✦</span> Overview</button><button class="community-nav-item${communityPane === 'requests' ? ' is-active' : ''}" type="button" data-community-pane="requests"><span>♧</span> Friend requests${requests.length ? `<b>${requests.length}</b>` : ''}</button>${isCurrentUserStaff() ? `<button class="community-nav-item${communityPane === 'reports' ? ' is-active' : ''}" type="button" data-community-pane="reports"><span>⚑</span> Studio reports${communityData.bugReports?.length ? `<b>${communityData.bugReports.filter(report => report.status === 'open').length}</b>` : ''}</button>` : ''}<div class="community-friends-heading"><span>FRIENDS</span><b>${friends.length}</b></div><div class="community-friend-list">${friends.length ? friends.map(person => `<button class="community-friend-item${communityPane === 'chat' && communityConversationId === person.id ? ' is-active' : ''}" type="button" data-community-chat="${esc(person.id)}">${avatar(person.username,'community-avatar',person.avatarImage)}<span><strong>${esc(person.username)}</strong><small>${esc(person.primaryRole)}</small></span><i></i></button>`).join('') : '<p class="community-no-friends">Accepted friends appear here. Visit the Members page to send a request.</p>'}</div><button class="community-report-launch" type="button" data-community-pane="report"><span>⚑</span><span><strong>Report a bug</strong><small>Send a note to the studio team</small></span><b>↗</b></button>`;
+    sidebar.innerHTML = `<p class="community-sidebar-kicker">YOUR SPACE</p><button class="community-nav-item${communityPane === 'home' ? ' is-active' : ''}" type="button" data-community-pane="home"><span>✦</span> Overview</button><button class="community-nav-item${communityPane === 'requests' ? ' is-active' : ''}" type="button" data-community-pane="requests"><span>♧</span> Friend requests${requests.length ? `<b>${requests.length}</b>` : ''}</button>${isCurrentUserStaff() ? `<button class="community-nav-item${communityPane === 'reports' ? ' is-active' : ''}" type="button" data-community-pane="reports"><span>⚑</span> Studio reports${communityData.bugReports?.length ? `<b>${communityData.bugReports.filter(report => report.status === 'open').length}</b>` : ''}</button>` : ''}<div class="community-friends-heading"><span>FRIENDS</span><b>${friends.length}</b></div><div class="community-friend-list">${friends.length ? friends.map(person => `<button class="community-friend-item${communityPane === 'chat' && communityConversationId === person.id ? ' is-active' : ''}" type="button" data-community-chat="${esc(person.id)}">${avatar(person.username,'community-avatar',person.avatarImage)}<span><strong>${esc(person.username)}</strong><small>${esc(person.primaryRole)}</small></span><i class="${person.online ? 'is-online' : 'is-offline'}" title="${person.online ? 'Online' : 'Offline'}"></i></button>`).join('') : '<p class="community-no-friends">Accepted friends appear here. Visit the Members page to send a request.</p>'}</div><button class="community-report-launch" type="button" data-community-pane="report"><span>⚑</span><span><strong>Report a bug</strong><small>Send a note to the studio team</small></span><b>↗</b></button>`;
   }
   function renderCommunityMessages(messages) {
     const list = $('.community-message-list');
     if (!list) return;
-    list.innerHTML = messages.length ? messages.map(message => `<article class="community-message${message.senderId === currentUser?.id ? ' is-mine' : ''}"><span class="community-message-author">${message.senderId === currentUser?.id ? 'You' : esc(memberProfiles.find(person => person.id === message.senderId)?.username || communityData.friends.find(person => person.id === message.senderId)?.username || 'Friend')}</span><p>${esc(message.text).replace(/\n/g,'<br>')}</p><time>${new Date(message.createdAt).toLocaleString([], {dateStyle:'medium',timeStyle:'short'})}</time></article>`).join('') : '<p class="community-empty-chat">This is the start of your conversation. Say hello!</p>';
+    const existing = new Set($$('.community-message[data-message-id]',list).map(item => item.dataset.messageId));
+    list.innerHTML = messages.length ? messages.map(message => {
+      const type = message.type || 'text', isMine = message.senderId === currentUser?.id;
+      let body = type === 'image' || type === 'gif' ? `<img class="chat-media-image${type === 'gif' ? ' is-gif' : ''}" src="${esc(message.mediaUrl)}" alt="${type === 'gif' ? 'Animated GIF' : 'Image shared in chat'}" loading="lazy">` : type === 'voice' ? `<audio class="chat-voice-player" controls preload="metadata" src="${esc(message.mediaUrl)}">Your browser cannot play this voice message.</audio>` : type === 'sticker' ? (message.mediaUrl ? `<img class="chat-sticker-image" src="${esc(message.mediaUrl)}" alt="Sticker" loading="lazy">` : `<div class="chat-sticker-message" aria-label="Sticker">${esc(message.text)}</div>`) : `<p>${esc(message.text).replace(/\n/g,'<br>')}</p>`;
+      const animate = !existing.has(message.id) && Date.now() - Number(message.createdAt) < 5000;
+      return `<article class="community-message${isMine ? ' is-mine' : ''}${animate ? ' is-new' : ''}" data-message-id="${esc(message.id)}"><span class="community-message-author">${isMine ? 'You' : esc(communityData.friends.find(person => person.id === message.senderId)?.username || 'Friend')}</span>${body}${message.caption ? `<p class="chat-media-caption">${esc(message.caption)}</p>` : ''}<time>${new Date(message.createdAt).toLocaleString([], {dateStyle:'medium',timeStyle:'short'})}</time></article>`;
+    }).join('') : '<p class="community-empty-chat">This is the start of your conversation. Say hello!</p>';
     list.scrollTop = list.scrollHeight;
   }
   async function loadCommunityConversation(id) {
     const main = $('[data-community-main]'), person = communityData.friends.find(friend => friend.id === id);
     if (!main || !person) return;
-    main.innerHTML = `<header class="community-pane-heading">${avatar(person.username,'community-avatar',person.avatarImage)}<div><h2>${esc(person.username)}</h2><p>Friend · ${esc(person.primaryRole)}</p></div><a href="account.html?user=${encodeURIComponent(person.id)}">View profile ↗</a></header><div class="community-message-list" aria-live="polite"></div><form class="community-composer" id="community-message-form"><label class="visually-hidden" for="community-message-input">Message ${esc(person.username)}</label><textarea id="community-message-input" name="text" rows="1" maxlength="2000" placeholder="Message ${esc(person.username)}…" required></textarea><button class="btn btn-primary" type="submit" aria-label="Send message">Send <span aria-hidden="true">↑</span></button></form>`;
+    main.classList.add('is-chat-view');
+    main.innerHTML = `<header class="community-pane-heading">${avatar(person.username,'community-avatar',person.avatarImage)}<div><h2>${esc(person.username)}</h2><p><i class="chat-online-dot${person.online ? ' is-online' : ''}"></i><span data-friend-presence>${person.online ? 'Online' : 'Offline'}</span> · ${esc(person.primaryRole)}</p></div><a href="account.html?user=${encodeURIComponent(person.id)}">View profile ↗</a><button class="chat-settings-button" type="button" data-chat-settings aria-label="Chat appearance settings">⚙</button></header><div class="community-message-list" aria-live="polite"></div><div class="chat-composer-wrap"><div class="chat-sticker-panel" data-chat-sticker-panel hidden><span>Send a sticker</span><div>${['✨','🌞','💖','🥺','🌙','🎮','🎉','🐈','❄️','⭐','💬','🫶'].map(sticker => `<button type="button" data-chat-sticker="${sticker}" aria-label="Send sticker ${sticker}">${sticker}</button>`).join('')}<button type="button" data-chat-file-open="sticker" aria-label="Upload a sticker image" title="Upload your own sticker">＋</button></div></div><form class="community-composer" id="community-message-form"><div class="chat-composer-tools"><button type="button" data-chat-file-open="image" aria-label="Send image" title="Send image">▧</button><button type="button" data-chat-file-open="gif" aria-label="Send GIF" title="Send GIF">GIF</button><button type="button" data-chat-sticker-toggle aria-label="Choose sticker" title="Choose sticker">✦</button><button type="button" data-chat-voice aria-label="Record voice message" title="Record voice message">🎙</button><input type="file" data-chat-file="image" accept="image/png,image/jpeg,image/webp" hidden><input type="file" data-chat-file="gif" accept="image/gif" hidden><input type="file" data-chat-file="sticker" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div><label class="visually-hidden" for="community-message-input">Message ${esc(person.username)}</label><textarea id="community-message-input" name="text" rows="1" maxlength="2000" placeholder="Message ${esc(person.username)}…"></textarea><button class="btn btn-primary" type="submit" aria-label="Send message">Send <span aria-hidden="true">↑</span></button><span class="chat-voice-status" data-chat-voice-status aria-live="polite"></span></form></div><aside class="chat-settings-panel" data-chat-settings-panel hidden></aside>`;
     try { const result = await api(`/api/community/messages?with=${encodeURIComponent(id)}`); renderCommunityMessages(result.messages || []); }
     catch (error) { main.querySelector('.community-message-list').innerHTML = `<p class="community-inline-error">${esc(error.message)}</p>`; }
   }
   async function renderCommunityPane() {
     const main = $('[data-community-main]');
     if (!main) return;
+    main.classList.remove('is-chat-view');
     if (!currentUser) {
       main.innerHTML = `<div class="community-welcome community-gate"><span class="community-welcome-mark">✦</span><p class="section-eyebrow">SOLARIS COMMUNITY</p><h1>Make a little room for connection.</h1><p>Sign in to chat with friends, accept requests, and send a bug report to the studio.</p><div><a class="btn btn-primary" href="account.html?mode=login">Log in</a><a class="btn btn-ghost" href="account.html?mode=signup">Sign up</a></div></div>`;
       return;
@@ -968,30 +975,129 @@
   function renderCommunityUI() {
     ensureCommunityMessenger(); renderCommunitySidebar(); renderCommunityPane();
   }
+  function applyCommunityChatSettings() {
+    const root = document.documentElement, settings = communityChatSettings;
+    root.style.setProperty('--chat-bg',settings.background);
+    root.style.setProperty('--chat-own-bubble',settings.ownBubble);
+    root.style.setProperty('--chat-friend-bubble',settings.friendBubble);
+    root.style.setProperty('--chat-message-text',settings.text);
+    root.style.setProperty('--chat-font-size',`${settings.fontSize}px`);
+    root.style.setProperty('--chat-font-family',settings.fontFamily);
+    root.style.setProperty('--chat-wallpaper-image',settings.wallpaper ? `url("${settings.wallpaper}")` : 'none');
+    document.body.classList.toggle('chat-compact',settings.compact);
+    document.body.dataset.chatAnimation = settings.animation;
+  }
+  function loadCommunityChatSettings() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(`solaris-chat-settings:${currentUser?.id || 'guest'}`) || '{}');
+      communityChatSettings = {...communityChatSettings,...saved};
+      if (!/^#[\da-f]{6}$/i.test(communityChatSettings.background)) communityChatSettings.background = '#111017';
+      if (!/^#[\da-f]{6}$/i.test(communityChatSettings.ownBubble)) communityChatSettings.ownBubble = '#342442';
+      if (!/^#[\da-f]{6}$/i.test(communityChatSettings.friendBubble)) communityChatSettings.friendBubble = '#24212a';
+      if (!/^#[\da-f]{6}$/i.test(communityChatSettings.text)) communityChatSettings.text = '#f7f2ff';
+      communityChatSettings.fontSize = Math.min(20,Math.max(13,Number(communityChatSettings.fontSize) || 15));
+      if (!['DM Sans','Georgia','monospace'].includes(communityChatSettings.fontFamily)) communityChatSettings.fontFamily = 'DM Sans';
+      if (!['pop','fade','slide','none'].includes(communityChatSettings.animation)) communityChatSettings.animation = 'pop';
+      if (typeof communityChatSettings.wallpaper !== 'string' || !communityChatSettings.wallpaper.startsWith('data:image/')) communityChatSettings.wallpaper = '';
+    } catch (_) {}
+    applyCommunityChatSettings();
+  }
+  function saveCommunityChatSettings() {
+    try { localStorage.setItem(`solaris-chat-settings:${currentUser?.id || 'guest'}`,JSON.stringify(communityChatSettings)); }
+    catch (_) { toast('These appearance settings could not be saved in this browser.'); }
+    applyCommunityChatSettings();
+  }
+  function renderCommunityChatSettings() {
+    const panel = $('[data-chat-settings-panel]');
+    if (!panel) return;
+    panel.innerHTML = `<div class="chat-settings-heading"><div><span class="section-eyebrow">YOUR CHAT SPACE</span><h2>Appearance</h2></div><button type="button" data-chat-settings-close aria-label="Close settings">×</button></div><div class="chat-settings-fields"><label>Chat background<input type="color" data-chat-setting="background" value="${esc(communityChatSettings.background)}"></label><label>Your bubble<input type="color" data-chat-setting="ownBubble" value="${esc(communityChatSettings.ownBubble)}"></label><label>Friend bubble<input type="color" data-chat-setting="friendBubble" value="${esc(communityChatSettings.friendBubble)}"></label><label>Message text<input type="color" data-chat-setting="text" value="${esc(communityChatSettings.text)}"></label><label class="chat-range-setting">Text size <output data-chat-font-output>${communityChatSettings.fontSize}px</output><input type="range" min="13" max="20" step="1" data-chat-setting="fontSize" value="${communityChatSettings.fontSize}"></label><label>Message font<select data-chat-setting="fontFamily"><option${communityChatSettings.fontFamily === 'DM Sans' ? ' selected' : ''}>DM Sans</option><option${communityChatSettings.fontFamily === 'Georgia' ? ' selected' : ''}>Georgia</option><option${communityChatSettings.fontFamily === 'monospace' ? ' selected' : ''}>monospace</option></select></label><label>New message animation<select data-chat-setting="animation"><option value="pop"${communityChatSettings.animation === 'pop' ? ' selected' : ''}>Soft pop</option><option value="fade"${communityChatSettings.animation === 'fade' ? ' selected' : ''}>Fade in</option><option value="slide"${communityChatSettings.animation === 'slide' ? ' selected' : ''}>Slide in</option><option value="none"${communityChatSettings.animation === 'none' ? ' selected' : ''}>None</option></select></label><label class="chat-wallpaper-setting">Chat wallpaper <input type="file" data-chat-wallpaper accept="image/png,image/jpeg,image/webp"></label><label class="chat-compact-setting"><input type="checkbox" data-chat-setting="compact"${communityChatSettings.compact ? ' checked' : ''}> Compact message spacing</label><button type="button" class="btn btn-ghost btn-sm" data-chat-wallpaper-clear${communityChatSettings.wallpaper ? '' : ' hidden'}>Remove wallpaper</button></div><div class="chat-coming-soon"><span>Custom chat bubbles</span><strong>Coming soon~</strong><p>Build a bubble style that feels like yours. This option is planned for a future update.</p></div>`;
+  }
+  async function initializeCommunityPage() {
+    communityPane = 'home';
+    communityConversationId = '';
+    loadCommunityChatSettings();
+    renderCommunityUI();
+    if (!currentUser) return;
+    const requestedFriend = new URLSearchParams(location.search).get('with') || '';
+    try {
+      await api('/api/community/presence','POST',{});
+      const result = await api('/api/community');
+      communityData = result.community || communityData;
+      const initialFriend = communityData.friends?.some(person => person.id === requestedFriend) ? requestedFriend : communityData.friends?.[0]?.id;
+      if (initialFriend) { communityPane = 'chat'; communityConversationId = initialFriend; }
+      renderCommunitySidebar();
+      if (communityPane === 'chat') await loadCommunityConversation(communityConversationId);
+      else await renderCommunityPane();
+    } catch (error) { toast(error.message); }
+    clearInterval(communityRefreshTimer);
+    communityRefreshTimer = setInterval(async () => {
+      if (!currentUser || document.visibilityState === 'hidden') return;
+      try {
+        await api('/api/community/presence','POST',{});
+        const result = await api('/api/community');
+        communityData = result.community || communityData;
+        renderCommunitySidebar();
+        if (communityPane === 'chat' && communityConversationId) {
+          const person = communityData.friends.find(friend => friend.id === communityConversationId);
+          const label = $('[data-friend-presence]');
+          if (!person) { communityPane = 'home'; communityConversationId = ''; await renderCommunityPane(); }
+          else {
+            if (label) label.textContent = person.online ? 'Online' : 'Offline';
+            $('.chat-online-dot')?.classList.toggle('is-online',person.online === true);
+            const messages = await api(`/api/community/messages?with=${encodeURIComponent(communityConversationId)}`);
+            renderCommunityMessages(messages.messages || []);
+          }
+        }
+      } catch (_) {}
+    },12000);
+  }
+  async function sendCommunityMedia(file, kind, caption = '') {
+    if (!communityConversationId || !file) return;
+    const status = $('[data-chat-voice-status]');
+    try {
+      const largeImage = file.type.startsWith('image/') && file.type !== 'image/gif';
+      if (file.size > (largeImage ? 12_000_000 : 1_800_000)) throw new Error(largeImage ? 'Choose an image smaller than 12 MB.' : 'Choose a file smaller than 1.8 MB.');
+      if (status) status.textContent = 'Uploading…';
+      let data = await readAsDataUrl(file);
+      if (['image','sticker'].includes(kind) && file.type !== 'image/gif') data = await compressChatImage(data);
+      if (kind === 'voice') data = data.replace(/^data:audio\/webm;codecs=[^;]+;base64,/,'data:audio/webm;base64,').replace(/^data:audio\/ogg;codecs=[^;]+;base64,/,'data:audio/ogg;base64,');
+      const upload = await api('/api/community/asset','POST',{recipientId:communityConversationId,kind,data});
+      await api('/api/community/message','POST',{recipientId:communityConversationId,type:kind === 'gif' ? 'gif' : kind,mediaUrl:upload.url,mediaPath:upload.path,text:'',caption:caption.slice(0,240)});
+      const result = await api(`/api/community/messages?with=${encodeURIComponent(communityConversationId)}`);
+      renderCommunityMessages(result.messages || []);
+      if (status) status.textContent = '';
+      const textInput = $('#community-message-input'); if (textInput) textInput.value = '';
+    } catch (error) { if (status) status.textContent = ''; toast(error.message); }
+  }
+  function readAsDataUrl(file) {
+    return new Promise((resolve,reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '')); reader.onerror = () => reject(new Error('The selected file could not be read.')); reader.readAsDataURL(file); });
+  }
+  async function compressChatImage(dataUrl) {
+    const image = new Image();
+    await new Promise((resolve,reject) => { image.onload = resolve; image.onerror = () => reject(new Error('That image could not be opened.')); image.src = dataUrl; });
+    const scale = Math.min(1,1600 / Math.max(image.naturalWidth,image.naturalHeight));
+    const canvas = document.createElement('canvas'); canvas.width = Math.round(image.naturalWidth * scale); canvas.height = Math.round(image.naturalHeight * scale);
+    const context = canvas.getContext('2d'); if (!context) throw new Error('Your browser could not prepare that image.');
+    context.drawImage(image,0,0,canvas.width,canvas.height);
+    for (const quality of [.86,.75,.64,.53]) { const output = canvas.toDataURL('image/webp',quality); if (output.length < 2_400_000) return output; }
+    throw new Error('That image is too large after resizing. Choose a smaller image.');
+  }
+  async function sendCommunitySticker(sticker) {
+    if (!communityConversationId) return;
+    try {
+      await api('/api/community/message','POST',{recipientId:communityConversationId,type:'sticker',text:sticker});
+      const result = await api(`/api/community/messages?with=${encodeURIComponent(communityConversationId)}`);
+      renderCommunityMessages(result.messages || []);
+      $('[data-chat-sticker-panel]')?.setAttribute('hidden','');
+    } catch (error) { toast(error.message); }
+  }
   async function refreshCommunity() {
     if (!currentUser) { communityData = {friends:[],friendRequestsSent:[],friendRequestsReceived:[],bugReports:[]}; renderCommunityUI(); renderMemberCardGrid(); return; }
     try {
       const result = await api('/api/community'); communityData = result.community || communityData;
       renderCommunitySidebar(); renderMemberCardGrid();
-      if (communityPane === 'home' && $('#community-dialog')?.open) renderCommunityPane();
-    } catch (error) { if ($('#community-dialog')?.open) toast(error.message); }
-  }
-  async function openCommunityMessenger() {
-    ensureCommunityMessenger();
-    const dialog = $('#community-dialog');
-    if (!dialog.open) dialog.showModal();
-    communityPane = 'home'; communityConversationId = '';
-    renderCommunityUI();
-    if (currentUser) await refreshCommunity();
-    clearInterval(communityRefreshTimer);
-    communityRefreshTimer = setInterval(async () => {
-      if (!$('#community-dialog')?.open || !currentUser) return;
-      await refreshCommunity();
-      if (communityPane === 'chat' && communityConversationId) {
-        try { const result = await api(`/api/community/messages?with=${encodeURIComponent(communityConversationId)}`); renderCommunityMessages(result.messages || []); }
-        catch (_) {}
-      }
-    },12000);
+      if (page === 'chat' && communityPane !== 'chat') renderCommunityPane();
+    } catch (error) { if (page === 'chat') toast(error.message); }
   }
   async function updateCommunityFriendRequest(button) {
     button.disabled = true;
@@ -1021,6 +1127,7 @@
   }
   function profilePreview() {
     ensureCommunityMessenger();
+    if (page === 'chat') return;
     if (currentUser) refreshCommunity();
     const button = $('#profile-button');
     const popover = $('#profile-popover');
@@ -1054,6 +1161,9 @@
   }
 
   const views = {
+    chat() {
+      return `<div class="community-shell community-page-shell"><header class="community-header"><a href="index.html" class="community-brand"><img src="assets/golden-spiral-sun-icon.png" alt=""><span>Solaris Community</span></a><div class="community-header-actions"><span class="community-presence"><i></i><span data-studio-presence>Studio community</span></span><a class="community-close" href="index.html" data-close-community aria-label="Close community">×</a></div></header><div class="community-layout"><aside class="community-sidebar" data-community-sidebar></aside><main class="community-main" data-community-main></main></div></div>`;
+    },
     home() {
       const game = DATA.games[0];
       return `<section class="hero" aria-labelledby="hero-title"><div class="hero-in"><h1 id="hero-title">Solaris<br>Studio</h1>
@@ -1117,7 +1227,7 @@
     const selectedProject = page === 'project' ? gameById(new URLSearchParams(location.search).get('id')) || DATA.games[0] : null;
     const selectedArtwork = page === 'artwork' ? artById(new URLSearchParams(location.search).get('id')) || DATA.arts[0] : null;
     document.title = selectedProject ? `${selectedProject.name} | Solaris Studio` : selectedArtwork ? `${selectedArtwork.title} | Solaris Studio` : `${titles[page] ? `${titles[page]} | ` : ''}Solaris Studio`;
-    $('#nav-list').innerHTML = ROUTES.map(([id,label,href]) => `<li><a href="${href}"${id === page ? ' aria-current="page"' : ''}>${label}</a></li>`).join('');
+    if ($('#nav-list')) $('#nav-list').innerHTML = ROUTES.map(([id,label,href]) => `<li><a href="${href}"${id === page ? ' aria-current="page"' : ''}>${label}</a></li>`).join('');
     ensureGlobalSearch();
     ensureCommunityMessenger();
   }
@@ -1273,6 +1383,7 @@
   }
   function closeProfile() {
     const popover = $('#profile-popover');
+    if (!popover) return;
     popover.hidden = true;
     $('#profile-button').setAttribute('aria-expanded','false');
     $$('[data-note-toggle]',popover).forEach(button => {
@@ -1806,12 +1917,14 @@
     if (currentUser) leaveGuestMode();
     profilePreview();
     if (page === 'account') showAccount();
+    if (page === 'chat') await initializeCommunityPage();
     if (['shop','download','project'].includes(page)) renderPage();
     try { await resumePendingFirebaseSignup(); }
     catch (error) { if (page === 'account' && !currentUser) setMessage('#auth-message',error.message); }
   }).catch(error => {
     currentUser = null;
     profilePreview();
+    if (page === 'chat') renderCommunityUI();
     if (page === 'account') app.innerHTML = isGuest && !new URLSearchParams(location.search).has('mode') ? guestDashboard() : authView('signup','Could not reach the account server. Start the site with node server.js and reload.');
   });
 
@@ -1891,6 +2004,9 @@
     const communityChatButton = event.target.closest('[data-community-chat]');
     const communityAddFriend = event.target.closest('[data-community-add-friend]');
     const communityRespond = event.target.closest('[data-community-respond]');
+    const chatFileOpen = event.target.closest('[data-chat-file-open]');
+    const chatSticker = event.target.closest('[data-chat-sticker]');
+    const chatVoice = event.target.closest('[data-chat-voice]');
     const removeFramePiece = event.target.closest('[data-remove-frame-piece]');
     const removeFont = event.target.closest('[data-remove-friend-font]');
     const useSticker = event.target.closest('[data-use-friend-sticker]');
@@ -1898,6 +2014,30 @@
     const loadFramePreset = event.target.closest('[data-load-frame-preset]');
     const removeFramePreset = event.target.closest('[data-remove-frame-preset]');
     if (event.target.closest('[data-close-community]')) { $('#community-dialog')?.close(); return; }
+    if (chatFileOpen) { $(`[data-chat-file="${chatFileOpen.dataset.chatFileOpen}"]`)?.click(); return; }
+    if (chatSticker) { await sendCommunitySticker(chatSticker.dataset.chatSticker); return; }
+    if (event.target.closest('[data-chat-sticker-toggle]')) { const panel = $('[data-chat-sticker-panel]'); if (panel) panel.hidden = !panel.hidden; return; }
+    if (event.target.closest('[data-chat-settings]')) { const panel = $('[data-chat-settings-panel]'); if (panel) { renderCommunityChatSettings(); panel.hidden = false; } return; }
+    if (event.target.closest('[data-chat-settings-close]')) { $('[data-chat-settings-panel]')?.setAttribute('hidden',''); return; }
+    if (event.target.closest('[data-chat-wallpaper-clear]')) { communityChatSettings.wallpaper = ''; saveCommunityChatSettings(); renderCommunityChatSettings(); return; }
+    if (chatVoice) {
+      if (communityRecorder?.state === 'recording') { communityRecorder.stop(); chatVoice.textContent = '🎙'; chatVoice.classList.remove('is-recording'); $('[data-chat-voice-status]').textContent = 'Finishing voice message…'; return; }
+      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { toast('Voice recording is not supported in this browser.'); return; }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        communityRecorderChunks = [];
+        communityRecorder = new MediaRecorder(stream);
+        communityRecorder.ondataavailable = event => { if (event.data.size) communityRecorderChunks.push(event.data); };
+        communityRecorder.onstop = async () => {
+          stream.getTracks().forEach(track => track.stop());
+          const blob = new Blob(communityRecorderChunks,{type:communityRecorder.mimeType || 'audio/webm'});
+          communityRecorder = null; communityRecorderChunks = [];
+          if (blob.size) await sendCommunityMedia(new File([blob],`voice-message.${blob.type.includes('ogg') ? 'ogg' : 'webm'}`,{type:blob.type}),'voice');
+        };
+        communityRecorder.start(); chatVoice.textContent = '■'; chatVoice.classList.add('is-recording'); $('[data-chat-voice-status]').textContent = 'Recording… click ■ to send';
+      } catch (error) { toast(error.name === 'NotAllowedError' ? 'Allow microphone access to record a voice message.' : 'The microphone could not be opened.'); }
+      return;
+    }
     if (communityPaneButton) { communityPane = communityPaneButton.dataset.communityPane; communityConversationId = ''; renderCommunitySidebar(); await renderCommunityPane(); return; }
     if (communityChatButton) { communityPane = 'chat'; communityConversationId = communityChatButton.dataset.communityChat; renderCommunitySidebar(); await loadCommunityConversation(communityConversationId); return; }
     if (communityAddFriend) { await updateCommunityFriendRequest(communityAddFriend); return; }
@@ -2150,7 +2290,7 @@
     if (event.target.closest('[data-cancel-edit]')) { editingProfile = false; editingFriendCard = false; viewingPersonalInfo = false; showAccount(); return; }
     if (!event.target.closest('.profile-wrap')) closeProfile();
     if (!event.target.closest('.global-search')) closeGlobalSearch();
-    if (!event.target.closest('.top')) { const nav = $('#nav'); nav.classList.remove('open'); $('[data-menu]').setAttribute('aria-expanded','false'); }
+    if (!event.target.closest('.top')) { const nav = $('#nav'), menu = $('[data-menu]'); nav?.classList.remove('open'); menu?.setAttribute('aria-expanded','false'); }
   });
   document.addEventListener('submit', async event => {
     if (event.target.id === 'community-message-form') {
@@ -2308,6 +2448,29 @@
     }
   });
   document.addEventListener('change', async event => {
+    const chatFile = event.target.closest('[data-chat-file]');
+    if (chatFile) {
+      const file = chatFile.files?.[0], kind = chatFile.dataset.chatFile, caption = $('#community-message-input')?.value || '';
+      chatFile.value = '';
+      if (file) await sendCommunityMedia(file,kind === 'gif' ? 'gif' : kind === 'sticker' ? 'sticker' : 'image',caption);
+      return;
+    }
+    const wallpaperFile = event.target.closest('[data-chat-wallpaper]');
+    if (wallpaperFile) {
+      const file = wallpaperFile.files?.[0]; wallpaperFile.value = '';
+      if (!file) return;
+      try { if (file.size > 2_000_000) throw new Error('Choose a wallpaper smaller than 2 MB.'); communityChatSettings.wallpaper = await compressChatImage(await readAsDataUrl(file)); saveCommunityChatSettings(); renderCommunityChatSettings(); }
+      catch (error) { toast(error.message); }
+      return;
+    }
+    const chatSetting = event.target.closest('[data-chat-setting]');
+    if (chatSetting) {
+      const key = chatSetting.dataset.chatSetting;
+      communityChatSettings[key] = chatSetting.type === 'checkbox' ? chatSetting.checked : key === 'fontSize' ? Number(chatSetting.value) : chatSetting.value;
+      const output = $('[data-chat-font-output]'); if (output) output.textContent = `${communityChatSettings.fontSize}px`;
+      saveCommunityChatSettings();
+      return;
+    }
     const changedLayerProperty = event.target.closest('[data-layer-property]');
     if (changedLayerProperty && friendCardLayerBefore) {
       friendCardUndoStack.push(friendCardLayerBefore); friendCardLayerBefore = null;
@@ -2494,5 +2657,5 @@
     const options = $('#profile-options');
     if (options) { options.hidden = true; $('.profile-options-button')?.setAttribute('aria-expanded','false'); }
   });
-  $('#dlg').addEventListener('click', event => { if (event.target === $('#dlg')) $('#dlg').close(); });
+  $('#dlg')?.addEventListener('click', event => { if (event.target === $('#dlg')) $('#dlg').close(); });
 })();

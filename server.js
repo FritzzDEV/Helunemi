@@ -17,7 +17,7 @@ const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const PAUSE_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 const USERNAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY = 3 * 1024 * 1024;
-const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js']);
+const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js']);
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.png': 'image/png' };
 const PRIMARY_ROLES = {
   assistant: { label: 'Assistant', explanation: 'Supports studio coordination and helps keep Solaris projects moving.' },
@@ -35,6 +35,7 @@ let pool = null;
 let firebaseAuth = null;
 const sessions = new Map();
 const attempts = new Map();
+const communityPresence = new Map();
 let writeQueue = Promise.resolve();
 
 function send(res, status, value, headers = {}) {
@@ -225,8 +226,11 @@ function cleanCommunity(value, accountId) {
   const messages = (Array.isArray(source.messages) ? source.messages : []).slice(-250).map(item => {
     if (!item || typeof item !== 'object' || typeof item.id !== 'string' || typeof item.senderId !== 'string' || typeof item.recipientId !== 'string') return null;
     const messageText = typeof item.text === 'string' ? item.text.trim().slice(0, 2000) : '';
-    if (!messageText) return null;
-    return { id: item.id.slice(0, 100), senderId: item.senderId.slice(0, 100), recipientId: item.recipientId.slice(0, 100), text: messageText, createdAt: Math.max(0, Number(item.createdAt) || Date.now()) };
+    const type = ['text','image','gif','voice','sticker'].includes(item.type) ? item.type : 'text';
+    const mediaUrl = typeof item.mediaUrl === 'string' && item.mediaUrl.startsWith('https://firebasestorage.googleapis.com/') ? item.mediaUrl.slice(0,1400) : '';
+    const mediaPath = typeof item.mediaPath === 'string' ? item.mediaPath.slice(0,400) : '';
+    if (type === 'text' && !messageText || type === 'sticker' && !messageText && !mediaUrl || ['image','gif','voice'].includes(type) && !mediaUrl) return null;
+    return { id: item.id.slice(0, 100), senderId: item.senderId.slice(0, 100), recipientId: item.recipientId.slice(0, 100), type, text: messageText, ...(mediaUrl ? {mediaUrl,mediaPath} : {}), caption: typeof item.caption === 'string' ? item.caption.trim().slice(0,240) : '', createdAt: Math.max(0, Number(item.createdAt) || Date.now()) };
   }).filter(Boolean);
   const bugReports = (Array.isArray(source.bugReports) ? source.bugReports : []).slice(-100).map(item => {
     if (!item || typeof item !== 'object' || typeof item.id !== 'string') return null;
@@ -235,7 +239,8 @@ function cleanCommunity(value, accountId) {
   return { friends: ids('friends'), friendRequestsSent: ids('friendRequestsSent'), friendRequestsReceived: ids('friendRequestsReceived'), messages, bugReports };
 }
 function communityAccountSummary(account) {
-  return { id: account.id, username: account.profile.username, avatarImage: account.profile.avatarImage || '', primaryRole: account.role === 'owner' ? 'owner' : account.profile.primaryRole || 'member' };
+  const seenAt = communityPresence.get(account.id) || 0;
+  return { id: account.id, username: account.profile.username, avatarImage: account.profile.avatarImage || '', primaryRole: account.role === 'owner' ? 'owner' : account.profile.primaryRole || 'member', online: Date.now() - seenAt < 45000 };
 }
 function isStudioStaff(account) {
   return account.role === 'owner' || ['assistant','ai-assistant','developer'].includes(account.profile.primaryRole);
@@ -575,6 +580,13 @@ async function handleApi(req, res, pathname) {
     if (!account) return send(res, 401, { error: 'Log in to use Solaris Community.' });
     return send(res, 200, { community: communitySnapshot(account) });
   }
+  if (req.method === 'POST' && pathname === '/api/community/presence') {
+    const account = await getAccount(req);
+    if (!account) return send(res, 401, { error: 'Log in to show your online status.' });
+    communityPresence.set(account.id,Date.now());
+    for (const [id,seenAt] of communityPresence) if (Date.now() - seenAt > 5 * 60 * 1000) communityPresence.delete(id);
+    return send(res, 200, { online: true });
+  }
   if (req.method === 'POST' && pathname === '/api/community/friend-request') {
     const account = await getAccount(req);
     if (!account) return send(res, 401, { error: 'Log in to add friends.' });
@@ -624,6 +636,34 @@ async function handleApi(req, res, pathname) {
     const messages = account.community.messages.filter(item => (item.senderId === account.id && item.recipientId === otherId) || (item.senderId === otherId && item.recipientId === account.id)).sort((a,b) => a.createdAt - b.createdAt);
     return send(res, 200, { messages });
   }
+  if (req.method === 'POST' && pathname === '/api/community/asset') {
+    const account = await getAccount(req);
+    if (!account) return send(res, 401, { error: 'Log in to send chat media.' });
+    const input = await readBody(req), target = accounts.find(item => item.id === input.recipientId);
+    normalizeAccount(account);
+    if (!target || !account.community.friends.includes(target.id)) return send(res, 403, { error: 'You can only send media to an accepted friend.' });
+    const match = typeof input.data === 'string' ? /^data:(image\/(?:webp|png|jpeg|gif)|audio\/(?:webm|ogg|mpeg|mp4|wav));base64,([A-Za-z0-9+/]+={0,2})$/.exec(input.data) : null;
+    if (!match) return send(res, 400, { error: 'Choose a JPG, PNG, WebP, GIF, or supported audio recording.' });
+    if (!['image','gif','sticker','voice'].includes(input.kind)) return send(res,400,{error:'Choose an image, GIF, sticker, or voice recording.'});
+    const mimeType = match[1], isImage = mimeType.startsWith('image/');
+    if (isImage !== ['image','gif','sticker'].includes(input.kind)) return send(res, 400, { error: 'The selected media does not match its file type.' });
+    if (input.kind === 'gif' && mimeType !== 'image/gif' || input.kind === 'voice' && !mimeType.startsWith('audio/')) return send(res, 400, { error: 'The selected media does not match its file type.' });
+    const buffer = Buffer.from(match[2],'base64');
+    if (!buffer.length || buffer.length > 1_800_000) return send(res, 413, { error: 'Choose a chat media file smaller than 1.8 MB.' });
+    const extension = ({'image/webp':'webp','image/png':'png','image/jpeg':'jpg','image/gif':'gif','audio/webm':'webm','audio/ogg':'ogg','audio/mpeg':'mp3','audio/mp4':'m4a','audio/wav':'wav'})[mimeType];
+    const objectPath = `community/${account.id}/${target.id}/${crypto.randomUUID()}.${extension}`;
+    const token = crypto.randomUUID();
+    try {
+      const bucket = getFirebaseStorageBucket();
+      await bucket.file(objectPath).save(buffer,{resumable:false,metadata:{contentType:mimeType,cacheControl:'private, max-age=31536000',metadata:{senderAccountId:account.id,recipientAccountId:target.id,firebaseStorageDownloadTokens:token}}});
+      const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
+      return send(res,201,{url,path:objectPath});
+    } catch (error) {
+      if (error.status) return send(res,error.status,{error:error.message});
+      console.error('FIREBASE COMMUNITY MEDIA UPLOAD ERROR:',error);
+      return send(res,503,{error:'Chat media could not be uploaded. Check Firebase Storage and its service-account permissions.'});
+    }
+  }
   if (req.method === 'POST' && pathname === '/api/community/message') {
     const account = await getAccount(req);
     if (!account) return send(res, 401, { error: 'Log in to send messages.' });
@@ -632,8 +672,22 @@ async function handleApi(req, res, pathname) {
     if (!target || !account.community.friends.includes(target.id)) return send(res, 403, { error: 'You can only message an accepted friend.' });
     normalizeAccount(target);
     const body = typeof input.text === 'string' ? input.text.trim() : '';
-    if (!body || body.length > 2000) return send(res, 400, { error: 'Write a message of 1–2,000 characters.' });
-    const message = { id: crypto.randomUUID(), senderId: account.id, recipientId: target.id, text: body, createdAt: Date.now() };
+    const type = ['text','image','gif','voice','sticker'].includes(input.type) ? input.type : 'text';
+    if (type === 'text' && (!body || body.length > 2000)) return send(res, 400, { error: 'Write a message of 1–2,000 characters.' });
+    if (type === 'sticker' && ((!body && !input.mediaUrl) || body.length > 24)) return send(res,400,{error:'Choose a sticker to send.'});
+    let mediaUrl = '', mediaPath = '';
+    if (['image','gif','voice'].includes(type) || type === 'sticker' && input.mediaUrl) {
+      let parsed, urlBucket;
+      try {
+        parsed = new URL(String(input.mediaUrl || ''));
+        mediaUrl = parsed.href;
+        mediaPath = decodeURIComponent(parsed.pathname.split('/o/')[1] || '');
+        urlBucket = decodeURIComponent(parsed.pathname.split('/')[3] || '');
+      } catch (_) { return send(res,400,{error:'Upload the image or voice message again.'}); }
+      if (parsed.hostname !== 'firebasestorage.googleapis.com' || parsed.protocol !== 'https:' || urlBucket !== firebaseStorageBucket() || mediaPath !== String(input.mediaPath || '') || !mediaPath.startsWith(`community/${account.id}/${target.id}/`) || !parsed.searchParams.has('token')) return send(res,400,{error:'That chat media upload is not valid.'});
+    }
+    if (body.length > 2000) return send(res,400,{error:'Keep messages under 2,000 characters.'});
+    const message = { id: crypto.randomUUID(), senderId: account.id, recipientId: target.id, type, text: body, ...(mediaUrl ? {mediaUrl,mediaPath} : {}), caption: typeof input.caption === 'string' ? input.caption.trim().slice(0,240) : '', createdAt: Date.now() };
     const beforeAccount = JSON.stringify(account.community.messages), beforeTarget = JSON.stringify(target.community.messages);
     account.community.messages = [...account.community.messages, message].slice(-250);
     target.community.messages = [...target.community.messages, message].slice(-250);
