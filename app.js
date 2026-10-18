@@ -35,7 +35,7 @@
   const page = document.body.dataset.page || 'home';
   const titles = {home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat',publish:'Publish'};
   let currentUser = null;
-  let ownerPosts = {games:[],arts:[],updates:[],downloads:[]};
+  let ownerPosts = {games:[],arts:[],updates:[],downloads:[],gameBuilds:[]};
   let memberProfiles = [];
   let communityData = {friends:[],friendRequestsSent:[],friendRequestsReceived:[],bugReports:[]};
   let communityPane = 'home';
@@ -1232,23 +1232,21 @@
   function ownerTextContainerMarkup(item = {}) {
     return `<article class="owner-dynamic-row" data-game-text-container><div class="owner-dynamic-row-head"><strong>Text container</strong><button class="btn btn-ghost btn-sm" type="button" data-remove-game-text>Remove</button></div><label class="owner-post-field">Container title<input type="text" maxlength="100" data-game-text-field="title" value="${esc(item.title || '')}" placeholder="For example: Story, features, or development notes"></label><label class="owner-post-field is-wide">Text<textarea rows="4" maxlength="10000" data-game-text-field="body" placeholder="Write this section's text.">${esc(item.body || '')}</textarea></label></article>`;
   }
-  function ownerGameDownloadMarkup(item = {}) {
-    return `<article class="owner-dynamic-row" data-game-download-item><div class="owner-dynamic-row-head"><strong>Game download</strong><button class="btn btn-ghost btn-sm" type="button" data-remove-game-download>Remove</button></div><div class="owner-post-fields owner-download-fields"><label class="owner-post-field">Download name<input type="text" maxlength="120" data-game-download-field="title" value="${esc(item.title || '')}" placeholder="Windows early access build"></label><label class="owner-post-field">Version<input type="text" maxlength="60" data-game-download-field="version" value="${esc(item.version || '')}" placeholder="v0.0.2"></label><label class="owner-post-field">Platform<input type="text" maxlength="80" data-game-download-field="platform" value="${esc(item.platform || '')}" placeholder="Windows, Android…"></label><label class="owner-post-field">Secure download link<input type="url" data-game-download-field="downloadUrl" value="${esc(item.downloadUrl || '')}" placeholder="https://…"></label></div></article>`;
-  }
   function ownerContentManager(section) {
     if (currentUser?.accountRole !== 'owner') return '';
     const posts = ownerPosts[section] || [];
     const cards = posts.length ? posts.map(post => {
       const title = post.name || post.title || 'Untitled post';
       const detail = section === 'games' ? `${post.status} · ${post.genre}` : section === 'updates' ? (post.category || 'Studio update') : section === 'downloads' ? post.category : (post.type || 'Artwork');
-      return `<article class="owner-post-row"><span><strong>${esc(title)}</strong><small>${esc(detail || '')}</small></span><span class="owner-post-row-actions"><button class="btn btn-ghost btn-sm" type="button" data-owner-post-edit="${section}" data-post-id="${esc(post.id)}">Edit</button><button class="btn btn-danger btn-sm" type="button" data-owner-post-delete="${section}" data-post-id="${esc(post.id)}">Delete</button></span></article>`;
+      return `<article class="owner-post-row"><span><strong>${esc(title)}</strong><small>${esc(detail || '')}</small></span><span class="owner-post-row-actions">${section === 'games' ? `<a class="btn btn-ghost btn-sm" href="publish.html?type=game-builds&amp;gameId=${encodeURIComponent(post.id)}">Manage downloads</a>` : ''}<button class="btn btn-ghost btn-sm" type="button" data-owner-post-edit="${section}" data-post-id="${esc(post.id)}">Edit</button><button class="btn btn-danger btn-sm" type="button" data-owner-post-delete="${section}" data-post-id="${esc(post.id)}">Delete</button></span></article>`;
     }).join('') : '<p class="owner-post-empty">No posts here yet. Publish the first one below.</p>';
-    const extraEditors = section === 'games' ? `<section class="owner-extra-editor"><div><h4>Additional project text</h4><p>Short summary and Project details are already included above. Add optional sections only when you need them.</p></div><div class="owner-dynamic-list" data-game-text-list></div><button class="btn btn-ghost" type="button" data-add-game-text-container>Add text container</button></section><section class="owner-extra-editor"><div><h4>Game downloads</h4><p>Add a secure download link for each available build. Downloads appear on the game's project details page.</p></div><div class="owner-dynamic-list" data-game-download-list></div><button class="btn btn-ghost" type="button" data-add-game-download>Add game download</button></section>` : '';
+    const extraEditors = section === 'games' ? `<section class="owner-extra-editor"><div><h4>Additional project text</h4><p>Short summary and Project details are already included above. Add optional sections only when you need them.</p></div><div class="owner-dynamic-list" data-game-text-list></div><button class="btn btn-ghost" type="button" data-add-game-text-container>Add text container</button></section>` : '';
     return `<section class="owner-publishing" aria-label="Owner publishing tools for ${ownerPostSectionLabels[section]}"><div class="owner-publishing-heading"><div><span class="section-eyebrow">OWNER PUBLISHING</span><h2>Manage ${ownerPostSectionLabels[section]}</h2><p>Your posts are saved with Solaris site data.</p></div></div><div class="owner-post-list">${cards}</div><form class="owner-post-form" data-owner-content-form data-section="${section}"><input type="hidden" name="id"><h3 data-owner-form-title>Post a new ${section === 'games' ? 'game' : section === 'arts' ? 'artwork' : section === 'updates' ? 'update' : 'download'}</h3><div class="owner-post-fields">${ownerPostFields[section].map(field => ownerFieldMarkup(section,field)).join('')}</div>${extraEditors}<div class="owner-post-form-actions"><button class="btn btn-primary" type="submit" data-owner-form-submit>Publish post</button><button class="btn btn-ghost" type="button" data-owner-post-cancel hidden>Cancel edit</button><span class="form-message" data-owner-post-message role="status"></span></div></form></section>`;
   }
   function applyOwnerPosts(content) {
-    ownerPosts = { games:Array.isArray(content?.games) ? content.games : [], arts:Array.isArray(content?.arts) ? content.arts : [], updates:Array.isArray(content?.updates) ? content.updates : [], downloads:Array.isArray(content?.downloads) ? content.downloads : [] };
+    ownerPosts = { games:Array.isArray(content?.games) ? content.games : [], arts:Array.isArray(content?.arts) ? content.arts : [], updates:Array.isArray(content?.updates) ? content.updates : [], downloads:Array.isArray(content?.downloads) ? content.downloads : [], gameBuilds:Array.isArray(content?.gameBuilds) ? content.gameBuilds : [] };
     DATA.games = DATA.games.filter(game => game._ownerManaged !== true).concat(ownerPosts.games.map(game => ({...game,_ownerManaged:true})));
+    DATA.games = DATA.games.map(game => ({...game,gameDownloads:ownerPosts.gameBuilds.filter(build => build.gameId === game.id)}));
     DATA.arts = DATA.arts.filter(art => art._ownerManaged !== true).concat(ownerPosts.arts.map(art => ({...art,_ownerManaged:true})));
   }
   async function loadOwnerPosts() {
@@ -1263,7 +1261,6 @@
     if (section === 'games') {
       post.cover = raw.cover || 'frost';
       post.textContainers = $$('[data-game-text-container]',form).map(row => ({title:$('[data-game-text-field="title"]',row).value.trim(),body:$('[data-game-text-field="body"]',row).value.trim()})).filter(item => item.title || item.body);
-      post.gameDownloads = $$('[data-game-download-item]',form).map(row => ({title:$('[data-game-download-field="title"]',row).value.trim(),version:$('[data-game-download-field="version"]',row).value.trim(),platform:$('[data-game-download-field="platform"]',row).value.trim(),downloadUrl:$('[data-game-download-field="downloadUrl"]',row).value.trim()})).filter(item => item.title || item.downloadUrl);
     }
     if (section === 'arts') post.tags = String(raw.tags || '').split(',').map(tag => tag.trim()).filter(Boolean);
     return post;
@@ -1288,7 +1285,6 @@
     }
     if (section === 'games') {
       $('[data-game-text-list]',form).innerHTML = (post.textContainers || []).map(ownerTextContainerMarkup).join('');
-      $('[data-game-download-list]',form).innerHTML = (post.gameDownloads || []).map(ownerGameDownloadMarkup).join('');
     }
     form.elements.id.value = post.id;
     $('[data-owner-form-title]',form).textContent = `Edit ${section === 'games' ? 'game' : section === 'arts' ? 'artwork' : section === 'updates' ? 'update' : 'download'}`;
@@ -1300,9 +1296,8 @@
     form.reset();
     form.elements.id.value = '';
     $$('[data-owner-image-value]',form).forEach(input => setOwnerImagePreview(form,input.dataset.ownerImageValue,''));
-    const textList = $('[data-game-text-list]',form), downloadList = $('[data-game-download-list]',form);
+    const textList = $('[data-game-text-list]',form);
     if (textList) textList.innerHTML = '';
-    if (downloadList) downloadList.innerHTML = '';
     $('[data-owner-form-title]',form).textContent = `Post a new ${form.dataset.section === 'games' ? 'game' : form.dataset.section === 'arts' ? 'artwork' : form.dataset.section === 'updates' ? 'update' : 'download'}`;
     $('[data-owner-form-submit]',form).textContent = 'Publish post';
     $('[data-owner-post-cancel]',form).hidden = true;
@@ -1317,7 +1312,6 @@
       if (section === 'games' && (!post.icon || !post.banner)) throw new Error('Import both a game icon and a project banner before publishing.');
       if (section === 'arts' && !post.image) throw new Error('Import an artwork image before publishing.');
       if (section === 'games' && post.textContainers.some(item => !item.title || !item.body)) throw new Error('Add a title and text to each additional text container, or remove the empty one.');
-      if (section === 'games' && post.gameDownloads.some(item => !item.title || !item.downloadUrl)) throw new Error('Add a download name and secure link to each game download, or remove the empty one.');
       if (!post.id) post.id = `owner-${({games:'game',arts:'art',updates:'update',downloads:'download'})[section]}-${crypto.randomUUID()}`;
       const index = (ownerPosts[section] || []).findIndex(item => item.id === post.id);
       const result = await api('/api/owner/site-content','PUT',{section,post});
@@ -1335,6 +1329,91 @@
       applyOwnerPosts(result.content); renderPage(); toast('The post has been removed.');
     } catch (error) { toast(error.message); button.disabled = false; }
   }
+  const gameBuildAccept = {windows:'.exe,.msi',android:'.apk',other:'.zip,.dmg,.appimage,.deb,.rpm,.7z,.tgz,.tar.gz,.tar.xz'};
+  function formatGameBuildSize(size) {
+    const bytes = Number(size) || 0;
+    if (bytes < 1024 ** 2) return `${Math.max(1,Math.round(bytes / 1024))} KB`;
+    return `${(bytes / 1024 ** 2 >= 1024 ? bytes / 1024 ** 3 : bytes / 1024 ** 2).toFixed(1)} ${bytes / 1024 ** 2 >= 1024 ? 'GB' : 'MB'}`;
+  }
+  function ownerGameBuildRowMarkup(build = {}) {
+    const platform = ['windows','android','other'].includes(build.platform) ? build.platform : 'windows';
+    const supported = build.supported !== false;
+    return `<article class="owner-dynamic-row game-upload-row" data-game-build-row><input type="hidden" data-game-build-field="id" value="${esc(build.id || '')}"><input type="hidden" data-game-build-field="buildId" value="${esc(build.buildId || '')}"><input type="hidden" data-game-build-field="fileName" value="${esc(build.fileName || '')}"><input type="hidden" data-game-build-field="size" value="${esc(build.size || '')}"><input type="hidden" data-game-build-field="storagePath" value="${esc(build.storagePath || '')}"><div class="owner-dynamic-row-head"><strong>Game build</strong><button class="btn btn-ghost btn-sm" type="button" data-remove-game-build>Remove</button></div><div class="owner-post-fields"><label class="owner-post-field">Build name<input type="text" maxlength="120" required data-game-build-field="title" value="${esc(build.title || '')}" placeholder="Windows early access build"></label><label class="owner-post-field">Version<input type="text" maxlength="60" data-game-build-field="version" value="${esc(build.version || '')}" placeholder="v0.0.2"></label><label class="owner-post-field">Operating system<select data-game-build-platform><option value="windows"${platform === 'windows' ? ' selected' : ''}>Windows</option><option value="android"${platform === 'android' ? ' selected' : ''}>Android</option><option value="other"${platform === 'other' ? ' selected' : ''}>Other OS</option></select></label><label class="owner-post-field">Availability<select data-game-build-supported><option value="true"${supported ? ' selected' : ''}>Supported · upload a build</option><option value="false"${!supported ? ' selected' : ''}>Not supported · show a note</option></select></label><label class="owner-post-field game-build-os-name"${platform === 'other' ? '' : ' hidden'}>OS name<input type="text" maxlength="60" data-game-build-field="osName" value="${esc(build.osName || '')}" placeholder="Linux, macOS…"></label><label class="owner-post-field game-build-unsupported-message"${supported ? ' hidden' : ''}>Message shown to visitors<input type="text" maxlength="300" data-game-build-field="unsupportedMessage" value="${esc(build.unsupportedMessage || 'This operating system is not supported yet.')}"></label></div><div class="game-build-current-file" data-game-build-current${build.storagePath && supported ? '' : ' hidden'}><span>Current file</span><strong>${esc(build.fileName || '')}</strong><small>${formatGameBuildSize(build.size)}</small></div><label class="owner-post-field game-build-file-field" data-game-build-file-wrap${supported ? '' : ' hidden'}>Game file <span class="game-build-file-hint">${platform === 'windows' ? 'Windows installer · .exe or .msi' : platform === 'android' ? 'Android package · .apk' : 'Other OS package · .zip, .dmg, .AppImage, .deb, .rpm, .7z, .tar.gz, or .tar.xz'}</span><input type="file" data-game-build-file accept="${gameBuildAccept[platform]}"><small data-game-build-file-name>${build.storagePath ? 'Leave empty to keep the current file.' : 'Choose the installer to enable this download.'}</small></label><div class="game-upload-progress" data-game-build-progress hidden><progress max="100" value="0" data-game-build-progress-bar></progress><span data-game-build-progress-text role="status" aria-live="polite">Preparing upload…</span></div></article>`;
+  }
+  function ownerGameBuildManager(gameId) {
+    if (currentUser?.accountRole !== 'owner') return '';
+    const game = gameById(gameId) || DATA.games[0];
+    if (!game) return '<p class="empty">Choose a published game first.</p>';
+    const builds = ownerPosts.gameBuilds.filter(build => build.gameId === game.id);
+    return `<section class="owner-publishing game-build-manager"><div class="owner-publishing-heading"><div><span class="section-eyebrow">SECURE GAME BUILDS</span><h2>Manage downloads for ${esc(game.name)}</h2><p>Import installers directly from your device. Files are streamed to private Firebase Storage; only signed-in Solaris accounts can download supported builds.</p></div></div><form data-owner-game-build-form data-game-id="${esc(game.id)}"><div class="owner-dynamic-list game-build-editor-list" data-game-build-list>${builds.map(ownerGameBuildRowMarkup).join('')}</div><button class="btn btn-ghost" type="button" data-add-game-build>Add operating system</button><p class="game-build-security-note">Windows supports .exe and .msi, Android supports .apk, and Other OS supports .zip, .dmg, .AppImage, .deb, .rpm, .7z, .tar.gz, and .tar.xz. Maximum upload size: 2 GiB per file. Visitors on unsupported systems will see your note instead of a download button.</p><div class="owner-post-form-actions"><button class="btn btn-primary" type="submit" data-game-build-save>Save game downloads</button><a class="btn btn-ghost" href="project.html?id=${encodeURIComponent(game.id)}">Cancel</a><span class="form-message" data-game-build-message role="status"></span></div></form></section>`;
+  }
+  function gameBuildFormData(row, gameId) {
+    const get = key => $(`[data-game-build-field="${key}"]`,row)?.value || '';
+    const platform = $('[data-game-build-platform]',row).value;
+    const supported = $('[data-game-build-supported]',row).value === 'true';
+    const file = $('[data-game-build-file]',row).files?.[0] || null;
+    return {id:get('id') || `owner-game-build-${crypto.randomUUID()}`,gameId,title:$('[data-game-build-field="title"]',row).value.trim(),version:$('[data-game-build-field="version"]',row).value.trim(),platform,osName:platform === 'other' ? $('[data-game-build-field="osName"]',row).value.trim() : '',supported,unsupportedMessage:$('[data-game-build-field="unsupportedMessage"]',row).value.trim() || 'This operating system is not supported yet.',buildId:get('buildId'),fileName:get('fileName'),size:Number(get('size')) || 0,storagePath:get('storagePath'),file};
+  }
+  function uploadGameBuildFile(file, gameId, buildId, platform, onProgress) {
+    return new Promise((resolve,reject) => {
+      const request = new XMLHttpRequest();
+      request.open('POST','/api/owner/game-build-upload'); request.withCredentials = true;
+      request.setRequestHeader('Content-Type','application/octet-stream');
+      request.setRequestHeader('X-Game-Id',gameId); request.setRequestHeader('X-Build-Id',buildId);
+      request.setRequestHeader('X-Game-Platform',platform); request.setRequestHeader('X-File-Name',encodeURIComponent(file.name)); request.setRequestHeader('X-Upload-Size',String(file.size));
+      request.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); };
+      request.onerror = () => reject(new Error('The connection stopped during upload. Check your internet connection and try again.'));
+      request.onabort = () => reject(new Error('The upload was cancelled.'));
+      request.onload = () => { let result = {}; try { result = JSON.parse(request.responseText || '{}'); } catch (_) {} if (request.status < 200 || request.status >= 300) return reject(new Error(result.error || 'The game build could not be uploaded.')); resolve(result); };
+      request.send(file);
+    });
+  }
+  async function saveOwnerGameBuilds(form) {
+    const message = $('[data-game-build-message]',form), button = $('[data-game-build-save]',form), gameId = form.dataset.gameId;
+    if (currentUser?.accountRole !== 'owner') { toast('Only the Owner account can manage game builds.'); return; }
+    const rows = $$('[data-game-build-row]',form), uploaded = [], builds = [];
+    button.disabled = true; message.textContent = 'Checking builds…'; message.className = 'form-message';
+    try {
+      for (const row of rows) {
+        const build = gameBuildFormData(row,gameId), allowed = {windows:/\.(exe|msi)$/i,android:/\.apk$/i,other:/\.(zip|dmg|appimage|deb|rpm|7z|tgz|tar\.gz|tar\.xz)$/i}[build.platform];
+        if (!build.title) throw new Error('Give every operating-system entry a build name.');
+        if (!build.platform || !allowed) throw new Error('Choose Windows, Android, or Other OS for every build.');
+        if (build.file && !allowed.test(build.file.name)) throw new Error(`Choose a valid ${build.platform === 'windows' ? '.exe or .msi' : build.platform === 'android' ? '.apk' : 'Other OS archive or package'} file.`);
+        if (build.file && build.file.size > 2 * 1024 ** 3) throw new Error('Each game build can be up to 2 GiB.');
+        if (build.supported && !build.file && build.storagePath && !allowed.test(build.fileName)) throw new Error(`The existing file does not match ${build.platform}. Choose a replacement installer.`);
+        if (build.supported && !build.file && !build.storagePath) throw new Error(`Choose an installer for ${build.title}, or mark this operating system as not supported.`);
+        if (build.file && build.supported) {
+          build.buildId = `build-${crypto.randomUUID()}`;
+          const progress = $('[data-game-build-progress]',row), bar = $('[data-game-build-progress-bar]',row), status = $('[data-game-build-progress-text]',row);
+          progress.hidden = false; bar.value = 0; status.textContent = `Uploading ${build.file.name} · 0%`;
+          const result = await uploadGameBuildFile(build.file,gameId,build.buildId,build.platform,percent => { bar.value = percent; status.textContent = percent >= 100 ? 'Verifying and saving file…' : `Uploading ${build.file.name} · ${percent}%`; });
+          build.fileName = result.fileName; build.size = result.size; build.storagePath = result.storagePath; uploaded.push({gameId,buildId:result.buildId,fileName:result.fileName,platform:build.platform});
+        }
+        delete build.file; builds.push(build);
+      }
+      const result = await api('/api/owner/game-builds','PUT',{gameId,builds});
+      applyOwnerPosts(result.content); renderPage(); toast('Game downloads have been saved.');
+    } catch (error) {
+      for (const upload of uploaded) await api('/api/owner/game-build-cleanup','POST',upload).catch(() => {});
+      message.textContent = error.message; message.classList.add('is-error');
+    } finally { button.disabled = false; }
+  }
+  function updateGameBuildRow(row) {
+    const platform = $('[data-game-build-platform]',row).value, supported = $('[data-game-build-supported]',row).value === 'true';
+    $('[data-game-build-file]',row).accept = gameBuildAccept[platform];
+    $('[data-game-build-file-wrap]',row).hidden = !supported;
+    $('[data-game-build-unsupported-message]',row).hidden = supported;
+    $('[data-game-build-os-name]',row).hidden = platform !== 'other';
+    const hint = $('.game-build-file-hint',row); if (hint) hint.textContent = platform === 'windows' ? 'Windows installer · .exe or .msi' : platform === 'android' ? 'Android package · .apk' : 'Other OS package · .zip, .dmg, .AppImage, .deb, .rpm, .7z, .tar.gz, or .tar.xz';
+    const file = $('[data-game-build-file]',row).files?.[0], fileName = $('[data-game-build-file-name]',row);
+    if (fileName && file) fileName.textContent = `${file.name} · ${formatGameBuildSize(file.size)}`;
+    else if (fileName) {
+      const currentName = $('[data-game-build-field="fileName"]',row)?.value || '', storagePath = $('[data-game-build-field="storagePath"]',row)?.value || '';
+      if (storagePath && currentName) fileName.textContent = allowedFileNameForPlatform(currentName,platform) ? 'Leave empty to keep the current file.' : 'The current file uses another format. Choose a replacement for this operating system.';
+      else fileName.textContent = supported ? 'Choose the installer to enable this download.' : 'No file is needed for an unsupported operating system.';
+    }
+  }
+  function allowedFileNameForPlatform(fileName,platform) { return {windows:/\.(exe|msi)$/i,android:/\.apk$/i,other:/\.(zip|dmg|appimage|deb|rpm|7z|tgz|tar\.gz|tar\.xz)$/i}[platform]?.test(fileName) || false; }
   async function compressOwnerImage(file) {
     if (!['image/png','image/jpeg','image/webp'].includes(file?.type)) throw new Error('Choose a PNG, JPG, or WebP image.');
     if (file.size > 15_000_000) throw new Error('Choose an image smaller than 15 MB.');
@@ -1392,9 +1471,13 @@
       return `<div class="wrap">${ownerPageHeading('downloads','Download','Extras and add-ons for Solaris Studio games.')}<section class="download-intro"><span class="section-eyebrow">PLUGINS · MODS · EXTRAS</span><h2>Make each game your own</h2><p>This page is a home for extras created for Solaris Studio games: character skins, add-ons, mods, plugins, modding apps, and other useful tools. These creations can give players new ways to personalize a game, try new ideas, and build on the experience. Game builds themselves will be shared on their own project detail pages; this page is for the tools and community-made additions around them.</p><p>We welcome creativity while asking everyone to use modifications thoughtfully: local servers on your own computer are supported, and public-server use is welcome when the modification is appropriate and safe.</p><h3>Why we support game modification tools</h3><ul class="download-reasons"><li><strong>Personalize your characters.</strong> Use skins and visual add-ons to make a character feel like your own.</li><li><strong>Explore more ways to play.</strong> Mods, plugins, and add-ons can introduce new ideas, features, and experiences to Solaris games.</li><li><strong>Celebrate creativity and hard work.</strong> Modding apps give players a way to experiment, make things, and share the care they put into their creations.</li></ul>${downloadAccess}</section><div class="download-categories">${categoryCards(['Plugins & tools'],'Plugins & tools')}${categoryCards(['Mods & add-ons','Skins'],'Mods & add-ons')}${categoryCards(['Other'],'Other extras')}</div><div class="project-download-links"><h2>Game pages</h2>${DATA.games.map(game => `<a class="text-link" href="project.html?id=${encodeURIComponent(game.id)}">${esc(game.name)} project details <span aria-hidden="true">↗</span></a>`).join('')}</div><div class="page-end"></div></div>`;
     },
     publish() {
-      const section = new URLSearchParams(location.search).get('type');
-      const target = Object.hasOwn(ownerPostSectionLabels,section) ? section : 'games';
+      const params = new URLSearchParams(location.search), section = params.get('type');
       if (currentUser?.accountRole !== 'owner') return `<div class="wrap"><div class="page-head"><h1>Owner publishing</h1><p>This page is available to the Solaris Owner account.</p></div><section class="account-panel"><h2>Owner access required</h2><p>Sign in with the Owner account to publish site content.</p><a class="btn btn-primary" href="account.html?mode=login">Log in</a></section></div>`;
+      if (section === 'game-builds') {
+        const game = gameById(params.get('gameId')) || DATA.games[0];
+        return `<div class="wrap publish-page"><div class="page-head"><a class="publish-back" href="project.html?id=${encodeURIComponent(game.id)}">← Back to ${esc(game.name)}</a><span class="section-eyebrow">OWNER PUBLISHING</span><h1>Game downloads</h1><p>Import installers and choose which operating systems Solaris supports.</p></div>${ownerGameBuildManager(game.id)}</div>`;
+      }
+      const target = Object.hasOwn(ownerPostSectionLabels,section) ? section : 'games';
       return `<div class="wrap publish-page"><div class="page-head"><a class="publish-back" href="${target === 'downloads' ? 'download.html' : `${target === 'arts' ? 'arts' : target}.html`}">← Back to ${esc(ownerPostSectionLabels[target])}</a><span class="section-eyebrow">OWNER PUBLISHING</span><h1>${esc(ownerPostActionLabels[target])}</h1><p>Create and manage content for the ${esc(ownerPostSectionLabels[target].toLowerCase())} page.</p></div>${ownerContentManager(target)}</div>`;
     },
     shop() {
@@ -1413,9 +1496,13 @@
       const playerIntro = game.playerIntro ? `<section class="project-copy project-story"><h2>Your story begins</h2>${paragraphs(game.playerIntro)}</section>` : '';
       const releasePlan = game.releasePlan ? `<section class="project-copy project-release"><h2>Early access plans</h2><p>${esc(game.releasePlan)}</p></section>` : '';
       const extraText = (game.textContainers || []).map(item => `<section class="project-copy project-story"><h2>${esc(item.title)}</h2>${paragraphs(item.body)}</section>`).join('');
-      const downloadMessage = !currentUser ? 'Game downloads require a signed-in Solaris account. No public build is available yet.' : game.status === 'In Development' ? 'There are no public game builds yet. Check back as development continues.' : 'This project is planned for the future and has no downloads yet.';
-      const gameDownloads = game.gameDownloads?.length ? `<div class="game-build-list">${game.gameDownloads.map(item => `<article class="game-build-card"><div><strong>${esc(item.title)}</strong><span>${esc([item.version,item.platform].filter(Boolean).join(' · ') || game.version || 'Game build')}</span></div>${currentUser ? `<a class="btn btn-primary btn-sm" href="${esc(item.downloadUrl)}" target="_blank" rel="noopener noreferrer">Download <span aria-hidden="true">↗</span></a>` : `<a class="btn btn-ghost btn-sm" href="account.html?mode=login">Log in to download</a>`}</article>`).join('')}</div>` : `<p>${esc(downloadMessage)}</p>`;
-      return `<div class="project-page"><div class="project-banner project-banner-${esc(game.cover)}" role="img" aria-label="${esc(game.name)} project banner">${gameBannerImage(game)}<div class="project-banner-mark">${esc(game.name)}</div></div><div class="wrap project-layout"><main class="project-detail-main"><a class="project-back" href="games.html">← All projects</a><div class="project-heading">${projectIcon(game)}<div><div class="project-status-row">${badge(game.status)}${game.version ? `<span class="project-version">${esc(game.version)}</span>` : ''}</div><h1>${esc(game.name)}</h1><p class="project-subtitle">${esc(game.subtitle)} · ${esc(game.genre)}</p></div></div><section class="project-copy"><h2>About this project</h2><p>${esc(game.details)}</p><p>${esc(game.blurb)}</p></section>${worldIntro}${playerIntro}${releasePlan}${extraText}<section class="project-copy project-extra"><h2>Downloads</h2>${gameDownloads}<a class="text-link" href="download.html">Browse plugins, mods, and extras <span aria-hidden="true">↗</span></a></section>${artworkSection}</main><aside class="project-switcher" aria-label="Solaris projects"><label class="project-search-wrap"><span class="project-search-icon" aria-hidden="true">⌕</span><span class="visually-hidden">Search other games</span><input type="search" data-project-search placeholder="Search other games…" autocomplete="off"></label><section class="project-selected-section"><span class="section-eyebrow">Selected Game</span>${currentProject}</section><div class="project-switch-divider"><span>Explore other games</span></div><div class="project-switch-list">${otherProjects}</div><p class="project-no-results" data-project-empty hidden>No other games match that search.</p></aside></div></div>`;
+      const builds = game.gameDownloads || [];
+      const groups = [{id:'windows',name:'Windows'},{id:'android',name:'Android'},{id:'other',name:'Other OS'}];
+      const platformHint = `${navigator.userAgentData?.platform || ''} ${navigator.platform || ''} ${navigator.userAgent || ''}`;
+      const defaultPlatform = /android/i.test(platformHint) ? 'android' : /windows/i.test(platformHint) ? 'windows' : 'other';
+      const gameDownloads = `<div class="game-os-downloads"><div class="game-os-tabs" role="tablist" aria-label="Choose your operating system">${groups.map(group => `<button class="game-os-tab" type="button" role="tab" data-game-os-select="${group.id}" aria-selected="${group.id === defaultPlatform}" aria-controls="game-os-panel-${group.id}">${group.name}</button>`).join('')}</div>${groups.map(group => { const entries = builds.filter(item => item.platform === group.id); return `<section class="game-os-group game-os-panel" id="game-os-panel-${group.id}" role="tabpanel" data-game-os-panel="${group.id}"${group.id !== defaultPlatform ? ' hidden' : ''}><h3>${group.name}</h3>${entries.length ? entries.map(item => `<article class="game-build-card"><div><strong>${esc(item.title)}</strong><span>${esc([item.version,item.osName && group.id === 'other' ? item.osName : group.name].filter(Boolean).join(' · '))}${item.supported && item.fileName ? ` · ${formatGameBuildSize(item.size)}` : ''}</span></div>${item.supported ? currentUser ? `<a class="btn btn-primary btn-sm" href="/api/game-build/${encodeURIComponent(item.id)}" download>Download <span aria-hidden="true">↓</span></a>` : `<a class="btn btn-ghost btn-sm" href="account.html?mode=login">Log in to download</a>` : `<p class="game-build-unsupported">${esc(item.unsupportedMessage || 'This operating system is not supported yet.')}</p>`}</article>`).join('') : `<p class="game-build-empty">No ${group.name} build has been posted yet.</p>`}</section>`; }).join('')}</div>`;
+      const manageDownloads = currentUser?.accountRole === 'owner' ? `<a class="btn btn-ghost btn-sm" href="publish.html?type=game-builds&amp;gameId=${encodeURIComponent(game.id)}">Manage game downloads</a>` : '';
+      return `<div class="project-page"><div class="project-banner project-banner-${esc(game.cover)}" role="img" aria-label="${esc(game.name)} project banner">${gameBannerImage(game)}<div class="project-banner-mark">${esc(game.name)}</div></div><div class="wrap project-layout"><main class="project-detail-main"><div class="project-detail-actions"><a class="project-back" href="games.html">← All projects</a>${manageDownloads}</div><div class="project-heading">${projectIcon(game)}<div><div class="project-status-row">${badge(game.status)}${game.version ? `<span class="project-version">${esc(game.version)}</span>` : ''}</div><h1>${esc(game.name)}</h1><p class="project-subtitle">${esc(game.subtitle)} · ${esc(game.genre)}</p></div></div><section class="project-copy"><h2>About this project</h2><p>${esc(game.details)}</p><p>${esc(game.blurb)}</p></section>${worldIntro}${playerIntro}${releasePlan}${extraText}<section class="project-copy project-extra"><h2>Downloads</h2>${gameDownloads}<a class="text-link" href="download.html">Browse plugins, mods, and extras <span aria-hidden="true">↗</span></a></section>${artworkSection}</main><aside class="project-switcher" aria-label="Solaris projects"><label class="project-search-wrap"><span class="project-search-icon" aria-hidden="true">⌕</span><span class="visually-hidden">Search other games</span><input type="search" data-project-search placeholder="Search other games…" autocomplete="off"></label><section class="project-selected-section"><span class="section-eyebrow">Selected Game</span>${currentProject}</section><div class="project-switch-divider"><span>Explore other games</span></div><div class="project-switch-list">${otherProjects}</div><p class="project-no-results" data-project-empty hidden>No other games match that search.</p></aside></div></div>`;
     },
     artwork() {
       const artwork = artById(new URLSearchParams(location.search).get('id')) || DATA.arts[0];
@@ -2205,6 +2292,13 @@
   });
 
   document.addEventListener('click', async event => {
+    const gameOsTab = event.target.closest('[data-game-os-select]');
+    if (gameOsTab) {
+      const downloads = gameOsTab.closest('.game-os-downloads'), selected = gameOsTab.dataset.gameOsSelect;
+      $$('[data-game-os-select]',downloads).forEach(button => button.setAttribute('aria-selected',String(button === gameOsTab)));
+      $$('[data-game-os-panel]',downloads).forEach(panel => { panel.hidden = panel.dataset.gameOsPanel !== selected; });
+      return;
+    }
     const ownerPostEdit = event.target.closest('[data-owner-post-edit]');
     const ownerPostDelete = event.target.closest('[data-owner-post-delete]');
     const ownerPostCancel = event.target.closest('[data-owner-post-cancel]');
@@ -2213,8 +2307,8 @@
     if (ownerPostCancel) { const form = ownerPostCancel.closest('[data-owner-content-form]'); if (form) resetOwnerPostForm(form); return; }
     if (event.target.closest('[data-add-game-text-container]')) { const form = $('[data-owner-content-form][data-section="games"]'); $('[data-game-text-list]',form)?.insertAdjacentHTML('beforeend',ownerTextContainerMarkup()); return; }
     if (event.target.closest('[data-remove-game-text]')) { event.target.closest('[data-game-text-container]')?.remove(); return; }
-    if (event.target.closest('[data-add-game-download]')) { const form = $('[data-owner-content-form][data-section="games"]'); $('[data-game-download-list]',form)?.insertAdjacentHTML('beforeend',ownerGameDownloadMarkup()); return; }
-    if (event.target.closest('[data-remove-game-download]')) { event.target.closest('[data-game-download-item]')?.remove(); return; }
+    if (event.target.closest('[data-add-game-build]')) { const form = $('[data-owner-game-build-form]'), list = $('[data-game-build-list]',form); list?.insertAdjacentHTML('beforeend',ownerGameBuildRowMarkup()); const row = list?.lastElementChild; if (row) updateGameBuildRow(row); return; }
+    if (event.target.closest('[data-remove-game-build]')) { event.target.closest('[data-game-build-row]')?.remove(); return; }
     const clearOwnerImage = event.target.closest('[data-owner-image-clear]');
     if (clearOwnerImage) { const form = clearOwnerImage.closest('[data-owner-content-form]'); setOwnerImagePreview(form,clearOwnerImage.dataset.ownerImageClear,''); return; }
     const communityPaneButton = event.target.closest('[data-community-pane]');
@@ -2510,6 +2604,11 @@
     if (!event.target.closest('.top')) { const nav = $('#nav'), menu = $('[data-menu]'); nav?.classList.remove('open'); menu?.setAttribute('aria-expanded','false'); }
   });
   document.addEventListener('submit', async event => {
+    if (event.target.matches('[data-owner-game-build-form]')) {
+      event.preventDefault();
+      await saveOwnerGameBuilds(event.target);
+      return;
+    }
     if (event.target.matches('[data-owner-content-form]')) {
       event.preventDefault();
       await saveOwnerPostForm(event.target);
@@ -2670,6 +2769,8 @@
     }
   });
   document.addEventListener('change', async event => {
+    const gameBuildControl = event.target.closest('[data-game-build-platform],[data-game-build-supported],[data-game-build-file]');
+    if (gameBuildControl) { updateGameBuildRow(gameBuildControl.closest('[data-game-build-row]')); return; }
     const ownerImage = event.target.closest('[data-owner-image-import]');
     if (ownerImage) {
       const file = ownerImage.files?.[0], key = ownerImage.dataset.ownerImageImport, form = ownerImage.closest('[data-owner-content-form]');

@@ -5,6 +5,8 @@ const fsSync = require('node:fs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { Transform } = require('node:stream');
+const { pipeline } = require('node:stream/promises');
 const { promisify } = require('node:util');
 
 const scrypt = promisify(crypto.scrypt);
@@ -17,6 +19,8 @@ const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const PAUSE_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 const USERNAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY = 3 * 1024 * 1024;
+const MAX_GAME_BUILD_BYTES = Math.min(4 * 1024 ** 3, Math.max(50 * 1024 ** 2, Number(process.env.SOLARIS_MAX_GAME_BUILD_BYTES) || 2 * 1024 ** 3));
+const BUILT_IN_GAME_IDS = new Set(['gamma-frost', 'omiwo']);
 const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'publish.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js']);
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.png': 'image/png' };
 const PRIMARY_ROLES = {
@@ -31,7 +35,7 @@ const FRIEND_CARD_EFFECTS = new Set(['none', 'glow', 'lift', 'shine']);
 
 let accounts = [];
 let pausedAccounts = [];
-const EMPTY_SITE_CONTENT = { games: [], arts: [], updates: [], downloads: [] };
+const EMPTY_SITE_CONTENT = { games: [], arts: [], updates: [], downloads: [], gameBuilds: [] };
 let siteContent = { ...EMPTY_SITE_CONTENT };
 let pool = null;
 let firebaseAuth = null;
@@ -206,6 +210,87 @@ async function getAccount(req) {
   if (!session || session.expires < Date.now()) { sessions.delete(token); return null; }
   return accounts.find(account => account.id === session.accountId) || null;
 }
+function isKnownGameId(gameId) {
+  return BUILT_IN_GAME_IDS.has(gameId) || siteContent.games.some(game => game.id === gameId);
+}
+function gameBuildDisposition(fileName) {
+  const fallback = fileName.replace(/[^A-Za-z0-9._ -]/g, '_').replace(/"/g, '_');
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+}
+async function cleanupStoredGameBuilds(builds) {
+  const paths = [...new Set((builds || []).map(build => build?.storagePath).filter(path => typeof path === 'string' && /^game-builds\/[a-z0-9-]+\/[A-Za-z0-9-]+\/[A-Za-z0-9._()+ -]+$/.test(path)))];
+  if (!paths.length) return;
+  try {
+    const bucket = getFirebaseStorageBucket();
+    await Promise.all(paths.map(objectPath => bucket.file(objectPath).delete({ignoreNotFound:true}).catch(error => console.error('GAME BUILD CLEANUP ERROR:', objectPath, error))));
+  } catch (error) { console.error('GAME BUILD CLEANUP SETUP ERROR:', error); }
+}
+async function uploadGameBuild(req, res) {
+  const owner = await getAccount(req);
+  if (!owner || owner.role !== 'owner') return send(res, 403, { error: 'Only the Solaris Owner can upload game builds.' });
+  const gameId = text(req.headers['x-game-id'], 100), buildId = text(req.headers['x-build-id'], 100), platform = text(req.headers['x-game-platform'], 16);
+  if (!/^[a-z0-9-]{1,100}$/.test(gameId) || !isKnownGameId(gameId)) return send(res, 404, { error: 'Choose a game that is already published.' });
+  if (!/^build-[a-f0-9-]{30,50}$/i.test(buildId) || !['windows','android','other'].includes(platform)) return send(res, 400, { error: 'The game build upload details are invalid.' });
+  let rawName = '';
+  try { rawName = decodeURIComponent(String(req.headers['x-file-name'] || '')); } catch { return send(res, 400, { error: 'The selected filename is invalid.' }); }
+  const fileName = cleanGameBuildFilename(rawName, platform);
+  if (!fileName) return send(res, 400, { error: 'Choose a Windows .exe or .msi, Android .apk, or supported Other OS package.' });
+  const expectedSize = Number(req.headers['content-length']);
+  if (!Number.isSafeInteger(expectedSize) || expectedSize <= 0) return send(res, 411, { error: 'The upload needs a valid file size.' });
+  if (expectedSize > MAX_GAME_BUILD_BYTES) return send(res, 413, { error: `Choose a game build no larger than ${Math.floor(MAX_GAME_BUILD_BYTES / 1024 ** 3)} GiB.` });
+  if (Number(req.headers['x-upload-size']) !== expectedSize) return send(res, 400, { error: 'The file size did not match the upload.' });
+  const objectPath = `game-builds/${gameId}/${buildId}/${fileName}`;
+  let received = 0;
+  const meter = new Transform({ transform(chunk, encoding, callback) { received += chunk.length; callback(received > MAX_GAME_BUILD_BYTES ? Object.assign(new Error('The game build exceeds the upload limit.'), { status: 413 }) : null, chunk); } });
+  let file;
+  try {
+    file = getFirebaseStorageBucket().file(objectPath);
+    await pipeline(req, meter, file.createWriteStream({ resumable:true, validation:'crc32c', metadata:{ contentType:'application/octet-stream', cacheControl:'private, no-store', contentDisposition:gameBuildDisposition(fileName), metadata:{ gameId, buildId, ownerAccountId:owner.id } } }));
+    if (received !== expectedSize) { await file.delete({ignoreNotFound:true}).catch(() => {}); return send(res, 400, { error: 'The uploaded file was incomplete. Please try again.' }); }
+    return send(res, 201, { buildId, fileName, size:received, platform, storagePath:objectPath });
+  } catch (error) {
+    if (file) await file.delete({ignoreNotFound:true}).catch(() => {});
+    if (error.status) return send(res, error.status, { error:error.message });
+    console.error('GAME BUILD UPLOAD ERROR:', error);
+    return send(res, 503, { error:'The game build could not be stored. Check Firebase Storage and try again.' });
+  }
+}
+async function downloadGameBuild(req, res, buildId) {
+  const account = await getAccount(req);
+  if (!account) return send(res, 401, { error:'Log in to download game builds.' });
+  const build = siteContent.gameBuilds.find(item => item.id === buildId && item.supported && item.storagePath);
+  if (!build || !validGameBuildObjectPath(build.gameId, build.buildId, build.fileName, build.storagePath)) return send(res, 404, { error:'That game build is no longer available.' });
+  let file;
+  try {
+    file = getFirebaseStorageBucket().file(build.storagePath);
+    const [metadata] = await file.getMetadata();
+    const size = Number(metadata.size);
+    if (!Number.isSafeInteger(size) || size <= 0 || size > MAX_GAME_BUILD_BYTES) return send(res, 404, { error:'That game build is no longer available.' });
+    let start = 0, end = size - 1, status = 200;
+    const rangeHeader = req.headers.range;
+    if (rangeHeader) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+      if (!match || (!match[1] && !match[2])) { res.writeHead(416, {'Content-Range':`bytes */${size}`,'Cache-Control':'no-store'}); return res.end(); }
+      if (!match[1]) { const suffix = Number(match[2]); if (!Number.isSafeInteger(suffix) || suffix <= 0) { res.writeHead(416, {'Content-Range':`bytes */${size}`,'Cache-Control':'no-store'}); return res.end(); } start = Math.max(0,size-suffix); }
+      else start = Number(match[1]);
+      if (match[1] && match[2]) end = Math.min(size-1,Number(match[2]));
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= size || end < start) { res.writeHead(416, {'Content-Range':`bytes */${size}`,'Cache-Control':'no-store'}); return res.end(); }
+      status = 206;
+    }
+    const headers = { 'Content-Type':'application/octet-stream', 'Content-Disposition':gameBuildDisposition(build.fileName), 'Content-Length':String(end-start+1), 'Accept-Ranges':'bytes', 'X-Content-Type-Options':'nosniff', 'Cache-Control':'private, no-store', 'Content-Security-Policy':"default-src 'none'; sandbox" };
+    if (status === 206) headers['Content-Range'] = `bytes ${start}-${end}/${size}`;
+    res.writeHead(status,headers);
+    if (req.method === 'HEAD') return res.end();
+    const stream = file.createReadStream(status === 206 ? {start,end} : {});
+    stream.on('error',error => { console.error('GAME BUILD DOWNLOAD ERROR:',error); if (!res.headersSent) send(res,503,{error:'The game build could not be downloaded right now.'}); else res.destroy(error); });
+    stream.pipe(res);
+  } catch (error) {
+    if (error.code === 404) return send(res,404,{error:'That game build is no longer available.'});
+    console.error('GAME BUILD DOWNLOAD ERROR:',error);
+    if (!res.headersSent) return send(res,503,{error:'The game build could not be downloaded right now.'});
+    res.destroy(error);
+  }
+}
 function publicProfile(account) {
   const { id, profile } = account;
   const friendCard = account.role !== 'owner' && profile.primaryRole === 'member' && profile.friendCard?.published === true
@@ -336,8 +421,18 @@ function siteContentImage(value) {
   if (image.startsWith('data:image/')) return imageData(image, 950_000);
   return siteContentUrl(image, 1200);
 }
+function cleanGameBuildFilename(value, platform) {
+  const raw = text(value, 240).replace(/\\/g, '/').split('/').pop() || '';
+  const filename = raw.replace(/[^A-Za-z0-9._()+ -]/g, '_').replace(/\s+/g, ' ').replace(/^\.+/, '').trim().slice(-180);
+  const lower = filename.toLowerCase();
+  const allowed = platform === 'windows' ? /\.(?:exe|msi)$/i : platform === 'android' ? /\.apk$/i : /\.(?:zip|dmg|appimage|deb|rpm|7z|tgz|tar\.gz|tar\.xz)$/i;
+  return filename && allowed.test(lower) ? filename : '';
+}
+function validGameBuildObjectPath(gameId, buildId, fileName, value) {
+  return typeof value === 'string' && value === `game-builds/${gameId}/${buildId}/${fileName}`;
+}
 function cleanSitePost(section, value = {}) {
-  const prefixes = { games: 'owner-game-', arts: 'owner-art-', updates: 'owner-update-', downloads: 'owner-download-' };
+  const prefixes = { games: 'owner-game-', arts: 'owner-art-', updates: 'owner-update-', downloads: 'owner-download-', gameBuilds: 'owner-game-build-' };
   const prefix = prefixes[section];
   if (!prefix || !value || typeof value !== 'object' || Array.isArray(value)) throw Object.assign(new Error('Choose a supported publishing section.'), { status: 400 });
   const id = text(value.id, 120) || `${prefix}${crypto.randomUUID()}`;
@@ -346,10 +441,9 @@ function cleanSitePost(section, value = {}) {
     const status = text(value.status, 32);
     if (!['In Development', 'Future project', 'Beta', 'Released'].includes(status)) throw Object.assign(new Error('Choose a valid game status.'), { status: 400 });
     const textContainers = (Array.isArray(value.textContainers) ? value.textContainers : []).slice(0, 30).map(item => ({ title: text(item?.title, 100), body: text(item?.body, 10000) })).filter(item => item.title && item.body);
-    const gameDownloads = (Array.isArray(value.gameDownloads) ? value.gameDownloads : []).slice(0, 30).map(item => ({ title: text(item?.title, 120), version: text(item?.version, 60), platform: text(item?.platform, 80), downloadUrl: siteContentUrl(item?.downloadUrl, 1200) })).filter(item => item.title && item.downloadUrl);
-    const game = { id, name: text(value.name, 100), subtitle: text(value.subtitle, 100), genre: text(value.genre, 100), status, version: text(value.version, 40), cover: ['frost', 'collide'].includes(value.cover) ? value.cover : 'frost', icon: siteContentImage(value.icon), banner: siteContentImage(value.banner), blurb: text(value.blurb, 1200), details: text(value.details, 6000), worldIntro: text(value.worldIntro, 10000), playerIntro: text(value.playerIntro, 10000), releasePlan: text(value.releasePlan, 3000), textContainers, gameDownloads };
+    const game = { id, name: text(value.name, 100), subtitle: text(value.subtitle, 100), genre: text(value.genre, 100), status, version: text(value.version, 40), cover: ['frost', 'collide'].includes(value.cover) ? value.cover : 'frost', icon: siteContentImage(value.icon), banner: siteContentImage(value.banner), blurb: text(value.blurb, 1200), details: text(value.details, 6000), worldIntro: text(value.worldIntro, 10000), playerIntro: text(value.playerIntro, 10000), releasePlan: text(value.releasePlan, 3000), textContainers };
     if (!game.name || !game.genre || !game.blurb || !game.details) throw Object.assign(new Error('Add the game name, genre, summary, and project details.'), { status: 400 });
-    if ((value.icon && !game.icon) || (value.banner && !game.banner) || gameDownloads.length !== (Array.isArray(value.gameDownloads) ? value.gameDownloads.filter(item => item?.title && item?.downloadUrl).length : 0)) throw Object.assign(new Error('Choose valid imported game images and secure download links.'), { status: 400 });
+    if ((value.icon && !game.icon) || (value.banner && !game.banner)) throw Object.assign(new Error('Choose valid imported game images.'), { status: 400 });
     return game;
   }
   if (section === 'arts') {
@@ -364,6 +458,19 @@ function cleanSitePost(section, value = {}) {
     if (!update.title || !update.content) throw Object.assign(new Error('Add an update title and its content.'), { status: 400 });
     return update;
   }
+  if (section === 'gameBuilds') {
+    const gameId = text(value.gameId, 100);
+    const platform = ['windows', 'android', 'other'].includes(value.platform) ? value.platform : '';
+    const supported = value.supported !== false;
+    const buildId = text(value.buildId, 100);
+    const fileName = cleanGameBuildFilename(value.fileName, platform);
+    const size = Number.isSafeInteger(Number(value.size)) ? Number(value.size) : 0;
+    const storagePath = supported && /^[A-Za-z0-9-]{1,100}$/.test(buildId) && fileName && size > 0 && size <= MAX_GAME_BUILD_BYTES && validGameBuildObjectPath(gameId, buildId, fileName, value.storagePath) ? value.storagePath : '';
+    const build = { id, gameId, title: text(value.title, 120), version: text(value.version, 60), platform, osName: platform === 'other' ? text(value.osName, 60) || 'Other OS' : '', supported, unsupportedMessage: text(value.unsupportedMessage, 300) || 'This operating system is not supported yet.', buildId: storagePath ? buildId : '', fileName: storagePath ? fileName : '', size: storagePath ? size : 0, storagePath };
+    if (!gameId || !/^[a-z0-9-]{1,100}$/.test(gameId) || !platform || !build.title) throw Object.assign(new Error('Choose a game, operating system, and build name.'), { status: 400 });
+    if (supported && !storagePath) throw Object.assign(new Error('Upload a valid installer for every supported operating system.'), { status: 400 });
+    return build;
+  }
   const categories = ['Plugins & tools', 'Mods & add-ons', 'Skins', 'Other'];
   const item = { id, title: text(value.title, 140), description: text(value.description, 3000), gameId: /^[a-z0-9-]{1,100}$/.test(text(value.gameId, 100)) ? text(value.gameId, 100) : '', category: categories.includes(value.category) ? value.category : 'Other', version: text(value.version, 60), downloadUrl: siteContentUrl(value.downloadUrl, 1200), image: siteContentUrl(value.image, 1200) };
   if (!item.title || !item.description || !item.downloadUrl) throw Object.assign(new Error('Add the extra title, description, and secure download link.'), { status: 400 });
@@ -374,7 +481,7 @@ function cleanSiteContentState(value) {
   const result = { ...EMPTY_SITE_CONTENT };
   for (const section of Object.keys(result)) {
     const seen = new Set();
-    result[section] = (Array.isArray(value?.[section]) ? value[section] : []).slice(0, 100).map(item => {
+    result[section] = (Array.isArray(value?.[section]) ? value[section] : []).slice(0, section === 'gameBuilds' ? 500 : 100).map(item => {
       try { return cleanSitePost(section, item); } catch (_) { return null; }
     }).filter(item => item && !seen.has(item.id) && seen.add(item.id));
   }
@@ -634,19 +741,62 @@ async function handleApi(req, res, pathname) {
     const account = await getAccount(req);
     return send(res, 200, { user: account ? privateProfile(account) : null });
   }
-  if (req.method === 'GET' && pathname === '/api/site-content') return send(res, 200, { content: siteContent });
+  if (req.method === 'GET' && pathname === '/api/site-content') {
+    const viewer = await getAccount(req);
+    const content = viewer?.role === 'owner' ? siteContent : { ...siteContent, gameBuilds:siteContent.gameBuilds.map(({storagePath:_storagePath,...build}) => build) };
+    return send(res, 200, { content });
+  }
+  const gameBuildRoute = /^\/api\/game-build\/([a-z0-9-]{1,120})$/.exec(pathname);
+  if ((req.method === 'GET' || req.method === 'HEAD') && gameBuildRoute) return downloadGameBuild(req,res,gameBuildRoute[1]);
+  if (req.method === 'POST' && pathname === '/api/owner/game-build-upload') return uploadGameBuild(req,res);
+  if (req.method === 'PUT' && pathname === '/api/owner/game-builds') {
+    const owner = await getAccount(req);
+    if (!owner || owner.role !== 'owner') return send(res,403,{error:'Only the Solaris Owner can manage game builds.'});
+    const input = await readBody(req), gameId = text(input.gameId,100);
+    if (!/^[a-z0-9-]{1,100}$/.test(gameId) || !isKnownGameId(gameId)) return send(res,404,{error:'Choose a published game before managing its downloads.'});
+    if (!Array.isArray(input.builds) || input.builds.length > 30) return send(res,400,{error:'A game can have up to 30 operating-system entries.'});
+    const previousBuilds = siteContent.gameBuilds.filter(build => build.gameId === gameId), seenIds = new Set(), seenBuildIds = new Set();
+    let nextForGame;
+    try {
+      nextForGame = input.builds.map(item => cleanSitePost('gameBuilds',{...item,gameId}));
+      for (const build of nextForGame) {
+        if (seenIds.has(build.id) || (build.buildId && seenBuildIds.has(build.buildId))) throw Object.assign(new Error('Each operating-system build needs its own saved entry.'),{status:400});
+        seenIds.add(build.id); if (build.buildId) seenBuildIds.add(build.buildId);
+      }
+    } catch (error) { return send(res,error.status || 400,{error:error.message || 'One of the game build entries is invalid.'}); }
+    const nextIds = new Set(nextForGame.map(build => build.id));
+    const removed = previousBuilds.filter(build => !nextIds.has(build.id) || nextForGame.find(item => item.id === build.id)?.storagePath !== build.storagePath);
+    const nextContent = {...siteContent,gameBuilds:[...siteContent.gameBuilds.filter(build => build.gameId !== gameId),...nextForGame]};
+    const previousContent = siteContent;
+    siteContent = nextContent;
+    try { await saveAccounts(); }
+    catch (error) { siteContent = previousContent; throw error; }
+    await cleanupStoredGameBuilds(removed);
+    return send(res,200,{content:siteContent,message:'Game downloads have been saved.'});
+  }
+  if (req.method === 'POST' && pathname === '/api/owner/game-build-cleanup') {
+    const owner = await getAccount(req);
+    if (!owner || owner.role !== 'owner') return send(res,403,{error:'Only the Solaris Owner can clean up game uploads.'});
+    const input = await readBody(req), gameId = text(input.gameId,100), buildId = text(input.buildId,100), platform = text(input.platform,16), fileName = cleanGameBuildFilename(input.fileName,platform);
+    if (!/^[a-z0-9-]{1,100}$/.test(gameId) || !/^build-[a-f0-9-]{30,50}$/i.test(buildId) || !fileName) return send(res,400,{error:'The game upload reference is invalid.'});
+    const objectPath = `game-builds/${gameId}/${buildId}/${fileName}`;
+    if (siteContent.gameBuilds.some(build => build.storagePath === objectPath)) return send(res,409,{error:'This game build is still in use.'});
+    try { await getFirebaseStorageBucket().file(objectPath).delete({ignoreNotFound:true}); return send(res,200,{message:'Unused game upload removed.'}); }
+    catch (error) { console.error('GAME BUILD CLEANUP ERROR:',error); return send(res,503,{error:'The unused game upload could not be removed.'}); }
+  }
   if (req.method === 'PUT' && pathname === '/api/owner/site-content') {
     const owner = await getAccount(req);
     if (!owner || owner.role !== 'owner') return send(res, 403, { error: 'Only the Solaris Owner can publish site content.' });
     const input = await readBody(req), section = text(input.section, 24);
-    if (!Object.hasOwn(EMPTY_SITE_CONTENT, section)) return send(res, 400, { error: 'Choose a valid publishing section.' });
+    if (!['games','arts','updates','downloads'].includes(section)) return send(res, 400, { error: 'Choose a valid publishing section.' });
     const prefix = { games: 'owner-game-', arts: 'owner-art-', updates: 'owner-update-', downloads: 'owner-download-' }[section];
     const previousItems = siteContent[section] || [];
-    let nextItems;
+    let nextItems, removedGameBuilds = [];
     if (input.delete === true) {
       const id = text(input.id, 120);
       if (!id.startsWith(prefix) || !previousItems.some(item => item.id === id)) return send(res, 404, { error: 'That owner post could not be found.' });
       nextItems = previousItems.filter(item => item.id !== id);
+      if (section === 'games') removedGameBuilds = siteContent.gameBuilds.filter(build => build.gameId === id);
     } else {
       const inputPost = input.post && typeof input.post === 'object' ? input.post : {};
       const previousIndex = previousItems.findIndex(item => item.id === text(inputPost.id, 120));
@@ -658,9 +808,10 @@ async function handleApi(req, res, pathname) {
       if (index >= 0) nextItems[index] = post; else nextItems.push(post);
     }
     const previous = siteContent;
-    siteContent = { ...siteContent, [section]: nextItems };
+    siteContent = { ...siteContent, [section]: nextItems, ...(removedGameBuilds.length ? {gameBuilds:siteContent.gameBuilds.filter(build => build.gameId !== text(input.id,120))} : {}) };
     try { await saveAccounts(); }
     catch (error) { siteContent = previous; throw error; }
+    await cleanupStoredGameBuilds(removedGameBuilds);
     return send(res, 200, { content: siteContent, message: 'Your site content has been saved.' });
   }
   if (req.method === 'GET' && pathname === '/api/community') {
