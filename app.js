@@ -1433,7 +1433,7 @@
     const panelHead = leftChildren[0];
     const paneSetup = document.createElement('div'), paneLayers = document.createElement('div'), paneAssets = document.createElement('div');
     paneSetup.className = 'friend-editor-pane'; paneSetup.dataset.leftPaneContent = 'setup';
-    paneLayers.className = 'friend-editor-pane friend-editor-layer-pane'; paneLayers.dataset.leftPaneContent = 'layers';
+    paneLayers.className = 'friend-editor-pane friend-editor-layer-pane'; paneLayers.dataset.leftPaneContent = 'layers'; paneLayers.hidden = true;
     paneAssets.className = 'friend-editor-pane'; paneAssets.dataset.leftPaneContent = 'assets'; paneAssets.hidden = true;
     const panes = [paneSetup,paneLayers,paneAssets];
     const panels = leftChildren.slice(1);

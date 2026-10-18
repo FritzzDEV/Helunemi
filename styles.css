@@ -1490,3 +1490,7 @@ body.friend-card-edit-mode .friend-layer-avatar img{pointer-events:none;-webkit-
 .friend-card-layer.friend-shape-square>.friend-layer-shape{border-radius:0}
 body.friend-card-edit-mode .friend-editor-left{grid-template-rows:auto auto minmax(0,1fr)}
 body.friend-card-edit-mode .friend-editor-right{grid-template-rows:auto minmax(0,1fr)}
+/* Keep property controls at their natural dimensions and action buttons compact. */
+body.friend-card-edit-mode .friend-properties-panes>.friend-properties-content{align-content:start;grid-auto-rows:max-content}
+body.friend-card-edit-mode .friend-layer-controls{align-items:flex-start;align-content:start;justify-content:flex-start}
+body.friend-card-edit-mode .friend-layer-controls>.btn{flex:0 0 auto;width:auto;height:2rem;min-height:2rem;align-self:flex-start;padding:.3rem .45rem;white-space:nowrap}
