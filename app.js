@@ -33,7 +33,7 @@
   const paragraphs = value => String(value || '').split(/\n\s*\n/).map(part => part.trim()).filter(Boolean).map(part => `<p>${esc(part)}</p>`).join('');
   const app = $('#app');
   const page = document.body.dataset.page || 'home';
-  const titles = {home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat'};
+  const titles = {home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat',publish:'Publish'};
   let currentUser = null;
   let ownerPosts = {games:[],arts:[],updates:[],downloads:[]};
   let memberProfiles = [];
@@ -1187,21 +1187,20 @@
       {key:'name',label:'Game title',required:true}, {key:'subtitle',label:'Subtitle'}, {key:'genre',label:'Genre',required:true},
       {key:'status',label:'Project status',type:'select',required:true,options:['In Development','Future project','Beta','Released']},
       {key:'version',label:'Version'}, {key:'cover',label:'Card theme',type:'select',options:['frost','collide']},
-      {key:'icon',label:'Game icon URL',placeholder:'https://…'}, {key:'banner',label:'Project banner URL',placeholder:'https://…'},
-      {key:'blurb',label:'Short summary',type:'textarea',required:true}, {key:'details',label:'Project details',type:'textarea',required:true},
-      {key:'worldIntro',label:'World introduction',type:'textarea'}, {key:'playerIntro',label:'Player story',type:'textarea'}, {key:'releasePlan',label:'Release plan',type:'textarea'}
+      {key:'icon',label:'Game icon',type:'image'}, {key:'banner',label:'Project banner',type:'image'},
+      {key:'blurb',label:'Short summary',type:'textarea',required:true,placeholder:'A short overview shown on game cards.'},
+      {key:'details',label:'Project details',type:'textarea',required:true,placeholder:'The main project description shown on its details page.'}
     ],
     arts: [
-      {key:'title',label:'Artwork title',required:true}, {key:'image',label:'Image URL',required:true,placeholder:'https://…'},
+      {key:'title',label:'Artwork title',required:true}, {key:'image',label:'Artwork image',type:'image',required:true},
       {key:'type',label:'Artwork type',required:true,placeholder:'Concept art, game icon…'},
       {key:'shape',label:'Image shape',type:'select',options:['square','icon','banner','circle']},
       {key:'projectId',label:'Related game',type:'games'}, {key:'mainTag',label:'Main tag',required:true},
       {key:'tags',label:'Tags',type:'text',placeholder:'Separate tags with commas'}
     ],
     updates: [
-      {key:'title',label:'Update title',required:true}, {key:'category',label:'Update label',placeholder:'DEVELOPMENT NOTE'},
-      {key:'publishedAt',label:'Publish date',type:'datetime-local'}, {key:'gameId',label:'Related game',type:'games'},
-      {key:'content',label:'Update text',type:'textarea',required:true}
+      {key:'title',label:'Update title',required:true}, {key:'category',label:'Update type',type:'select',required:true,options:['Game','Website','Release','Beta','New game','Studio','Other']},
+      {key:'gameId',label:'Related game',type:'games'}, {key:'content',label:'Update text',type:'textarea',required:true}
     ],
     downloads: [
       {key:'title',label:'Extra title',required:true}, {key:'category',label:'Type',type:'select',required:true,options:['Plugins & tools','Mods & add-ons','Skins','Other']},
@@ -1211,15 +1210,30 @@
     ]
   };
   const ownerPostSectionLabels = {games:'Games',arts:'Arts',updates:'Updates',downloads:'Downloads'};
+  const ownerPostActionLabels = {games:'Add a Game',arts:'Add Artwork',updates:'Post an Update',downloads:'Add a Download'};
+  function ownerPageMenu(section) {
+    if (currentUser?.accountRole !== 'owner') return '';
+    return `<details class="owner-page-menu"><summary aria-label="Publishing options" title="Publishing options"><span aria-hidden="true">⋮</span></summary><div class="owner-page-menu-popover"><a href="publish.html?type=${section}">${ownerPostActionLabels[section]}</a></div></details>`;
+  }
+  function ownerPageHeading(section, title, description) {
+    return `<div class="page-head page-head-with-menu"><div><h1>${title}</h1><p>${description}</p></div>${ownerPageMenu(section)}</div>`;
+  }
   function ownerFieldMarkup(section, field) {
     const controlName = field.key;
     let control;
     if (field.type === 'textarea') control = `<textarea name="${controlName}" rows="4"${field.required ? ' required' : ''} placeholder="${esc(field.placeholder || '')}"></textarea>`;
     else if (field.type === 'select') control = `<select name="${controlName}"${field.required ? ' required' : ''}>${(field.options || []).map((option,index) => `<option value="${esc(option)}"${index === 0 ? ' selected' : ''}>${esc(option)}</option>`).join('')}</select>`;
     else if (field.type === 'games') control = `<select name="${controlName}"><option value="">No game selected</option>${DATA.games.map(game => `<option value="${esc(game.id)}">${esc(game.name)}</option>`).join('')}</select>`;
-    else if (field.type === 'datetime-local') control = `<input name="${controlName}" type="datetime-local">`;
+    else if (field.type === 'image') control = `<div class="owner-image-import"><input type="hidden" name="${controlName}" data-owner-image-value="${controlName}"><label class="owner-image-picker"><input type="file" accept="image/png,image/jpeg,image/webp" data-owner-image-import="${controlName}" data-owner-image-required="${field.required ? 'true' : 'false'}"><span class="btn btn-ghost btn-sm">Choose image</span><span class="owner-image-hint">PNG, JPG, or WebP · imported into Solaris</span></label><div class="owner-image-preview-wrap"><img data-owner-image-preview="${controlName}" alt="${esc(field.label)} preview" hidden><button class="btn btn-ghost btn-sm" type="button" data-owner-image-clear="${controlName}" hidden>Remove image</button></div></div>`;
     else control = `<input name="${controlName}" type="text" maxlength="${field.key === 'tags' ? 1800 : 1200}"${field.required ? ' required' : ''} placeholder="${esc(field.placeholder || '')}">`;
+    if (field.type === 'image') return `<div class="owner-post-field owner-post-field-image${field.required ? ' is-required' : ''}"><span>${esc(field.label)}${field.required ? ' <i>Required</i>' : ''}</span>${control}</div>`;
     return `<label class="owner-post-field${field.type === 'textarea' ? ' is-wide' : ''}">${esc(field.label)}${control}</label>`;
+  }
+  function ownerTextContainerMarkup(item = {}) {
+    return `<article class="owner-dynamic-row" data-game-text-container><div class="owner-dynamic-row-head"><strong>Text container</strong><button class="btn btn-ghost btn-sm" type="button" data-remove-game-text>Remove</button></div><label class="owner-post-field">Container title<input type="text" maxlength="100" data-game-text-field="title" value="${esc(item.title || '')}" placeholder="For example: Story, features, or development notes"></label><label class="owner-post-field is-wide">Text<textarea rows="4" maxlength="10000" data-game-text-field="body" placeholder="Write this section's text.">${esc(item.body || '')}</textarea></label></article>`;
+  }
+  function ownerGameDownloadMarkup(item = {}) {
+    return `<article class="owner-dynamic-row" data-game-download-item><div class="owner-dynamic-row-head"><strong>Game download</strong><button class="btn btn-ghost btn-sm" type="button" data-remove-game-download>Remove</button></div><div class="owner-post-fields owner-download-fields"><label class="owner-post-field">Download name<input type="text" maxlength="120" data-game-download-field="title" value="${esc(item.title || '')}" placeholder="Windows early access build"></label><label class="owner-post-field">Version<input type="text" maxlength="60" data-game-download-field="version" value="${esc(item.version || '')}" placeholder="v0.0.2"></label><label class="owner-post-field">Platform<input type="text" maxlength="80" data-game-download-field="platform" value="${esc(item.platform || '')}" placeholder="Windows, Android…"></label><label class="owner-post-field">Secure download link<input type="url" data-game-download-field="downloadUrl" value="${esc(item.downloadUrl || '')}" placeholder="https://…"></label></div></article>`;
   }
   function ownerContentManager(section) {
     if (currentUser?.accountRole !== 'owner') return '';
@@ -1228,8 +1242,9 @@
       const title = post.name || post.title || 'Untitled post';
       const detail = section === 'games' ? `${post.status} · ${post.genre}` : section === 'updates' ? (post.category || 'Studio update') : section === 'downloads' ? post.category : (post.type || 'Artwork');
       return `<article class="owner-post-row"><span><strong>${esc(title)}</strong><small>${esc(detail || '')}</small></span><span class="owner-post-row-actions"><button class="btn btn-ghost btn-sm" type="button" data-owner-post-edit="${section}" data-post-id="${esc(post.id)}">Edit</button><button class="btn btn-danger btn-sm" type="button" data-owner-post-delete="${section}" data-post-id="${esc(post.id)}">Delete</button></span></article>`;
-    }).join('') : '<p class="owner-post-empty">No owner posts here yet. Use the form to publish the first one.</p>';
-    return `<section class="owner-publishing" aria-label="Owner publishing tools for ${ownerPostSectionLabels[section]}"><div class="owner-publishing-heading"><div><span class="section-eyebrow">OWNER PUBLISHING</span><h2>Manage ${ownerPostSectionLabels[section]}</h2><p>Posts save with the Solaris account data store.</p></div></div><div class="owner-post-list">${cards}</div><form class="owner-post-form" data-owner-content-form data-section="${section}"><input type="hidden" name="id"><h3 data-owner-form-title>Post a new ${section === 'games' ? 'game' : section === 'arts' ? 'artwork' : section === 'updates' ? 'update' : 'download'}</h3><div class="owner-post-fields">${ownerPostFields[section].map(field => ownerFieldMarkup(section,field)).join('')}</div><div class="owner-post-form-actions"><button class="btn btn-primary" type="submit" data-owner-form-submit>Publish post</button><button class="btn btn-ghost" type="button" data-owner-post-cancel hidden>Cancel edit</button><span class="form-message" data-owner-post-message role="status"></span></div></form></section>`;
+    }).join('') : '<p class="owner-post-empty">No posts here yet. Publish the first one below.</p>';
+    const extraEditors = section === 'games' ? `<section class="owner-extra-editor"><div><h4>Additional project text</h4><p>Short summary and Project details are already included above. Add optional sections only when you need them.</p></div><div class="owner-dynamic-list" data-game-text-list></div><button class="btn btn-ghost" type="button" data-add-game-text-container>Add text container</button></section><section class="owner-extra-editor"><div><h4>Game downloads</h4><p>Add a secure download link for each available build. Downloads appear on the game's project details page.</p></div><div class="owner-dynamic-list" data-game-download-list></div><button class="btn btn-ghost" type="button" data-add-game-download>Add game download</button></section>` : '';
+    return `<section class="owner-publishing" aria-label="Owner publishing tools for ${ownerPostSectionLabels[section]}"><div class="owner-publishing-heading"><div><span class="section-eyebrow">OWNER PUBLISHING</span><h2>Manage ${ownerPostSectionLabels[section]}</h2><p>Your posts are saved with Solaris site data.</p></div></div><div class="owner-post-list">${cards}</div><form class="owner-post-form" data-owner-content-form data-section="${section}"><input type="hidden" name="id"><h3 data-owner-form-title>Post a new ${section === 'games' ? 'game' : section === 'arts' ? 'artwork' : section === 'updates' ? 'update' : 'download'}</h3><div class="owner-post-fields">${ownerPostFields[section].map(field => ownerFieldMarkup(section,field)).join('')}</div>${extraEditors}<div class="owner-post-form-actions"><button class="btn btn-primary" type="submit" data-owner-form-submit>Publish post</button><button class="btn btn-ghost" type="button" data-owner-post-cancel hidden>Cancel edit</button><span class="form-message" data-owner-post-message role="status"></span></div></form></section>`;
   }
   function applyOwnerPosts(content) {
     ownerPosts = { games:Array.isArray(content?.games) ? content.games : [], arts:Array.isArray(content?.arts) ? content.arts : [], updates:Array.isArray(content?.updates) ? content.updates : [], downloads:Array.isArray(content?.downloads) ? content.downloads : [] };
@@ -1239,15 +1254,25 @@
   async function loadOwnerPosts() {
     const result = await api('/api/site-content');
     applyOwnerPosts(result.content);
-    if (['home','games','project','arts','artwork','updates','download'].includes(page)) renderPage();
+    if (['home','games','project','arts','artwork','updates','download','publish'].includes(page)) renderPage();
   }
   function ownerPostFromForm(form) {
     const raw = Object.fromEntries(new FormData(form));
-    const section = form.dataset.section;
-    if (section === 'games') return {...raw,cover:raw.cover || 'frost'};
-    if (section === 'arts') return {...raw,tags:String(raw.tags || '').split(',').map(tag => tag.trim()).filter(Boolean)};
-    if (section === 'updates') return {...raw,publishedAt:raw.publishedAt ? new Date(raw.publishedAt).getTime() : Date.now()};
-    return raw;
+    const section = form.dataset.section, existing = raw.id ? ownerPosts[section]?.find(item => item.id === raw.id) : null;
+    const post = {...(existing || {}),...raw};
+    if (section === 'games') {
+      post.cover = raw.cover || 'frost';
+      post.textContainers = $$('[data-game-text-container]',form).map(row => ({title:$('[data-game-text-field="title"]',row).value.trim(),body:$('[data-game-text-field="body"]',row).value.trim()})).filter(item => item.title || item.body);
+      post.gameDownloads = $$('[data-game-download-item]',form).map(row => ({title:$('[data-game-download-field="title"]',row).value.trim(),version:$('[data-game-download-field="version"]',row).value.trim(),platform:$('[data-game-download-field="platform"]',row).value.trim(),downloadUrl:$('[data-game-download-field="downloadUrl"]',row).value.trim()})).filter(item => item.title || item.downloadUrl);
+    }
+    if (section === 'arts') post.tags = String(raw.tags || '').split(',').map(tag => tag.trim()).filter(Boolean);
+    return post;
+  }
+  function setOwnerImagePreview(form, key, value) {
+    const hidden = $(`[data-owner-image-value="${key}"]`,form), preview = $(`[data-owner-image-preview="${key}"]`,form), clear = $(`[data-owner-image-clear="${key}"]`,form);
+    if (hidden) hidden.value = value || '';
+    if (preview) { preview.src = value || ''; preview.hidden = !value; }
+    if (clear) clear.hidden = !value;
   }
   function fillOwnerPostForm(button) {
     const section = button.dataset.ownerPostEdit, post = ownerPosts[section]?.find(item => item.id === button.dataset.postId);
@@ -1256,13 +1281,14 @@
     for (const field of ownerPostFields[section]) {
       const input = form.elements.namedItem(field.key);
       if (!input) continue;
-      let value = post[field.key] ?? '';
-      if (field.key === 'tags') value = Array.isArray(value) ? value.join(', ') : value;
-      if (field.type === 'datetime-local' && value) {
-        const date = new Date(Number(value));
-        value = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0,16);
-      }
-      input.value = value;
+      const value = post[field.key] ?? '';
+      if (field.type === 'image') setOwnerImagePreview(form,field.key,value);
+      else if (field.key === 'tags') input.value = Array.isArray(value) ? value.join(', ') : value;
+      else input.value = value;
+    }
+    if (section === 'games') {
+      $('[data-game-text-list]',form).innerHTML = (post.textContainers || []).map(ownerTextContainerMarkup).join('');
+      $('[data-game-download-list]',form).innerHTML = (post.gameDownloads || []).map(ownerGameDownloadMarkup).join('');
     }
     form.elements.id.value = post.id;
     $('[data-owner-form-title]',form).textContent = `Edit ${section === 'games' ? 'game' : section === 'arts' ? 'artwork' : section === 'updates' ? 'update' : 'download'}`;
@@ -1273,6 +1299,10 @@
   function resetOwnerPostForm(form) {
     form.reset();
     form.elements.id.value = '';
+    $$('[data-owner-image-value]',form).forEach(input => setOwnerImagePreview(form,input.dataset.ownerImageValue,''));
+    const textList = $('[data-game-text-list]',form), downloadList = $('[data-game-download-list]',form);
+    if (textList) textList.innerHTML = '';
+    if (downloadList) downloadList.innerHTML = '';
     $('[data-owner-form-title]',form).textContent = `Post a new ${form.dataset.section === 'games' ? 'game' : form.dataset.section === 'arts' ? 'artwork' : form.dataset.section === 'updates' ? 'update' : 'download'}`;
     $('[data-owner-form-submit]',form).textContent = 'Publish post';
     $('[data-owner-post-cancel]',form).hidden = true;
@@ -1284,6 +1314,10 @@
     button.disabled = true; message.textContent = 'Saving…'; message.className = 'form-message';
     try {
       const post = ownerPostFromForm(form);
+      if (section === 'games' && (!post.icon || !post.banner)) throw new Error('Import both a game icon and a project banner before publishing.');
+      if (section === 'arts' && !post.image) throw new Error('Import an artwork image before publishing.');
+      if (section === 'games' && post.textContainers.some(item => !item.title || !item.body)) throw new Error('Add a title and text to each additional text container, or remove the empty one.');
+      if (section === 'games' && post.gameDownloads.some(item => !item.title || !item.downloadUrl)) throw new Error('Add a download name and secure link to each game download, or remove the empty one.');
       if (!post.id) post.id = `owner-${({games:'game',arts:'art',updates:'update',downloads:'download'})[section]}-${crypto.randomUUID()}`;
       const index = (ownerPosts[section] || []).findIndex(item => item.id === post.id);
       const result = await api('/api/owner/site-content','PUT',{section,post});
@@ -1300,6 +1334,18 @@
       const result = await api('/api/owner/site-content','PUT',{section,id:post.id,delete:true});
       applyOwnerPosts(result.content); renderPage(); toast('The post has been removed.');
     } catch (error) { toast(error.message); button.disabled = false; }
+  }
+  async function compressOwnerImage(file) {
+    if (!['image/png','image/jpeg','image/webp'].includes(file?.type)) throw new Error('Choose a PNG, JPG, or WebP image.');
+    if (file.size > 15_000_000) throw new Error('Choose an image smaller than 15 MB.');
+    const image = new Image(), data = await readAsDataUrl(file);
+    await new Promise((resolve,reject) => { image.onload = resolve; image.onerror = () => reject(new Error('That image could not be opened.')); image.src = data; });
+    const scale = Math.min(1,1800 / Math.max(image.naturalWidth,image.naturalHeight));
+    const canvas = document.createElement('canvas'); canvas.width = Math.round(image.naturalWidth * scale); canvas.height = Math.round(image.naturalHeight * scale);
+    const context = canvas.getContext('2d'); if (!context) throw new Error('Your browser could not prepare that image.');
+    context.drawImage(image,0,0,canvas.width,canvas.height);
+    for (const quality of [.86,.78,.7,.62,.54,.46,.38]) { const output = canvas.toDataURL('image/webp',quality); if (output.length <= 760_000) return output; }
+    throw new Error('That image is too large after resizing. Choose a smaller image.');
   }
 
   const views = {
@@ -1332,18 +1378,24 @@
     members() {
       return `<div class="wrap"><div class="page-head"><span class="section-eyebrow">MEET THE COMMUNITY</span><h1>Members</h1><p>Member accounts make a Friend-Card in their own style. Cards appear here only after the member chooses to post them. Studio roles have their own profiles on the List page.</p></div><section class="member-directory friend-directory" aria-label="Search member Friend-Cards"><label class="member-search-wrap"><span class="visually-hidden">Search member Friend-Cards</span><span class="member-search-icon" aria-hidden="true">⌕</span><input type="search" data-friend-search placeholder="Search posted cards…" autocomplete="off"></label></section><div class="friend-card-grid" id="member-card-grid"></div><p class="empty member-empty" id="member-card-empty">No custom Friend-Cards have been posted yet.</p><p class="form-message" id="member-card-message" role="status"></p><div class="page-end"></div></div>`;
     },
-    games() { return `<div class="wrap"><div class="page-head"><h1>Games</h1><p>Solaris Studio is new, with one game in development and one planned for the future.</p></div>${ownerContentManager('games')}<div class="grid">${DATA.games.map(projectCard).join('')}</div><div class="page-end"></div></div>`; },
+    games() { return `<div class="wrap">${ownerPageHeading('games','Games','Solaris Studio is new, with one game in development and one planned for the future.')}<div class="grid">${DATA.games.map(projectCard).join('')}</div><div class="page-end"></div></div>`; },
     updates() {
-      const updates = [{id:'gamma-frost-production-slow',category:'DEVELOPMENT NOTE',title:'Gamma Frost production is slow',content:'Gamma Frost production is moving slowly because I’m currently the only person working on it. That means I can’t build every part of the game at once, so development will take time.\n\nWhen Gamma Frost reaches early access, it will not yet be an MMORPG. The game will begin in a more limited form, and its larger online world will take longer to build. Thank you for your patience while I keep working on it.',gameId:'gamma-frost',publishedAt:Date.UTC(2026,9,18)},...ownerPosts.updates].sort((a,b) => Number(b.publishedAt || 0) - Number(a.publishedAt || 0));
-      return `<div class="wrap"><div class="page-head"><h1>Updates</h1><p>News and development updates from Solaris Studio.</p></div>${ownerContentManager('updates')}<ol class="updates-timeline">${updates.map(update => { const date = update.publishedAt ? new Date(Number(update.publishedAt)).toLocaleDateString([], {year:'numeric',month:'short',day:'numeric'}) : ''; const game = gameById(update.gameId); return `<li class="update-timeline-item"><span class="update-timeline-node" aria-hidden="true"></span><article class="update-timeline-card"><div class="update-timeline-meta"><span class="section-eyebrow">${esc(update.category || 'STUDIO UPDATE')}</span>${date ? `<time>${esc(date)}</time>` : ''}</div><h2>${esc(update.title)}</h2>${paragraphs(update.content)}${game ? `<a class="text-link" href="project.html?id=${encodeURIComponent(game.id)}">${esc(game.name)} project details <span aria-hidden="true">↗</span></a>` : ''}</article></li>`; }).join('')}</ol><div class="page-end"></div></div>`;
+      const updates = [{id:'gamma-frost-production-slow',category:'Game',title:'Gamma Frost production is slow',content:'Gamma Frost production is moving slowly because I’m currently the only person working on it. That means I can’t build every part of the game at once, so development will take time.\n\nWhen Gamma Frost reaches early access, it will not yet be an MMORPG. The game will begin in a more limited form, and its larger online world will take longer to build. Thank you for your patience while I keep working on it.',gameId:'gamma-frost',publishedAt:Date.UTC(2026,9,18)},...ownerPosts.updates].sort((a,b) => Number(b.publishedAt || 0) - Number(a.publishedAt || 0));
+      return `<div class="wrap">${ownerPageHeading('updates','Updates','News and development updates from Solaris Studio.')}<ol class="updates-timeline">${updates.map(update => { const date = update.publishedAt ? new Date(Number(update.publishedAt)).toLocaleString([], {year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : ''; const game = gameById(update.gameId); return `<li class="update-timeline-item"><span class="update-timeline-node" aria-hidden="true"></span><article class="update-timeline-card"><div class="update-timeline-meta"><span class="section-eyebrow">${esc(update.category || 'Studio')}</span>${date ? `<time>${esc(date)}</time>` : ''}</div><h2>${esc(update.title)}</h2>${paragraphs(update.content)}${game ? `<a class="text-link" href="project.html?id=${encodeURIComponent(game.id)}">${esc(game.name)} project details <span aria-hidden="true">↗</span></a>` : ''}</article></li>`; }).join('')}</ol><div class="page-end"></div></div>`;
     },
-    arts() { return `<div class="wrap"><div class="page-head"><h1>Arts</h1><p>Artwork and visuals from Solaris Studio projects.</p></div>${ownerContentManager('arts')}<div class="artwork-grid">${DATA.arts.map(artworkCard).join('')}</div>${DATA.arts.length ? '' : '<p class="empty">No artwork has been posted yet.</p>'}<div class="page-end"></div></div>`; },
+    arts() { return `<div class="wrap">${ownerPageHeading('arts','Arts','Artwork and visuals from Solaris Studio projects.')}<div class="artwork-grid">${DATA.arts.map(artworkCard).join('')}</div>${DATA.arts.length ? '' : '<p class="empty">No artwork has been posted yet.</p>'}<div class="page-end"></div></div>`; },
     groups() { return `<div class="wrap"><div class="page-head"><h1>Groups</h1><p>Join the Solaris Studio community and find our official group links here.</p></div><section class="group-intro"><span class="section-eyebrow">ABOUT OUR COMMUNITY</span><h2>Small team, big dreams.</h2><p>Solaris Studio is an early-stage game development community with two active developers. We make games to bring the things we dream of creating to life.</p></section><section class="account-panel groups-panel"><h2>Solaris communities</h2><a class="group-link" href="https://discord.gg/Wg6Y9Yc4JA" target="_blank" rel="noopener noreferrer"><span class="group-link-icon" aria-hidden="true">◉</span><span><strong>Solaris Studio Discord</strong><small>Join the community</small></span><span class="group-link-arrow" aria-hidden="true">↗</span></a></section><div class="page-end"></div></div>`; },
     download() {
       const downloadAccess = currentUser ? '<p class="download-access-note">Signed-in accounts can open the available extras. Guests need to log in before downloading.</p>' : '<div class="download-guest-gate"><p>Guests can browse these extras, but a Solaris account is required to download.</p><a class="btn btn-ghost btn-sm" href="account.html?mode=login">Log in to access downloads</a></div>';
       const downloadCard = item => { const game = gameById(item.gameId); return `<article class="download-item-card">${item.image ? `<img src="${esc(item.image)}" alt="" loading="lazy">` : ''}<div class="download-item-copy"><span class="section-eyebrow">${esc(item.category)}</span><h3>${esc(item.title)}</h3><p>${esc(item.description)}</p><div class="download-item-meta">${game ? `<span>${esc(game.name)}</span>` : ''}${item.version ? `<span>${esc(item.version)}</span>` : ''}</div>${currentUser ? `<a class="btn btn-primary btn-sm" href="${esc(item.downloadUrl)}" target="_blank" rel="noopener noreferrer">Download <span aria-hidden="true">↗</span></a>` : '<a class="btn btn-ghost btn-sm" href="account.html?mode=login">Log in to download</a>'}</div></article>`; };
       const categoryCards = (category,title) => { const items = ownerPosts.downloads.filter(item => category.includes(item.category)); return `<section class="download-category"><h2>${title}</h2>${items.length ? `<div class="download-items-grid">${items.map(downloadCard).join('')}</div>` : `<p>No ${title.toLowerCase()} are available yet.</p>`}</section>`; };
-      return `<div class="wrap"><div class="page-head"><h1>Download</h1><p>Extras and add-ons for Solaris Studio games.</p></div><section class="download-intro"><span class="section-eyebrow">PLUGINS · MODS · EXTRAS</span><h2>Make each game your own</h2><p>This page is a home for extras created for Solaris Studio games: character skins, add-ons, mods, plugins, modding apps, and other useful tools. These creations can give players new ways to personalize a game, try new ideas, and build on the experience. Game builds themselves will be shared on their own project detail pages; this page is for the tools and community-made additions around them.</p><p>We welcome creativity while asking everyone to use modifications thoughtfully: local servers on your own computer are supported, and public-server use is welcome when the modification is appropriate and safe.</p><h3>Why we support game modification tools</h3><ul class="download-reasons"><li><strong>Personalize your characters.</strong> Use skins and visual add-ons to make a character feel like your own.</li><li><strong>Explore more ways to play.</strong> Mods, plugins, and add-ons can introduce new ideas, features, and experiences to Solaris games.</li><li><strong>Celebrate creativity and hard work.</strong> Modding apps give players a way to experiment, make things, and share the care they put into their creations.</li></ul>${downloadAccess}</section>${ownerContentManager('downloads')}<div class="download-categories">${categoryCards(['Plugins & tools'],'Plugins & tools')}${categoryCards(['Mods & add-ons','Skins'],'Mods & add-ons')}${categoryCards(['Other'],'Other extras')}</div><div class="project-download-links"><h2>Game pages</h2>${DATA.games.map(game => `<a class="text-link" href="project.html?id=${encodeURIComponent(game.id)}">${esc(game.name)} project details <span aria-hidden="true">↗</span></a>`).join('')}</div><div class="page-end"></div></div>`;
+      return `<div class="wrap">${ownerPageHeading('downloads','Download','Extras and add-ons for Solaris Studio games.')}<section class="download-intro"><span class="section-eyebrow">PLUGINS · MODS · EXTRAS</span><h2>Make each game your own</h2><p>This page is a home for extras created for Solaris Studio games: character skins, add-ons, mods, plugins, modding apps, and other useful tools. These creations can give players new ways to personalize a game, try new ideas, and build on the experience. Game builds themselves will be shared on their own project detail pages; this page is for the tools and community-made additions around them.</p><p>We welcome creativity while asking everyone to use modifications thoughtfully: local servers on your own computer are supported, and public-server use is welcome when the modification is appropriate and safe.</p><h3>Why we support game modification tools</h3><ul class="download-reasons"><li><strong>Personalize your characters.</strong> Use skins and visual add-ons to make a character feel like your own.</li><li><strong>Explore more ways to play.</strong> Mods, plugins, and add-ons can introduce new ideas, features, and experiences to Solaris games.</li><li><strong>Celebrate creativity and hard work.</strong> Modding apps give players a way to experiment, make things, and share the care they put into their creations.</li></ul>${downloadAccess}</section><div class="download-categories">${categoryCards(['Plugins & tools'],'Plugins & tools')}${categoryCards(['Mods & add-ons','Skins'],'Mods & add-ons')}${categoryCards(['Other'],'Other extras')}</div><div class="project-download-links"><h2>Game pages</h2>${DATA.games.map(game => `<a class="text-link" href="project.html?id=${encodeURIComponent(game.id)}">${esc(game.name)} project details <span aria-hidden="true">↗</span></a>`).join('')}</div><div class="page-end"></div></div>`;
+    },
+    publish() {
+      const section = new URLSearchParams(location.search).get('type');
+      const target = Object.hasOwn(ownerPostSectionLabels,section) ? section : 'games';
+      if (currentUser?.accountRole !== 'owner') return `<div class="wrap"><div class="page-head"><h1>Owner publishing</h1><p>This page is available to the Solaris Owner account.</p></div><section class="account-panel"><h2>Owner access required</h2><p>Sign in with the Owner account to publish site content.</p><a class="btn btn-primary" href="account.html?mode=login">Log in</a></section></div>`;
+      return `<div class="wrap publish-page"><div class="page-head"><a class="publish-back" href="${target === 'downloads' ? 'download.html' : `${target === 'arts' ? 'arts' : target}.html`}">← Back to ${esc(ownerPostSectionLabels[target])}</a><span class="section-eyebrow">OWNER PUBLISHING</span><h1>${esc(ownerPostActionLabels[target])}</h1><p>Create and manage content for the ${esc(ownerPostSectionLabels[target].toLowerCase())} page.</p></div>${ownerContentManager(target)}</div>`;
     },
     shop() {
       const inventory = currentUser?.tickets || { namecard: 0, who: 0 };
@@ -1360,8 +1412,10 @@
       const worldIntro = game.worldIntro ? `<section class="project-copy project-story"><h2>Short introduction</h2>${paragraphs(game.worldIntro)}</section>` : '';
       const playerIntro = game.playerIntro ? `<section class="project-copy project-story"><h2>Your story begins</h2>${paragraphs(game.playerIntro)}</section>` : '';
       const releasePlan = game.releasePlan ? `<section class="project-copy project-release"><h2>Early access plans</h2><p>${esc(game.releasePlan)}</p></section>` : '';
+      const extraText = (game.textContainers || []).map(item => `<section class="project-copy project-story"><h2>${esc(item.title)}</h2>${paragraphs(item.body)}</section>`).join('');
       const downloadMessage = !currentUser ? 'Game downloads require a signed-in Solaris account. No public build is available yet.' : game.status === 'In Development' ? 'There are no public game builds yet. Check back as development continues.' : 'This project is planned for the future and has no downloads yet.';
-      return `<div class="project-page"><div class="project-banner project-banner-${esc(game.cover)}" role="img" aria-label="${esc(game.name)} project banner">${gameBannerImage(game)}<div class="project-banner-mark">${esc(game.name)}</div></div><div class="wrap project-layout"><main class="project-detail-main"><a class="project-back" href="games.html">← All projects</a><div class="project-heading">${projectIcon(game)}<div><div class="project-status-row">${badge(game.status)}${game.version ? `<span class="project-version">${esc(game.version)}</span>` : ''}</div><h1>${esc(game.name)}</h1><p class="project-subtitle">${esc(game.subtitle)} · ${esc(game.genre)}</p></div></div><section class="project-copy"><h2>About this project</h2><p>${esc(game.details)}</p><p>${esc(game.blurb)}</p></section>${worldIntro}${playerIntro}${releasePlan}<section class="project-copy project-extra"><h2>Downloads</h2><p>${esc(downloadMessage)}</p><a class="text-link" href="download.html">Browse plugins, mods, and extras <span aria-hidden="true">↗</span></a></section>${artworkSection}</main><aside class="project-switcher" aria-label="Solaris projects"><label class="project-search-wrap"><span class="project-search-icon" aria-hidden="true">⌕</span><span class="visually-hidden">Search other games</span><input type="search" data-project-search placeholder="Search other games…" autocomplete="off"></label><section class="project-selected-section"><span class="section-eyebrow">Selected Game</span>${currentProject}</section><div class="project-switch-divider"><span>Explore other games</span></div><div class="project-switch-list">${otherProjects}</div><p class="project-no-results" data-project-empty hidden>No other games match that search.</p></aside></div></div>`;
+      const gameDownloads = game.gameDownloads?.length ? `<div class="game-build-list">${game.gameDownloads.map(item => `<article class="game-build-card"><div><strong>${esc(item.title)}</strong><span>${esc([item.version,item.platform].filter(Boolean).join(' · ') || game.version || 'Game build')}</span></div>${currentUser ? `<a class="btn btn-primary btn-sm" href="${esc(item.downloadUrl)}" target="_blank" rel="noopener noreferrer">Download <span aria-hidden="true">↗</span></a>` : `<a class="btn btn-ghost btn-sm" href="account.html?mode=login">Log in to download</a>`}</article>`).join('')}</div>` : `<p>${esc(downloadMessage)}</p>`;
+      return `<div class="project-page"><div class="project-banner project-banner-${esc(game.cover)}" role="img" aria-label="${esc(game.name)} project banner">${gameBannerImage(game)}<div class="project-banner-mark">${esc(game.name)}</div></div><div class="wrap project-layout"><main class="project-detail-main"><a class="project-back" href="games.html">← All projects</a><div class="project-heading">${projectIcon(game)}<div><div class="project-status-row">${badge(game.status)}${game.version ? `<span class="project-version">${esc(game.version)}</span>` : ''}</div><h1>${esc(game.name)}</h1><p class="project-subtitle">${esc(game.subtitle)} · ${esc(game.genre)}</p></div></div><section class="project-copy"><h2>About this project</h2><p>${esc(game.details)}</p><p>${esc(game.blurb)}</p></section>${worldIntro}${playerIntro}${releasePlan}${extraText}<section class="project-copy project-extra"><h2>Downloads</h2>${gameDownloads}<a class="text-link" href="download.html">Browse plugins, mods, and extras <span aria-hidden="true">↗</span></a></section>${artworkSection}</main><aside class="project-switcher" aria-label="Solaris projects"><label class="project-search-wrap"><span class="project-search-icon" aria-hidden="true">⌕</span><span class="visually-hidden">Search other games</span><input type="search" data-project-search placeholder="Search other games…" autocomplete="off"></label><section class="project-selected-section"><span class="section-eyebrow">Selected Game</span>${currentProject}</section><div class="project-switch-divider"><span>Explore other games</span></div><div class="project-switch-list">${otherProjects}</div><p class="project-no-results" data-project-empty hidden>No other games match that search.</p></aside></div></div>`;
     },
     artwork() {
       const artwork = artById(new URLSearchParams(location.search).get('id')) || DATA.arts[0];
@@ -2069,7 +2123,7 @@
     profilePreview();
     if (page === 'account') showAccount();
     if (page === 'chat') await initializeCommunityPage();
-    if (['home','games','project','arts','artwork','updates','download','shop'].includes(page)) renderPage();
+    if (['home','games','project','arts','artwork','updates','download','shop','publish'].includes(page)) renderPage();
     try { await resumePendingFirebaseSignup(); }
     catch (error) { if (page === 'account' && !currentUser) setMessage('#auth-message',error.message); }
   }).catch(error => {
@@ -2157,6 +2211,12 @@
     if (ownerPostEdit) { fillOwnerPostForm(ownerPostEdit); return; }
     if (ownerPostDelete) { await deleteOwnerPost(ownerPostDelete); return; }
     if (ownerPostCancel) { const form = ownerPostCancel.closest('[data-owner-content-form]'); if (form) resetOwnerPostForm(form); return; }
+    if (event.target.closest('[data-add-game-text-container]')) { const form = $('[data-owner-content-form][data-section="games"]'); $('[data-game-text-list]',form)?.insertAdjacentHTML('beforeend',ownerTextContainerMarkup()); return; }
+    if (event.target.closest('[data-remove-game-text]')) { event.target.closest('[data-game-text-container]')?.remove(); return; }
+    if (event.target.closest('[data-add-game-download]')) { const form = $('[data-owner-content-form][data-section="games"]'); $('[data-game-download-list]',form)?.insertAdjacentHTML('beforeend',ownerGameDownloadMarkup()); return; }
+    if (event.target.closest('[data-remove-game-download]')) { event.target.closest('[data-game-download-item]')?.remove(); return; }
+    const clearOwnerImage = event.target.closest('[data-owner-image-clear]');
+    if (clearOwnerImage) { const form = clearOwnerImage.closest('[data-owner-content-form]'); setOwnerImagePreview(form,clearOwnerImage.dataset.ownerImageClear,''); return; }
     const communityPaneButton = event.target.closest('[data-community-pane]');
     const communityChatButton = event.target.closest('[data-community-chat]');
     const communityAddFriend = event.target.closest('[data-community-add-friend]');
@@ -2610,6 +2670,17 @@
     }
   });
   document.addEventListener('change', async event => {
+    const ownerImage = event.target.closest('[data-owner-image-import]');
+    if (ownerImage) {
+      const file = ownerImage.files?.[0], key = ownerImage.dataset.ownerImageImport, form = ownerImage.closest('[data-owner-content-form]');
+      ownerImage.value = '';
+      if (!file || !form) return;
+      try {
+        if (currentUser?.accountRole !== 'owner') throw new Error('Only the Owner account can import publishing images.');
+        setOwnerImagePreview(form,key,await compressOwnerImage(file));
+      } catch (error) { toast(error.message); }
+      return;
+    }
     const chatFile = event.target.closest('[data-chat-file]');
     if (chatFile) {
       const file = chatFile.files?.[0], kind = chatFile.dataset.chatFile, caption = $('#community-message-input')?.value || '';

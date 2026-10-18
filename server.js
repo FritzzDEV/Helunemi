@@ -17,7 +17,7 @@ const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const PAUSE_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 const USERNAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY = 3 * 1024 * 1024;
-const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js']);
+const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'publish.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js']);
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.png': 'image/png' };
 const PRIMARY_ROLES = {
   assistant: { label: 'Assistant', explanation: 'Supports studio coordination and helps keep Solaris projects moving.' },
@@ -330,6 +330,12 @@ function siteContentUrl(value, max = 1200) {
   try { const parsed = new URL(url); return parsed.protocol === 'https:' ? url : ''; }
   catch { return ''; }
 }
+function siteContentImage(value) {
+  const image = text(value, 1_100_000);
+  if (!image) return '';
+  if (image.startsWith('data:image/')) return imageData(image, 950_000);
+  return siteContentUrl(image, 1200);
+}
 function cleanSitePost(section, value = {}) {
   const prefixes = { games: 'owner-game-', arts: 'owner-art-', updates: 'owner-update-', downloads: 'owner-download-' };
   const prefix = prefixes[section];
@@ -339,19 +345,22 @@ function cleanSitePost(section, value = {}) {
   if (section === 'games') {
     const status = text(value.status, 32);
     if (!['In Development', 'Future project', 'Beta', 'Released'].includes(status)) throw Object.assign(new Error('Choose a valid game status.'), { status: 400 });
-    const game = { id, name: text(value.name, 100), subtitle: text(value.subtitle, 100), genre: text(value.genre, 100), status, version: text(value.version, 40), cover: ['frost', 'collide'].includes(value.cover) ? value.cover : 'frost', icon: siteContentUrl(value.icon, 1200), banner: siteContentUrl(value.banner, 1200), blurb: text(value.blurb, 1200), details: text(value.details, 6000), worldIntro: text(value.worldIntro, 10000), playerIntro: text(value.playerIntro, 10000), releasePlan: text(value.releasePlan, 3000) };
+    const textContainers = (Array.isArray(value.textContainers) ? value.textContainers : []).slice(0, 30).map(item => ({ title: text(item?.title, 100), body: text(item?.body, 10000) })).filter(item => item.title && item.body);
+    const gameDownloads = (Array.isArray(value.gameDownloads) ? value.gameDownloads : []).slice(0, 30).map(item => ({ title: text(item?.title, 120), version: text(item?.version, 60), platform: text(item?.platform, 80), downloadUrl: siteContentUrl(item?.downloadUrl, 1200) })).filter(item => item.title && item.downloadUrl);
+    const game = { id, name: text(value.name, 100), subtitle: text(value.subtitle, 100), genre: text(value.genre, 100), status, version: text(value.version, 40), cover: ['frost', 'collide'].includes(value.cover) ? value.cover : 'frost', icon: siteContentImage(value.icon), banner: siteContentImage(value.banner), blurb: text(value.blurb, 1200), details: text(value.details, 6000), worldIntro: text(value.worldIntro, 10000), playerIntro: text(value.playerIntro, 10000), releasePlan: text(value.releasePlan, 3000), textContainers, gameDownloads };
     if (!game.name || !game.genre || !game.blurb || !game.details) throw Object.assign(new Error('Add the game name, genre, summary, and project details.'), { status: 400 });
-    if ((value.icon && !game.icon) || (value.banner && !game.banner)) throw Object.assign(new Error('Use secure HTTPS image links or an asset path for game images.'), { status: 400 });
+    if ((value.icon && !game.icon) || (value.banner && !game.banner) || gameDownloads.length !== (Array.isArray(value.gameDownloads) ? value.gameDownloads.filter(item => item?.title && item?.downloadUrl).length : 0)) throw Object.assign(new Error('Choose valid imported game images and secure download links.'), { status: 400 });
     return game;
   }
   if (section === 'arts') {
-    const art = { id, title: text(value.title, 120), image: siteContentUrl(value.image, 1200), shape: ['icon', 'banner', 'square', 'circle'].includes(value.shape) ? value.shape : 'square', type: text(value.type, 80), projectId: /^[a-z0-9-]{1,100}$/.test(text(value.projectId, 100)) ? text(value.projectId, 100) : '', mainTag: text(value.mainTag, 80), tags: [...new Set((Array.isArray(value.tags) ? value.tags : []).map(tag => text(tag, 60)).filter(Boolean))].slice(0, 30) };
-    if (!art.title || !art.image || !art.type || !art.mainTag) throw Object.assign(new Error('Add the artwork title, secure image link, type, and main tag.'), { status: 400 });
-    if (value.image && !art.image) throw Object.assign(new Error('Use a secure HTTPS image link or an asset path for artwork.'), { status: 400 });
+    const art = { id, title: text(value.title, 120), image: siteContentImage(value.image), shape: ['icon', 'banner', 'square', 'circle'].includes(value.shape) ? value.shape : 'square', type: text(value.type, 80), projectId: /^[a-z0-9-]{1,100}$/.test(text(value.projectId, 100)) ? text(value.projectId, 100) : '', mainTag: text(value.mainTag, 80), tags: [...new Set((Array.isArray(value.tags) ? value.tags : []).map(tag => text(tag, 60)).filter(Boolean))].slice(0, 30) };
+    if (!art.title || !art.image || !art.type || !art.mainTag) throw Object.assign(new Error('Add the artwork title, imported image, type, and main tag.'), { status: 400 });
+    if (value.image && !art.image) throw Object.assign(new Error('Import a valid artwork image.'), { status: 400 });
     return art;
   }
   if (section === 'updates') {
-    const update = { id, title: text(value.title, 160), category: text(value.category, 80) || 'STUDIO UPDATE', content: text(value.content, 12000), gameId: /^[a-z0-9-]{1,100}$/.test(text(value.gameId, 100)) ? text(value.gameId, 100) : '', publishedAt: Number.isFinite(Number(value.publishedAt)) && Number(value.publishedAt) > 0 ? Number(value.publishedAt) : Date.now() };
+    const updateTypes = ['Game', 'Website', 'Release', 'Beta', 'New game', 'Studio', 'Other'];
+    const update = { id, title: text(value.title, 160), category: updateTypes.includes(value.category) ? value.category : 'Studio', content: text(value.content, 12000), gameId: /^[a-z0-9-]{1,100}$/.test(text(value.gameId, 100)) ? text(value.gameId, 100) : '', publishedAt: Number.isFinite(Number(value.publishedAt)) && Number(value.publishedAt) > 0 ? Number(value.publishedAt) : Date.now() };
     if (!update.title || !update.content) throw Object.assign(new Error('Add an update title and its content.'), { status: 400 });
     return update;
   }
@@ -639,7 +648,10 @@ async function handleApi(req, res, pathname) {
       if (!id.startsWith(prefix) || !previousItems.some(item => item.id === id)) return send(res, 404, { error: 'That owner post could not be found.' });
       nextItems = previousItems.filter(item => item.id !== id);
     } else {
-      const post = cleanSitePost(section, input.post);
+      const inputPost = input.post && typeof input.post === 'object' ? input.post : {};
+      const previousIndex = previousItems.findIndex(item => item.id === text(inputPost.id, 120));
+      const postInput = section === 'updates' ? { ...inputPost, publishedAt: previousIndex >= 0 ? previousItems[previousIndex].publishedAt : Date.now() } : inputPost;
+      const post = cleanSitePost(section, postInput);
       const index = previousItems.findIndex(item => item.id === post.id);
       if (index < 0 && previousItems.length >= 100) return send(res, 400, { error: 'This section has reached its 100-post limit.' });
       nextItems = [...previousItems];
