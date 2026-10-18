@@ -31,6 +31,8 @@ const FRIEND_CARD_EFFECTS = new Set(['none', 'glow', 'lift', 'shine']);
 
 let accounts = [];
 let pausedAccounts = [];
+const EMPTY_SITE_CONTENT = { games: [], arts: [], updates: [], downloads: [] };
+let siteContent = { ...EMPTY_SITE_CONTENT };
 let pool = null;
 let firebaseAuth = null;
 const sessions = new Map();
@@ -321,6 +323,54 @@ function allowAttempt(req) {
 function text(value, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
+function siteContentUrl(value, max = 1200) {
+  const url = text(value, max);
+  if (!url) return '';
+  if (/^\/?assets\/[A-Za-z0-9_./-]+$/.test(url) && !url.split('/').includes('..')) return url;
+  try { const parsed = new URL(url); return parsed.protocol === 'https:' ? url : ''; }
+  catch { return ''; }
+}
+function cleanSitePost(section, value = {}) {
+  const prefixes = { games: 'owner-game-', arts: 'owner-art-', updates: 'owner-update-', downloads: 'owner-download-' };
+  const prefix = prefixes[section];
+  if (!prefix || !value || typeof value !== 'object' || Array.isArray(value)) throw Object.assign(new Error('Choose a supported publishing section.'), { status: 400 });
+  const id = text(value.id, 120) || `${prefix}${crypto.randomUUID()}`;
+  if (!id.startsWith(prefix) || !/^[a-z0-9-]+$/.test(id)) throw Object.assign(new Error('This post has an invalid ID.'), { status: 400 });
+  if (section === 'games') {
+    const status = text(value.status, 32);
+    if (!['In Development', 'Future project', 'Beta', 'Released'].includes(status)) throw Object.assign(new Error('Choose a valid game status.'), { status: 400 });
+    const game = { id, name: text(value.name, 100), subtitle: text(value.subtitle, 100), genre: text(value.genre, 100), status, version: text(value.version, 40), cover: ['frost', 'collide'].includes(value.cover) ? value.cover : 'frost', icon: siteContentUrl(value.icon, 1200), banner: siteContentUrl(value.banner, 1200), blurb: text(value.blurb, 1200), details: text(value.details, 6000), worldIntro: text(value.worldIntro, 10000), playerIntro: text(value.playerIntro, 10000), releasePlan: text(value.releasePlan, 3000) };
+    if (!game.name || !game.genre || !game.blurb || !game.details) throw Object.assign(new Error('Add the game name, genre, summary, and project details.'), { status: 400 });
+    if ((value.icon && !game.icon) || (value.banner && !game.banner)) throw Object.assign(new Error('Use secure HTTPS image links or an asset path for game images.'), { status: 400 });
+    return game;
+  }
+  if (section === 'arts') {
+    const art = { id, title: text(value.title, 120), image: siteContentUrl(value.image, 1200), shape: ['icon', 'banner', 'square', 'circle'].includes(value.shape) ? value.shape : 'square', type: text(value.type, 80), projectId: /^[a-z0-9-]{1,100}$/.test(text(value.projectId, 100)) ? text(value.projectId, 100) : '', mainTag: text(value.mainTag, 80), tags: [...new Set((Array.isArray(value.tags) ? value.tags : []).map(tag => text(tag, 60)).filter(Boolean))].slice(0, 30) };
+    if (!art.title || !art.image || !art.type || !art.mainTag) throw Object.assign(new Error('Add the artwork title, secure image link, type, and main tag.'), { status: 400 });
+    if (value.image && !art.image) throw Object.assign(new Error('Use a secure HTTPS image link or an asset path for artwork.'), { status: 400 });
+    return art;
+  }
+  if (section === 'updates') {
+    const update = { id, title: text(value.title, 160), category: text(value.category, 80) || 'STUDIO UPDATE', content: text(value.content, 12000), gameId: /^[a-z0-9-]{1,100}$/.test(text(value.gameId, 100)) ? text(value.gameId, 100) : '', publishedAt: Number.isFinite(Number(value.publishedAt)) && Number(value.publishedAt) > 0 ? Number(value.publishedAt) : Date.now() };
+    if (!update.title || !update.content) throw Object.assign(new Error('Add an update title and its content.'), { status: 400 });
+    return update;
+  }
+  const categories = ['Plugins & tools', 'Mods & add-ons', 'Skins', 'Other'];
+  const item = { id, title: text(value.title, 140), description: text(value.description, 3000), gameId: /^[a-z0-9-]{1,100}$/.test(text(value.gameId, 100)) ? text(value.gameId, 100) : '', category: categories.includes(value.category) ? value.category : 'Other', version: text(value.version, 60), downloadUrl: siteContentUrl(value.downloadUrl, 1200), image: siteContentUrl(value.image, 1200) };
+  if (!item.title || !item.description || !item.downloadUrl) throw Object.assign(new Error('Add the extra title, description, and secure download link.'), { status: 400 });
+  if ((value.downloadUrl && !item.downloadUrl) || (value.image && !item.image)) throw Object.assign(new Error('Use secure HTTPS links for downloads and images.'), { status: 400 });
+  return item;
+}
+function cleanSiteContentState(value) {
+  const result = { ...EMPTY_SITE_CONTENT };
+  for (const section of Object.keys(result)) {
+    const seen = new Set();
+    result[section] = (Array.isArray(value?.[section]) ? value[section] : []).slice(0, 100).map(item => {
+      try { return cleanSitePost(section, item); } catch (_) { return null; }
+    }).filter(item => item && !seen.has(item.id) && seen.add(item.id));
+  }
+  return result;
+}
 function cleanSecondaryRoles(value) {
   const source = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
   const seen = new Set();
@@ -536,7 +586,7 @@ function cleanProfile(input, existing = {}, allowMemberFriendCard = true, ownerI
   };
 }
 async function saveAccounts() {
-  const snapshot = JSON.stringify({ accounts, pausedAccounts });
+  const snapshot = JSON.stringify({ accounts, pausedAccounts, siteContent });
   writeQueue = writeQueue.catch(() => {}).then(async () => {
     if (pool) {
       await pool.query('INSERT INTO solaris_account_store (store_id, accounts) VALUES (1, $1::jsonb) ON CONFLICT (store_id) DO UPDATE SET accounts = EXCLUDED.accounts', [snapshot]);
@@ -574,6 +624,32 @@ async function handleApi(req, res, pathname) {
   if (req.method === 'GET' && pathname === '/api/me') {
     const account = await getAccount(req);
     return send(res, 200, { user: account ? privateProfile(account) : null });
+  }
+  if (req.method === 'GET' && pathname === '/api/site-content') return send(res, 200, { content: siteContent });
+  if (req.method === 'PUT' && pathname === '/api/owner/site-content') {
+    const owner = await getAccount(req);
+    if (!owner || owner.role !== 'owner') return send(res, 403, { error: 'Only the Solaris Owner can publish site content.' });
+    const input = await readBody(req), section = text(input.section, 24);
+    if (!Object.hasOwn(EMPTY_SITE_CONTENT, section)) return send(res, 400, { error: 'Choose a valid publishing section.' });
+    const prefix = { games: 'owner-game-', arts: 'owner-art-', updates: 'owner-update-', downloads: 'owner-download-' }[section];
+    const previousItems = siteContent[section] || [];
+    let nextItems;
+    if (input.delete === true) {
+      const id = text(input.id, 120);
+      if (!id.startsWith(prefix) || !previousItems.some(item => item.id === id)) return send(res, 404, { error: 'That owner post could not be found.' });
+      nextItems = previousItems.filter(item => item.id !== id);
+    } else {
+      const post = cleanSitePost(section, input.post);
+      const index = previousItems.findIndex(item => item.id === post.id);
+      if (index < 0 && previousItems.length >= 100) return send(res, 400, { error: 'This section has reached its 100-post limit.' });
+      nextItems = [...previousItems];
+      if (index >= 0) nextItems[index] = post; else nextItems.push(post);
+    }
+    const previous = siteContent;
+    siteContent = { ...siteContent, [section]: nextItems };
+    try { await saveAccounts(); }
+    catch (error) { siteContent = previous; throw error; }
+    return send(res, 200, { content: siteContent, message: 'Your site content has been saved.' });
   }
   if (req.method === 'GET' && pathname === '/api/community') {
     const account = await getAccount(req);
@@ -1061,13 +1137,14 @@ async function loadFileStore() {
   try {
     stored = JSON.parse(await fs.readFile(STORE_PATH, 'utf8'));
   } catch (error) {
-    if (error.code === 'ENOENT') { accounts = []; pausedAccounts = []; return; }
+    if (error.code === 'ENOENT') { accounts = []; pausedAccounts = []; siteContent = { ...EMPTY_SITE_CONTENT }; return; }
     throw error;
   }
   const savedAccounts = Array.isArray(stored) ? stored : Array.isArray(stored?.accounts) ? stored.accounts : [];
   accounts = savedAccounts.filter(account => account && account.id && account.profile && account.passwordHash && account.salt);
   pausedAccounts = Array.isArray(stored?.pausedAccounts) ? stored.pausedAccounts.filter(item => item?.account?.id && item.account.profile && item.account.passwordHash && item.account.salt && Number(item.resumeAt) > 0) : [];
-  let changed = Array.isArray(stored);
+  siteContent = cleanSiteContentState(stored?.siteContent);
+  let changed = Array.isArray(stored) || !stored?.siteContent;
   changed = accounts.reduce((didChange, account) => normalizeAccount(account) || didChange, changed);
   changed = pausedAccounts.reduce((didChange, item) => normalizeAccount(item.account) || didChange, changed);
   // Migrate legacy account arrays without dropping any existing profile data.
@@ -1087,7 +1164,8 @@ async function loadStore() {
     const savedAccounts = Array.isArray(stored) ? stored : Array.isArray(stored?.accounts) ? stored.accounts : [];
     accounts = savedAccounts.filter(account => account && account.id && account.profile && account.passwordHash && account.salt);
     pausedAccounts = Array.isArray(stored?.pausedAccounts) ? stored.pausedAccounts.filter(item => item?.account?.id && item.account.profile && item.account.passwordHash && item.account.salt && Number(item.resumeAt) > 0) : [];
-    let changed = Array.isArray(stored);
+    siteContent = cleanSiteContentState(stored?.siteContent);
+    let changed = Array.isArray(stored) || !stored?.siteContent;
     changed = accounts.reduce((didChange, account) => normalizeAccount(account) || didChange, changed);
     changed = pausedAccounts.reduce((didChange, item) => normalizeAccount(item.account) || didChange, changed);
     if (changed) await saveAccounts();

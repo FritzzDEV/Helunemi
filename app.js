@@ -35,6 +35,7 @@
   const page = document.body.dataset.page || 'home';
   const titles = {home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat'};
   let currentUser = null;
+  let ownerPosts = {games:[],arts:[],updates:[],downloads:[]};
   let memberProfiles = [];
   let communityData = {friends:[],friendRequestsSent:[],friendRequestsReceived:[],bugReports:[]};
   let communityPane = 'home';
@@ -87,7 +88,7 @@
   function artworkCard(art) {
     return `<article class="artwork-card"><a href="${artworkHref(art)}"><div class="artwork-card-image artwork-card-image-${esc(art.shape)}"><img src="${esc(art.image)}" alt="${esc(art.title)}"></div><div class="artwork-card-copy"><span class="artwork-main-tag">${esc(art.mainTag)}</span><h2>${esc(art.title)}</h2><span class="artwork-type">${esc(art.type)}</span><div class="artwork-tags">${art.tags.map(tag => `<span class="artwork-tag">${esc(tag)}</span>`).join('')}</div><span class="artwork-open">Artwork details <span aria-hidden="true">↗</span></span></div></a></article>`;
   }
-  const badge = status => `<span class="badge ${status === 'In Development' ? 'b-dev' : 'b-soon'}">${esc(status)}</span>`;
+  const badge = status => `<span class="badge ${status === 'In Development' ? 'b-dev' : status === 'Beta' ? 'b-beta' : status === 'Released' ? 'b-released' : 'b-soon'}">${esc(status)}</span>`;
   const socialIcon = label => ({Instagram:'◎',YouTube:'▶',Discord:'◉',Twitch:'▣',TikTok:'♪',Website:'↗',Bluesky:'✳',X:'𝕏'}[label] || '↗');
   const favoriteIcon = type => ({game:'🎮',developer:'✦',artwork:'▧'}[type] || '★');
   const favoritesFor = user => user?.favorites || {};
@@ -1181,6 +1182,126 @@
       <a class="btn btn-primary profile-view" href="account.html">View full account</a>`;
   }
 
+  const ownerPostFields = {
+    games: [
+      {key:'name',label:'Game title',required:true}, {key:'subtitle',label:'Subtitle'}, {key:'genre',label:'Genre',required:true},
+      {key:'status',label:'Project status',type:'select',required:true,options:['In Development','Future project','Beta','Released']},
+      {key:'version',label:'Version'}, {key:'cover',label:'Card theme',type:'select',options:['frost','collide']},
+      {key:'icon',label:'Game icon URL',placeholder:'https://…'}, {key:'banner',label:'Project banner URL',placeholder:'https://…'},
+      {key:'blurb',label:'Short summary',type:'textarea',required:true}, {key:'details',label:'Project details',type:'textarea',required:true},
+      {key:'worldIntro',label:'World introduction',type:'textarea'}, {key:'playerIntro',label:'Player story',type:'textarea'}, {key:'releasePlan',label:'Release plan',type:'textarea'}
+    ],
+    arts: [
+      {key:'title',label:'Artwork title',required:true}, {key:'image',label:'Image URL',required:true,placeholder:'https://…'},
+      {key:'type',label:'Artwork type',required:true,placeholder:'Concept art, game icon…'},
+      {key:'shape',label:'Image shape',type:'select',options:['square','icon','banner','circle']},
+      {key:'projectId',label:'Related game',type:'games'}, {key:'mainTag',label:'Main tag',required:true},
+      {key:'tags',label:'Tags',type:'text',placeholder:'Separate tags with commas'}
+    ],
+    updates: [
+      {key:'title',label:'Update title',required:true}, {key:'category',label:'Update label',placeholder:'DEVELOPMENT NOTE'},
+      {key:'publishedAt',label:'Publish date',type:'datetime-local'}, {key:'gameId',label:'Related game',type:'games'},
+      {key:'content',label:'Update text',type:'textarea',required:true}
+    ],
+    downloads: [
+      {key:'title',label:'Extra title',required:true}, {key:'category',label:'Type',type:'select',required:true,options:['Plugins & tools','Mods & add-ons','Skins','Other']},
+      {key:'gameId',label:'For game',type:'games'}, {key:'version',label:'Version'},
+      {key:'image',label:'Cover image URL',placeholder:'https://…'}, {key:'downloadUrl',label:'Download link',required:true,placeholder:'https://…'},
+      {key:'description',label:'Description',type:'textarea',required:true}
+    ]
+  };
+  const ownerPostSectionLabels = {games:'Games',arts:'Arts',updates:'Updates',downloads:'Downloads'};
+  function ownerFieldMarkup(section, field) {
+    const controlName = field.key;
+    let control;
+    if (field.type === 'textarea') control = `<textarea name="${controlName}" rows="4"${field.required ? ' required' : ''} placeholder="${esc(field.placeholder || '')}"></textarea>`;
+    else if (field.type === 'select') control = `<select name="${controlName}"${field.required ? ' required' : ''}>${(field.options || []).map((option,index) => `<option value="${esc(option)}"${index === 0 ? ' selected' : ''}>${esc(option)}</option>`).join('')}</select>`;
+    else if (field.type === 'games') control = `<select name="${controlName}"><option value="">No game selected</option>${DATA.games.map(game => `<option value="${esc(game.id)}">${esc(game.name)}</option>`).join('')}</select>`;
+    else if (field.type === 'datetime-local') control = `<input name="${controlName}" type="datetime-local">`;
+    else control = `<input name="${controlName}" type="text" maxlength="${field.key === 'tags' ? 1800 : 1200}"${field.required ? ' required' : ''} placeholder="${esc(field.placeholder || '')}">`;
+    return `<label class="owner-post-field${field.type === 'textarea' ? ' is-wide' : ''}">${esc(field.label)}${control}</label>`;
+  }
+  function ownerContentManager(section) {
+    if (currentUser?.accountRole !== 'owner') return '';
+    const posts = ownerPosts[section] || [];
+    const cards = posts.length ? posts.map(post => {
+      const title = post.name || post.title || 'Untitled post';
+      const detail = section === 'games' ? `${post.status} · ${post.genre}` : section === 'updates' ? (post.category || 'Studio update') : section === 'downloads' ? post.category : (post.type || 'Artwork');
+      return `<article class="owner-post-row"><span><strong>${esc(title)}</strong><small>${esc(detail || '')}</small></span><span class="owner-post-row-actions"><button class="btn btn-ghost btn-sm" type="button" data-owner-post-edit="${section}" data-post-id="${esc(post.id)}">Edit</button><button class="btn btn-danger btn-sm" type="button" data-owner-post-delete="${section}" data-post-id="${esc(post.id)}">Delete</button></span></article>`;
+    }).join('') : '<p class="owner-post-empty">No owner posts here yet. Use the form to publish the first one.</p>';
+    return `<section class="owner-publishing" aria-label="Owner publishing tools for ${ownerPostSectionLabels[section]}"><div class="owner-publishing-heading"><div><span class="section-eyebrow">OWNER PUBLISHING</span><h2>Manage ${ownerPostSectionLabels[section]}</h2><p>Posts save with the Solaris account data store.</p></div></div><div class="owner-post-list">${cards}</div><form class="owner-post-form" data-owner-content-form data-section="${section}"><input type="hidden" name="id"><h3 data-owner-form-title>Post a new ${section === 'games' ? 'game' : section === 'arts' ? 'artwork' : section === 'updates' ? 'update' : 'download'}</h3><div class="owner-post-fields">${ownerPostFields[section].map(field => ownerFieldMarkup(section,field)).join('')}</div><div class="owner-post-form-actions"><button class="btn btn-primary" type="submit" data-owner-form-submit>Publish post</button><button class="btn btn-ghost" type="button" data-owner-post-cancel hidden>Cancel edit</button><span class="form-message" data-owner-post-message role="status"></span></div></form></section>`;
+  }
+  function applyOwnerPosts(content) {
+    ownerPosts = { games:Array.isArray(content?.games) ? content.games : [], arts:Array.isArray(content?.arts) ? content.arts : [], updates:Array.isArray(content?.updates) ? content.updates : [], downloads:Array.isArray(content?.downloads) ? content.downloads : [] };
+    DATA.games = DATA.games.filter(game => game._ownerManaged !== true).concat(ownerPosts.games.map(game => ({...game,_ownerManaged:true})));
+    DATA.arts = DATA.arts.filter(art => art._ownerManaged !== true).concat(ownerPosts.arts.map(art => ({...art,_ownerManaged:true})));
+  }
+  async function loadOwnerPosts() {
+    const result = await api('/api/site-content');
+    applyOwnerPosts(result.content);
+    if (['home','games','project','arts','artwork','updates','download'].includes(page)) renderPage();
+  }
+  function ownerPostFromForm(form) {
+    const raw = Object.fromEntries(new FormData(form));
+    const section = form.dataset.section;
+    if (section === 'games') return {...raw,cover:raw.cover || 'frost'};
+    if (section === 'arts') return {...raw,tags:String(raw.tags || '').split(',').map(tag => tag.trim()).filter(Boolean)};
+    if (section === 'updates') return {...raw,publishedAt:raw.publishedAt ? new Date(raw.publishedAt).getTime() : Date.now()};
+    return raw;
+  }
+  function fillOwnerPostForm(button) {
+    const section = button.dataset.ownerPostEdit, post = ownerPosts[section]?.find(item => item.id === button.dataset.postId);
+    const form = $(`[data-owner-content-form][data-section="${section}"]`);
+    if (!form || !post) return;
+    for (const field of ownerPostFields[section]) {
+      const input = form.elements.namedItem(field.key);
+      if (!input) continue;
+      let value = post[field.key] ?? '';
+      if (field.key === 'tags') value = Array.isArray(value) ? value.join(', ') : value;
+      if (field.type === 'datetime-local' && value) {
+        const date = new Date(Number(value));
+        value = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0,16);
+      }
+      input.value = value;
+    }
+    form.elements.id.value = post.id;
+    $('[data-owner-form-title]',form).textContent = `Edit ${section === 'games' ? 'game' : section === 'arts' ? 'artwork' : section === 'updates' ? 'update' : 'download'}`;
+    $('[data-owner-form-submit]',form).textContent = 'Save changes';
+    $('[data-owner-post-cancel]',form).hidden = false;
+    form.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+  function resetOwnerPostForm(form) {
+    form.reset();
+    form.elements.id.value = '';
+    $('[data-owner-form-title]',form).textContent = `Post a new ${form.dataset.section === 'games' ? 'game' : form.dataset.section === 'arts' ? 'artwork' : form.dataset.section === 'updates' ? 'update' : 'download'}`;
+    $('[data-owner-form-submit]',form).textContent = 'Publish post';
+    $('[data-owner-post-cancel]',form).hidden = true;
+    const message = $('[data-owner-post-message]',form); message.textContent = ''; message.className = 'form-message';
+  }
+  async function saveOwnerPostForm(form) {
+    const section = form.dataset.section, message = $('[data-owner-post-message]',form), button = $('[data-owner-form-submit]',form);
+    if (currentUser?.accountRole !== 'owner') { toast('Only the Owner account can publish site content.'); return; }
+    button.disabled = true; message.textContent = 'Saving…'; message.className = 'form-message';
+    try {
+      const post = ownerPostFromForm(form);
+      if (!post.id) post.id = `owner-${({games:'game',arts:'art',updates:'update',downloads:'download'})[section]}-${crypto.randomUUID()}`;
+      const index = (ownerPosts[section] || []).findIndex(item => item.id === post.id);
+      const result = await api('/api/owner/site-content','PUT',{section,post});
+      applyOwnerPosts(result.content); renderPage(); toast(index >= 0 ? 'Your post has been updated.' : 'Your post is now published.');
+    } catch (error) { message.textContent = error.message; message.classList.add('is-error'); }
+    finally { button.disabled = false; }
+  }
+  async function deleteOwnerPost(button) {
+    if (currentUser?.accountRole !== 'owner') { toast('Only the Owner account can remove site content.'); return; }
+    const section = button.dataset.ownerPostDelete, post = ownerPosts[section]?.find(item => item.id === button.dataset.postId);
+    if (!post || !window.confirm(`Delete “${post.name || post.title}” from ${ownerPostSectionLabels[section]}? This cannot be undone.`)) return;
+    button.disabled = true;
+    try {
+      const result = await api('/api/owner/site-content','PUT',{section,id:post.id,delete:true});
+      applyOwnerPosts(result.content); renderPage(); toast('The post has been removed.');
+    } catch (error) { toast(error.message); button.disabled = false; }
+  }
+
   const views = {
     chat() {
       return `<div class="community-shell community-page-shell"><header class="community-header"><a href="index.html" class="community-brand"><img src="assets/golden-spiral-sun-icon.png" alt=""><span>Solaris Community</span></a><div class="community-header-actions"><span class="community-presence"><i></i><span data-studio-presence>Studio community</span></span><a class="community-close" href="index.html" data-close-community aria-label="Close community">×</a></div></header><div class="community-layout"><aside class="community-sidebar" data-community-sidebar></aside><main class="community-main" data-community-main></main></div></div>`;
@@ -1211,11 +1332,19 @@
     members() {
       return `<div class="wrap"><div class="page-head"><span class="section-eyebrow">MEET THE COMMUNITY</span><h1>Members</h1><p>Member accounts make a Friend-Card in their own style. Cards appear here only after the member chooses to post them. Studio roles have their own profiles on the List page.</p></div><section class="member-directory friend-directory" aria-label="Search member Friend-Cards"><label class="member-search-wrap"><span class="visually-hidden">Search member Friend-Cards</span><span class="member-search-icon" aria-hidden="true">⌕</span><input type="search" data-friend-search placeholder="Search posted cards…" autocomplete="off"></label></section><div class="friend-card-grid" id="member-card-grid"></div><p class="empty member-empty" id="member-card-empty">No custom Friend-Cards have been posted yet.</p><p class="form-message" id="member-card-message" role="status"></p><div class="page-end"></div></div>`;
     },
-    games() { return `<div class="wrap"><div class="page-head"><h1>Games</h1><p>Solaris Studio is new, with one game in development and one planned for the future.</p></div><div class="grid">${DATA.games.map(projectCard).join('')}</div><div class="page-end"></div></div>`; },
-    updates() { return `<div class="wrap"><div class="page-head"><h1>Updates</h1><p>News and development updates from Solaris Studio.</p></div><article class="update-card"><span class="section-eyebrow">DEVELOPMENT NOTE</span><h2>Gamma Frost production is slow</h2><p>Gamma Frost production is moving slowly because I’m currently the only person working on it. That means I can’t build every part of the game at once, so development will take time.</p><p>When Gamma Frost reaches early access, it will not yet be an MMORPG. The game will begin in a more limited form, and its larger online world will take longer to build. Thank you for your patience while I keep working on it.</p></article><div class="page-end"></div></div>`; },
-    arts() { return `<div class="wrap"><div class="page-head"><h1>Arts</h1><p>Artwork and visuals from Solaris Studio projects.</p></div><div class="artwork-grid">${DATA.arts.map(artworkCard).join('')}</div><div class="page-end"></div></div>`; },
+    games() { return `<div class="wrap"><div class="page-head"><h1>Games</h1><p>Solaris Studio is new, with one game in development and one planned for the future.</p></div>${ownerContentManager('games')}<div class="grid">${DATA.games.map(projectCard).join('')}</div><div class="page-end"></div></div>`; },
+    updates() {
+      const updates = [{id:'gamma-frost-production-slow',category:'DEVELOPMENT NOTE',title:'Gamma Frost production is slow',content:'Gamma Frost production is moving slowly because I’m currently the only person working on it. That means I can’t build every part of the game at once, so development will take time.\n\nWhen Gamma Frost reaches early access, it will not yet be an MMORPG. The game will begin in a more limited form, and its larger online world will take longer to build. Thank you for your patience while I keep working on it.',gameId:'gamma-frost',publishedAt:Date.UTC(2026,9,18)},...ownerPosts.updates].sort((a,b) => Number(b.publishedAt || 0) - Number(a.publishedAt || 0));
+      return `<div class="wrap"><div class="page-head"><h1>Updates</h1><p>News and development updates from Solaris Studio.</p></div>${ownerContentManager('updates')}<ol class="updates-timeline">${updates.map(update => { const date = update.publishedAt ? new Date(Number(update.publishedAt)).toLocaleDateString([], {year:'numeric',month:'short',day:'numeric'}) : ''; const game = gameById(update.gameId); return `<li class="update-timeline-item"><span class="update-timeline-node" aria-hidden="true"></span><article class="update-timeline-card"><div class="update-timeline-meta"><span class="section-eyebrow">${esc(update.category || 'STUDIO UPDATE')}</span>${date ? `<time>${esc(date)}</time>` : ''}</div><h2>${esc(update.title)}</h2>${paragraphs(update.content)}${game ? `<a class="text-link" href="project.html?id=${encodeURIComponent(game.id)}">${esc(game.name)} project details <span aria-hidden="true">↗</span></a>` : ''}</article></li>`; }).join('')}</ol><div class="page-end"></div></div>`;
+    },
+    arts() { return `<div class="wrap"><div class="page-head"><h1>Arts</h1><p>Artwork and visuals from Solaris Studio projects.</p></div>${ownerContentManager('arts')}<div class="artwork-grid">${DATA.arts.map(artworkCard).join('')}</div>${DATA.arts.length ? '' : '<p class="empty">No artwork has been posted yet.</p>'}<div class="page-end"></div></div>`; },
     groups() { return `<div class="wrap"><div class="page-head"><h1>Groups</h1><p>Join the Solaris Studio community and find our official group links here.</p></div><section class="group-intro"><span class="section-eyebrow">ABOUT OUR COMMUNITY</span><h2>Small team, big dreams.</h2><p>Solaris Studio is an early-stage game development community with two active developers. We make games to bring the things we dream of creating to life.</p></section><section class="account-panel groups-panel"><h2>Solaris communities</h2><a class="group-link" href="https://discord.gg/Wg6Y9Yc4JA" target="_blank" rel="noopener noreferrer"><span class="group-link-icon" aria-hidden="true">◉</span><span><strong>Solaris Studio Discord</strong><small>Join the community</small></span><span class="group-link-arrow" aria-hidden="true">↗</span></a></section><div class="page-end"></div></div>`; },
-    download() { const downloadAccess = currentUser ? '<p class="download-access-note">Downloads will be available to signed-in members when the first extras are ready.</p>' : '<div class="download-guest-gate"><p>Guests can browse this page, but downloads require a Solaris account. No downloads are available yet.</p><a class="btn btn-ghost btn-sm" href="account.html?mode=login">Log in to access downloads</a></div>'; return `<div class="wrap"><div class="page-head"><h1>Download</h1><p>Extras and add-ons for Solaris Studio games.</p></div><section class="download-intro"><span class="section-eyebrow">PLUGINS · MODS · EXTRAS</span><h2>Make each game your own</h2><p>This page is a home for extras created for Solaris Studio games: character skins, add-ons, mods, plugins, modding apps, and other useful tools. These creations can give players new ways to personalize a game, try new ideas, and build on the experience. Game builds themselves will be shared on their own project detail pages; this page is for the tools and community-made additions around them.</p><p>There are no downloads available yet. As our games and their tools grow, we’ll add each extra here with details about its game, version, and use. We welcome creativity while asking everyone to use modifications thoughtfully: local servers on your own computer are supported, and public-server use is welcome when the modification is appropriate and safe.</p><h3>Why we support game modification tools</h3><ul class="download-reasons"><li><strong>Personalize your characters.</strong> Use skins and visual add-ons to make a character feel like your own.</li><li><strong>Explore more ways to play.</strong> Mods, plugins, and add-ons can introduce new ideas, features, and experiences to Solaris games.</li><li><strong>Celebrate creativity and hard work.</strong> Modding apps give players a way to experiment, make things, and share the care they put into their creations.</li></ul>${downloadAccess}</section><div class="download-categories"><section class="download-category"><h2>Plugins &amp; tools</h2><p>No plugins or tools are available yet.</p></section><section class="download-category"><h2>Mods &amp; add-ons</h2><p>No mods or add-ons are available yet.</p></section></div><div class="project-download-links"><h2>Game pages</h2>${DATA.games.map(game => `<a class="text-link" href="project.html?id=${encodeURIComponent(game.id)}">${esc(game.name)} project details <span aria-hidden="true">↗</span></a>`).join('')}</div><div class="page-end"></div></div>`; },
+    download() {
+      const downloadAccess = currentUser ? '<p class="download-access-note">Signed-in accounts can open the available extras. Guests need to log in before downloading.</p>' : '<div class="download-guest-gate"><p>Guests can browse these extras, but a Solaris account is required to download.</p><a class="btn btn-ghost btn-sm" href="account.html?mode=login">Log in to access downloads</a></div>';
+      const downloadCard = item => { const game = gameById(item.gameId); return `<article class="download-item-card">${item.image ? `<img src="${esc(item.image)}" alt="" loading="lazy">` : ''}<div class="download-item-copy"><span class="section-eyebrow">${esc(item.category)}</span><h3>${esc(item.title)}</h3><p>${esc(item.description)}</p><div class="download-item-meta">${game ? `<span>${esc(game.name)}</span>` : ''}${item.version ? `<span>${esc(item.version)}</span>` : ''}</div>${currentUser ? `<a class="btn btn-primary btn-sm" href="${esc(item.downloadUrl)}" target="_blank" rel="noopener noreferrer">Download <span aria-hidden="true">↗</span></a>` : '<a class="btn btn-ghost btn-sm" href="account.html?mode=login">Log in to download</a>'}</div></article>`; };
+      const categoryCards = (category,title) => { const items = ownerPosts.downloads.filter(item => category.includes(item.category)); return `<section class="download-category"><h2>${title}</h2>${items.length ? `<div class="download-items-grid">${items.map(downloadCard).join('')}</div>` : `<p>No ${title.toLowerCase()} are available yet.</p>`}</section>`; };
+      return `<div class="wrap"><div class="page-head"><h1>Download</h1><p>Extras and add-ons for Solaris Studio games.</p></div><section class="download-intro"><span class="section-eyebrow">PLUGINS · MODS · EXTRAS</span><h2>Make each game your own</h2><p>This page is a home for extras created for Solaris Studio games: character skins, add-ons, mods, plugins, modding apps, and other useful tools. These creations can give players new ways to personalize a game, try new ideas, and build on the experience. Game builds themselves will be shared on their own project detail pages; this page is for the tools and community-made additions around them.</p><p>We welcome creativity while asking everyone to use modifications thoughtfully: local servers on your own computer are supported, and public-server use is welcome when the modification is appropriate and safe.</p><h3>Why we support game modification tools</h3><ul class="download-reasons"><li><strong>Personalize your characters.</strong> Use skins and visual add-ons to make a character feel like your own.</li><li><strong>Explore more ways to play.</strong> Mods, plugins, and add-ons can introduce new ideas, features, and experiences to Solaris games.</li><li><strong>Celebrate creativity and hard work.</strong> Modding apps give players a way to experiment, make things, and share the care they put into their creations.</li></ul>${downloadAccess}</section>${ownerContentManager('downloads')}<div class="download-categories">${categoryCards(['Plugins & tools'],'Plugins & tools')}${categoryCards(['Mods & add-ons','Skins'],'Mods & add-ons')}${categoryCards(['Other'],'Other extras')}</div><div class="project-download-links"><h2>Game pages</h2>${DATA.games.map(game => `<a class="text-link" href="project.html?id=${encodeURIComponent(game.id)}">${esc(game.name)} project details <span aria-hidden="true">↗</span></a>`).join('')}</div><div class="page-end"></div></div>`;
+    },
     shop() {
       const inventory = currentUser?.tickets || { namecard: 0, who: 0 };
       const ticketCard = (kind, title, summary, count) => `<article class="shop-ticket-card"><img class="shop-ticket-art" src="assets/${kind === 'namecard' ? 'namecard-ticket' : 'who-ticket'}.png" alt="${title} artwork"><div class="shop-ticket-copy"><span class="section-eyebrow">PROFILE TICKET</span><h2>${title}</h2><p>${summary}</p><span class="shop-ticket-count">${currentUser ? `In your inventory: <strong>${count}</strong>` : 'Sign in to view your inventory.'}</span></div>${currentUser ? `<button class="btn btn-primary" type="button" data-shop-ticket="${kind}">Get for free</button>` : '<a class="btn btn-primary" href="account.html?mode=signup">Sign up or log in</a>'}</article>`;
@@ -1933,13 +2062,14 @@
   try { const theme = localStorage.getItem('solaris-theme'); if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme',theme); } catch (_) {}
   loadTeamMembers();
   loadMemberProfiles();
+  loadOwnerPosts().catch(error => console.warn('Could not load published site content:',error.message));
   Promise.all([api('/api/me'),loadFirebaseSettings()]).then(async ([result]) => {
     currentUser = result.user;
     if (currentUser) leaveGuestMode();
     profilePreview();
     if (page === 'account') showAccount();
     if (page === 'chat') await initializeCommunityPage();
-    if (['shop','download','project'].includes(page)) renderPage();
+    if (['home','games','project','arts','artwork','updates','download','shop'].includes(page)) renderPage();
     try { await resumePendingFirebaseSignup(); }
     catch (error) { if (page === 'account' && !currentUser) setMessage('#auth-message',error.message); }
   }).catch(error => {
@@ -2021,6 +2151,12 @@
   });
 
   document.addEventListener('click', async event => {
+    const ownerPostEdit = event.target.closest('[data-owner-post-edit]');
+    const ownerPostDelete = event.target.closest('[data-owner-post-delete]');
+    const ownerPostCancel = event.target.closest('[data-owner-post-cancel]');
+    if (ownerPostEdit) { fillOwnerPostForm(ownerPostEdit); return; }
+    if (ownerPostDelete) { await deleteOwnerPost(ownerPostDelete); return; }
+    if (ownerPostCancel) { const form = ownerPostCancel.closest('[data-owner-content-form]'); if (form) resetOwnerPostForm(form); return; }
     const communityPaneButton = event.target.closest('[data-community-pane]');
     const communityChatButton = event.target.closest('[data-community-chat]');
     const communityAddFriend = event.target.closest('[data-community-add-friend]');
@@ -2314,6 +2450,11 @@
     if (!event.target.closest('.top')) { const nav = $('#nav'), menu = $('[data-menu]'); nav?.classList.remove('open'); menu?.setAttribute('aria-expanded','false'); }
   });
   document.addEventListener('submit', async event => {
+    if (event.target.matches('[data-owner-content-form]')) {
+      event.preventDefault();
+      await saveOwnerPostForm(event.target);
+      return;
+    }
     if (event.target.id === 'community-message-form') {
       event.preventDefault();
       const form = event.target, input = form.elements.text, button = $('button[type="submit"]',form);
