@@ -415,6 +415,12 @@ function siteContentUrl(value, max = 1200) {
   try { const parsed = new URL(url); return parsed.protocol === 'https:' ? url : ''; }
   catch { return ''; }
 }
+function secureExternalDownloadUrl(value, max = 1200) {
+  const url = text(value, max);
+  if (!url) return '';
+  try { const parsed = new URL(url); return parsed.protocol === 'https:' ? url : ''; }
+  catch { return ''; }
+}
 function siteContentImage(value) {
   const image = text(value, 1_100_000);
   if (!image) return '';
@@ -465,10 +471,13 @@ function cleanSitePost(section, value = {}) {
     const buildId = text(value.buildId, 100);
     const fileName = cleanGameBuildFilename(value.fileName, platform);
     const size = Number.isSafeInteger(Number(value.size)) ? Number(value.size) : 0;
-    const storagePath = supported && /^[A-Za-z0-9-]{1,100}$/.test(buildId) && fileName && size > 0 && size <= MAX_GAME_BUILD_BYTES && validGameBuildObjectPath(gameId, buildId, fileName, value.storagePath) ? value.storagePath : '';
-    const build = { id, gameId, title: text(value.title, 120), version: text(value.version, 60), platform, osName: platform === 'other' ? text(value.osName, 60) || 'Other OS' : '', supported, unsupportedMessage: text(value.unsupportedMessage, 300) || 'This operating system is not supported yet.', buildId: storagePath ? buildId : '', fileName: storagePath ? fileName : '', size: storagePath ? size : 0, storagePath };
+    const requestedDownloadUrl = text(value.downloadUrl, 1200);
+    const downloadUrl = supported ? secureExternalDownloadUrl(requestedDownloadUrl, 1200) : '';
+    const storagePath = supported && !downloadUrl && /^[A-Za-z0-9-]{1,100}$/.test(buildId) && fileName && size > 0 && size <= MAX_GAME_BUILD_BYTES && validGameBuildObjectPath(gameId, buildId, fileName, value.storagePath) ? value.storagePath : '';
+    const build = { id, gameId, title: text(value.title, 120), version: text(value.version, 60), platform, osName: platform === 'other' ? text(value.osName, 60) || 'Other OS' : '', supported, unsupportedMessage: text(value.unsupportedMessage, 300) || 'This operating system is not supported yet.', downloadUrl, buildId: storagePath ? buildId : '', fileName: storagePath ? fileName : '', size: storagePath ? size : 0, storagePath };
     if (!gameId || !/^[a-z0-9-]{1,100}$/.test(gameId) || !platform || !build.title) throw Object.assign(new Error('Choose a game, operating system, and build name.'), { status: 400 });
-    if (supported && !storagePath) throw Object.assign(new Error('Upload a valid installer for every supported operating system.'), { status: 400 });
+    if (supported && requestedDownloadUrl && !downloadUrl) throw Object.assign(new Error('Use a valid HTTPS URL for an outside download.'), { status: 400 });
+    if (supported && !storagePath && !downloadUrl) throw Object.assign(new Error('Upload a valid installer or add an outside HTTPS URL for every supported operating system.'), { status: 400 });
     return build;
   }
   const categories = ['Plugins & tools', 'Mods & add-ons', 'Skins', 'Other'];
