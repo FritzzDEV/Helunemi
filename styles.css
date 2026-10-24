@@ -1738,3 +1738,46 @@ body.friend-card-edit-mode .friend-layer-controls>.btn{flex:0 0 auto;width:auto;
 .game-build-security-note{margin:0;color:var(--muted);font-size:.82rem;line-height:1.55}
 @media(max-width:720px){.game-upload-row>.owner-post-fields{grid-template-columns:1fr}.game-build-current-file{grid-template-columns:1fr;gap:.2rem}.game-upload-progress{grid-template-columns:1fr}}
 @media(max-width:720px){.page-head-with-menu{gap:.5rem}.owner-image-import{grid-template-columns:1fr}.owner-image-preview-wrap{justify-content:flex-start}.owner-download-fields{grid-template-columns:1fr}.game-build-card{align-items:flex-start;flex-direction:column}}
+
+/* Friend-Card workflow, frame rows, and true layer geometry. */
+.friend-entry-actions{display:grid;gap:.4rem;margin-top:.45rem}.friend-entry-actions>.btn{width:100%}
+body.friend-card-edit-mode .friend-frame-assets{grid-template-columns:minmax(0,1fr);gap:.35rem}
+body.friend-card-edit-mode .frame-piece-row{display:grid;grid-template-columns:minmax(0,1fr) 28px 37px 24px 18px;align-items:center;gap:.3rem;padding:.35rem;min-height:36px;width:100%;min-width:0;overflow:hidden}
+body.friend-card-edit-mode .frame-piece-row>span{font-size:.66rem;line-height:1.2}
+body.friend-card-edit-mode .frame-piece-upload{display:grid;place-items:center;min-width:0;width:28px;height:28px;padding:0;font-size:.95rem}
+body.friend-card-edit-mode .frame-piece-remove{width:24px;height:28px;min-height:0}
+body.friend-card-edit-mode .frame-piece-row .frame-piece-size-value{display:block;width:37px;min-width:0;height:28px;min-height:0;padding:.2rem;font-size:.65rem;-moz-appearance:textfield}
+body.friend-card-edit-mode .frame-piece-size-value::-webkit-inner-spin-button,body.friend-card-edit-mode .frame-piece-size-value::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+body.friend-card-edit-mode .frame-piece-visibility{display:flex;align-items:center;justify-content:center;width:18px;margin:0;padding:0}
+body.friend-card-edit-mode .frame-piece-visibility input{width:14px;height:14px;margin:0}
+.frame-piece-size-empty{text-align:center;color:var(--muted)}
+.friend-sticker-library>.empty-inline{grid-column:1/-1;display:block;min-width:0;max-width:100%;white-space:normal;overflow-wrap:normal;word-break:normal;font-size:.75rem;line-height:1.6;padding:.6rem}
+.friend-shape-visual{position:absolute;inset:0;display:block;width:100%;height:100%;max-width:none;overflow:visible;fill:var(--layer-fill,#f5a300);background:transparent;pointer-events:none}
+.friend-layer-caption small,.friend-layer-caption>span{color:inherit}
+body.friend-card-edit-mode #friend-card-editor-stage[data-cfc-viewport="all"] .friend-card,
+body.friend-card-edit-mode #friend-card-editor-stage[data-cfc-viewport="all"] .friend-card-layer-canvas{overflow:visible}
+body.friend-card-edit-mode #friend-card-editor-stage:not([data-cfc-viewport="all"]) .friend-card,
+body.friend-card-edit-mode #friend-card-editor-stage:not([data-cfc-viewport="all"]) .friend-card-layer-canvas{overflow:hidden}
+body.friend-card-edit-mode .friend-canvas-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem .5rem;min-width:0;overflow:hidden}
+.friend-preview-switch{display:flex;align-items:center;flex-wrap:wrap;gap:.3rem;min-width:0;grid-column:1/-1}
+.friend-preview-switch>span{color:var(--muted);font-size:.65rem;margin-right:.25rem}
+.friend-preview-switch button{min-height:27px;padding:.2rem .5rem;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);font:700 .65rem var(--font-body);cursor:pointer}
+.friend-preview-switch button[aria-pressed="true"]{background:var(--chip-hover);border-color:var(--gold);color:var(--ink)}
+.friend-canvas-hint{display:grid;gap:.25rem;overflow-wrap:anywhere}
+[data-cfc-required-notice]{color:var(--muted);font-size:.7rem;font-weight:700}
+[data-cfc-required-notice].is-error{color:#ff8179}
+.friend-dialog-view-switch{margin:.2rem 2rem 1rem 0}
+.friend-dialog-view-switch button{min-height:32px;padding:.35rem .65rem}
+.cfc-choice-page{padding-bottom:3rem}
+.cfc-choice-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+.cfc-choice-action{display:grid;align-content:start;gap:.6rem;width:100%;text-align:left;color:var(--ink);cursor:pointer;font:inherit}
+.cfc-choice-action strong{font:700 1.05rem var(--font-display)}
+.cfc-choice-action span{color:var(--muted);font-size:.88rem;line-height:1.6}
+.cfc-choice-action:hover{border-color:var(--gold)}
+[data-cfc-choice-list]{display:grid;gap:.8rem}
+.cfc-choice-row{display:flex;align-items:center;gap:1rem;min-width:0}
+.cfc-choice-row>div{flex:1;min-width:0}.cfc-choice-row strong{overflow-wrap:anywhere}.cfc-choice-row p{margin-top:.35rem;font-size:.8rem;color:var(--muted)}
+.cfc-choice-row>img{width:72px;height:72px;object-fit:contain;flex:none;border-radius:10px;background:var(--bg)}
+@media(max-width:760px){body.friend-card-edit-mode .friend-canvas-toolbar{grid-template-columns:minmax(0,1fr)}body.friend-card-edit-mode .friend-canvas-zoom{justify-content:flex-start;flex-wrap:wrap}.cfc-choice-actions{grid-template-columns:minmax(0,1fr)}.cfc-choice-row{flex-wrap:wrap}.cfc-choice-row>.btn{margin-left:auto}}
+
+.friend-layer-username{font-family:inherit}

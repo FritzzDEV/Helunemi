@@ -12,6 +12,7 @@ const { createFileStorage } = require('./file-storage');
 const { createSocialSystem, sniffMedia } = require('./social-system');
 const DEFAULT_CONTENT = require('./site-defaults.json');
 const { createShopSystem, countryCode } = require('./shop-system');
+const {createFriendCardLibrary,validateFriendCardIdentity} = require('./friend-card-library');
 
 const scrypt = promisify(crypto.scrypt);
 const ROOT = __dirname;
@@ -50,6 +51,7 @@ let writeQueue = Promise.resolve();
 const fileStore = createFileStorage({ getPool: () => pool, dataDir: DATA_DIR });
 const socialSystem = createSocialSystem({ getAccounts: () => accounts, getAccount, send, readBody, save: saveAccounts, files: fileStore, cleanFriendCard });
 const shopSystem = createShopSystem({ getAccount, send, readBody, save: saveAccounts, privateProfile, cleanImage: siteContentImage });
+const friendCardLibrary = createFriendCardLibrary({getAccount,send,readBody,save:saveAccounts,clean:cleanFriendCard,publishAssets:setFriendCardAssetsPublished,privateProfile});
 
 function send(res, status, value, headers = {}) {
   const body = JSON.stringify(value);
@@ -580,7 +582,7 @@ function cleanPersonalityTags(value) {
 }
 function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
   if (!value || typeof value !== 'object' || value.version !== 1 || !Array.isArray(value.layers)) return null;
-  const types = new Set(['avatar','username','likes','dislikes','favorite','lookingFor','tags','button','text','sticker','shape','frame-piece','drawing','eraser']);
+  const types = new Set(['avatar','username','likes','dislikes','favorite','lookingFor','tags','button','text','textbox','sticker','shape','frame-piece','drawing','eraser']);
   const idSafe = item => text(item, 80).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80);
   const numeric = (item, fallback, min, max) => Math.min(max, Math.max(min, Number.isFinite(Number(item)) ? Number(item) : fallback));
   const fonts = (Array.isArray(value.fonts) ? value.fonts : []).slice(0, 12).map(font => {
@@ -590,28 +592,25 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
   }).filter(font => font?.url);
   const uploadedFontIds = new Set(fonts.map(font => font.id));
   const stickerLibrary = (Array.isArray(value.stickerLibrary) ? value.stickerLibrary : []).slice(0, 20).map((sticker, index) => ({ id: idSafe(sticker?.id) || `sticker${index + 1}`, name: text(sticker?.name || 'Sticker', 80), image: friendCardAsset(sticker?.image, 800_000, ownerId) })).filter(sticker => sticker.image);
+  const usedLayerIds = new Set();
   const layers = value.layers.slice(0, 80).map((layer, index) => {
     if (!layer || typeof layer !== 'object' || !types.has(layer.type)) return null;
     const type = layer.type;
-    const layerWidth = numeric(layer.width, 20, 1, 100);
+    let layerId=idSafe(layer.id);if(!layerId||usedLayerIds.has(layerId))layerId='layer-'+crypto.randomUUID();usedLayerIds.add(layerId);
+    const layerWidth = numeric(layer.width, 20, 1, 10000);
     const path = typeof layer.path === 'string' && layer.path.length <= 16000 && /^[MmLlHhVvCcSsQqTtAaZz0-9., +\-]*$/.test(layer.path) ? layer.path : '';
     const fontFamily = uploadedFontIds.has(layer.fontId) ? `SolarisFont-${layer.fontId}` : new Set(['DM Sans','Unbounded','Arial','Georgia','Trebuchet MS','Verdana','Courier New','serif','sans-serif','monospace']).has(layer.fontFamily) ? layer.fontFamily : 'DM Sans';
     return {
-      id: idSafe(layer.id) || `layer${index + 1}`, type, label: type === 'avatar' ? 'Profile picture' : type === 'username' ? 'Username' : text(layer.label || type, 80),
+      id: layerId, type, label: type === 'avatar' ? 'Profile picture' : type === 'username' ? 'Username' : text(layer.label || type, 80),
       field: ['avatar','username','likes','dislikes','favoriteThing','lookingFor','personalityTags','button'].includes(layer.field) ? layer.field : '',
-      x: numeric(layer.x, 0, 0, 100), y: numeric(layer.y, 0, 0, 100), width: layerWidth, height: type === 'avatar' ? layerWidth : numeric(layer.height, 10, 1, 100),
+      x: numeric(layer.x, 0, -10000, 10000), y: numeric(layer.y, 0, -10000, 10000), width: layerWidth, height: type === 'avatar' || type === 'shape' && ['circle','square','rounded'].includes(layer.shapeStyle) ? layerWidth : numeric(layer.height, 10, 1, 10000),
       rotation: numeric(layer.rotation, 0, -180, 180), fontSize: numeric(layer.fontSize, 3.2, 1, 14), lineHeight: numeric(layer.lineHeight, 1.2, .8, 2.2), letterSpacing: numeric(layer.letterSpacing, 0, -.5, 2), italic: layer.italic === true, opacity: numeric(layer.opacity, 100, 0, 100),
       color: safeColor(layer.color, cardDefaults.textColor), fill: safeColor(layer.fill, cardDefaults.backgroundColor),
       align: ['left','center','right'].includes(layer.align) ? layer.align : 'left', weight: Number(layer.weight) === 700 ? 700 : 500, radius: numeric(layer.radius, 8, 0, 100), shapeStyle: ['circle','rounded','rectangle','square','triangle','diamond','star','hexagon'].includes(layer.shapeStyle) ? layer.shapeStyle : 'rounded',
       text: text(layer.text, 500), fontFamily, fontId: uploadedFontIds.has(layer.fontId) ? layer.fontId : '', image: ['sticker','frame-piece'].includes(type) ? friendCardAsset(layer.image, 800_000, ownerId) : '', imageFit: ['contain','cover','fill'].includes(layer.imageFit) ? layer.imageFit : 'contain', imagePositionX: numeric(layer.imagePositionX, 50, 0, 100), imagePositionY: numeric(layer.imagePositionY, 50, 0, 100), imageMask: ['square','rounded','circle'].includes(layer.imageMask) ? layer.imageMask : 'square', path,
-      strokeWidth: numeric(layer.strokeWidth, 8, 1, 100), visible: ['avatar','username'].includes(type) ? true : layer.visible !== false, visibilityMode: ['avatar','username'].includes(type) ? 'both' : ['preview','full','both'].includes(layer.visibilityMode) ? layer.visibilityMode : 'both', locked: layer.locked === true
+      strokeWidth: numeric(layer.strokeWidth, 8, 1, 100), visible: layer.visible !== false, visibilityMode: ['preview','full','both'].includes(layer.visibilityMode) ? layer.visibilityMode : 'both', locked: layer.locked === true
     };
   }).filter(Boolean);
-  const protectedLayers = [
-    { id: 'required-avatar', type: 'avatar', label: 'Profile picture', field: 'avatar', x: 5, y: 7, width: 18, height: 18, color: cardDefaults.textColor, visible: true, visibilityMode: 'both', locked: false },
-    { id: 'required-username', type: 'username', label: 'Username', field: 'username', x: 27, y: 9, width: 68, height: 12, fontSize: 5, color: cardDefaults.titleColor, visible: true, visibilityMode: 'both', locked: false, weight: 700 }
-  ];
-  for (const required of protectedLayers) if (!layers.some(layer => layer.type === required.type)) layers.push(required);
   const frameSource = value.frame && typeof value.frame === 'object' ? value.frame : {};
   const cornerNames = ['topLeft','topRight','bottomLeft','bottomRight'], sideNames = ['top','bottom','left','right'], pieceNames = [...cornerNames,...sideNames];
   const frameImages = (source, names) => Object.fromEntries(names.map(name => [name, friendCardAsset(source?.[name], 800_000, ownerId)]));
@@ -711,6 +710,7 @@ function cleanProfile(input, existing = {}, allowMemberFriendCard = true, ownerI
   const favorites = ['game', 'developer', 'artwork'].map(type => validateFavorite(input.favorites && input.favorites[type], type)).filter(Boolean);
   const installedGames = Array.isArray(input.installedGames) ? [...new Set(input.installedGames.map(value => text(value, 80)).filter(Boolean))].slice(0, 20) : [];
   const friendCard = allowMemberFriendCard ? cleanFriendCard(input.friendCard && typeof input.friendCard === 'object' ? input.friendCard : existing.friendCard, ownerId) : emptyFriendCard();
+  if (allowMemberFriendCard && input.friendCard?.design) validateFriendCardIdentity(friendCard);
   friendCard.published = allowMemberFriendCard && existing.friendCard?.published === true;
   return {
     username: text(input.username, 24) || existing.username || '',
@@ -764,6 +764,7 @@ async function removeAccountSessions(accountId, req, res) {
 async function handleApi(req, res, pathname) {
   if (!checkOrigin(req)) return send(res, 403, { error: 'This request was not accepted.' });
   await restoreExpiredAccounts();
+  if (await friendCardLibrary.handle(req,res,pathname)) return;
   if (await shopSystem.handle(req,res,pathname)) return;
   if (await socialSystem.handle(req,res,pathname)) return;
   if (req.method === 'GET' && pathname === '/api/firebase-config') {
@@ -1091,38 +1092,6 @@ async function handleApi(req, res, pathname) {
       return send(res,201,{url,format:match[1],message:'Font uploaded to your private Helunemi storage.'});
     }catch(error){if(error.status)return send(res,error.status,{error:error.message});console.error('NEON FRIEND-CARD FONT UPLOAD ERROR:',error);return send(res,503,{error:'The font could not be uploaded to Neon Object Storage.'});}
   }
-  if (req.method === 'PUT' && pathname === '/api/member-friend-card/save') {
-    const account = await getAccount(req);
-    if (!account) return send(res, 401, { error: 'Log in to save your Friend-Card.' });
-    if (account.role === 'owner' || account.profile.primaryRole !== 'member') return send(res, 403, { error: 'Only Member accounts can edit a Member Friend-Card.' });
-    const input = await readBody(req);
-    const previousFriendCard = account.profile.friendCard;
-    const currentRevision = Math.max(0,Number(previousFriendCard?.revision) || 0);
-    if (!Number.isSafeInteger(Number(input.expectedRevision)) || Number(input.expectedRevision) !== currentRevision) return send(res, 409, { error: 'This Friend-Card changed in another session. Reload your latest card before saving these edits.' });
-    const friendCard = cleanFriendCard(input.friendCard, account.id);
-    friendCard.published = previousFriendCard?.published === true;
-    friendCard.revision = Math.max(Date.now(),currentRevision + 1);
-    account.profile.friendCard = friendCard;
-    try { await saveAccounts(); await setFriendCardAssetsPublished(account, friendCard, friendCard.published); }
-    catch (error) { account.profile.friendCard = previousFriendCard; throw error; }
-    return send(res, 200, { user: privateProfile(account), message: friendCard.published ? 'Your posted Friend-Card has been updated.' : 'Your Friend-Card is saved privately.' });
-  }
-  if (req.method === 'POST' && pathname === '/api/member-friend-card/post') {
-    const account = await getAccount(req);
-    if (!account) return send(res, 401, { error: 'Log in to post your Friend-Card.' });
-    if (account.role === 'owner' || account.profile.primaryRole !== 'member') return send(res, 403, { error: 'Only Member accounts can post a Member Friend-Card.' });
-    const input = await readBody(req);
-    const previousFriendCard = account.profile.friendCard;
-    const currentRevision = Math.max(0,Number(previousFriendCard?.revision) || 0);
-    if (!Number.isSafeInteger(Number(input.expectedRevision)) || Number(input.expectedRevision) !== currentRevision) return send(res, 409, { error: 'This Friend-Card changed in another session. Reload your latest card before posting these edits.' });
-    const friendCard = cleanFriendCard(input.friendCard, account.id);
-    friendCard.published = true;
-    friendCard.revision = Math.max(Date.now(),currentRevision + 1);
-    account.profile.friendCard = friendCard;
-    try { await saveAccounts(); await setFriendCardAssetsPublished(account, friendCard, true); }
-    catch (error) { account.profile.friendCard = previousFriendCard; throw error; }
-    return send(res, 200, { user: privateProfile(account), message: 'Your Friend-Card is posted on the Members page.' });
-  }
   if (req.method === 'GET' && pathname === '/api/admin/accounts') {
     const owner = await getAccount(req);
     if (!owner || owner.role !== 'owner') return send(res, 403, { error: 'Only the Helunemi Owner can assign account roles.' });
@@ -1411,7 +1380,8 @@ function retainedUploadKeys() {
     else if(Array.isArray(value))value.forEach(collect);
     else if(value&&typeof value==='object')Object.values(value).forEach(collect);
   };
-  for(const account of accounts){for(const message of account.community?.messages||[])if(/^[a-f0-9-]{36}$/i.test(String(message.mediaKey||'')))retained.add(message.mediaKey);collect(account.profile?.friendCard);}
+  for(const account of [...accounts,...pausedAccounts.map(item=>item.account)]){for(const message of account.community?.messages||[])if(/^[a-f0-9-]{36}$/i.test(String(message.mediaKey||'')))retained.add(message.mediaKey);collect(account.profile?.friendCard);collect(account.friendCards);}
+  collect(socialSystem.snapshot().cfcs);
   return [...retained];
 }
 loadStore().then(async () => {

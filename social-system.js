@@ -62,7 +62,7 @@ function createSocialSystem(context) {
   }
   function cfcSummary(card, user) {
     const unlocked = card.price === 0 || entitled(card, user);
-    return { id: card.id, name: card.name, ownerId: card.ownerId, creator: brief(accountById(card.ownerId)), visibility: card.visibility, price: card.price, currency: 'USD', locked: !unlocked, previewUrl: fileUrl(unlocked ? card.previewId : card.lockedPreviewId), aspectRatio: card.aspectRatio, canManage: ownerOf(card,user), sharedWith: ownerOf(card,user) ? card.sharedWith : [], groupIds: ownerOf(card,user) ? card.groupIds : [], createdAt: card.createdAt };
+    return { id: card.id, name: card.name, ownerId: card.ownerId, creator: brief(accountById(card.ownerId)), visibility: card.visibility, price: card.price, currency: 'USD', locked: !unlocked, sourceAvailable: ownerOf(card,user) && Boolean(card.editableFriendCard?.design), ...(ownerOf(card,user) && card.editableFriendCard?.design ? {editableFriendCard:card.editableFriendCard} : {}), previewUrl: fileUrl(unlocked ? card.previewId : card.lockedPreviewId), aspectRatio: card.aspectRatio, canManage: ownerOf(card,user), sharedWith: ownerOf(card,user) ? card.sharedWith : [], groupIds: ownerOf(card,user) ? card.groupIds : [], createdAt: card.createdAt };
   }
   async function commit(change) {
     const task = mutation.catch(() => {}).then(async () => {
@@ -271,7 +271,7 @@ function createSocialSystem(context) {
       const price=Math.round(Math.max(0,Math.min(10000,Number(input.price)||0))*100)/100;
       let card;
       await commit(async()=>{
-        card={id:existing?.id||crypto.randomUUID(),ownerId:user.id,name,price,visibility:input.visibility==='public'?'public':'private',sharedWith,groupIds,previewId:preview.id,lockedPreviewId:existing?.previewId===preview.id?existing.lockedPreviewId:await thumbnail(preview.id,user,true),aspectRatio:preview.width&&preview.height?preview.width+':'+preview.height:existing?.aspectRatio||user.profile.friendCard?.aspectRatio||'1:1',createdAt:existing?.createdAt||Date.now()};
+        card={id:existing?.id||crypto.randomUUID(),ownerId:user.id,name,price,editableFriendCard:existing?.editableFriendCard || (user.profile.friendCard?.design ? cleanFriendCard(user.profile.friendCard,user.id) : null),visibility:input.visibility==='public'?'public':'private',sharedWith,groupIds,previewId:preview.id,lockedPreviewId:existing?.previewId===preview.id?existing.lockedPreviewId:await thumbnail(preview.id,user,true),aspectRatio:preview.width&&preview.height?preview.width+':'+preview.height:existing?.aspectRatio||user.profile.friendCard?.aspectRatio||'1:1',createdAt:existing?.createdAt||Date.now()};
         if(existing)Object.assign(existing,card);else state.cfcs.push(card);
       });send(res,existing?200:201,{card:cfcSummary(card,user)});return true;
     }
