@@ -1,6 +1,6 @@
-# Helenumi website
+# Helunemi website
 
-Helenumi is an early game development community. The site introduces the studio and its projects, shares artwork and updates, and provides member accounts with public profiles.
+Helunemi is an early game development community. The site introduces the studio and its projects, shares artwork and updates, and provides member accounts with public profiles.
 
 ## Projects
 
@@ -20,7 +20,7 @@ The site serves its separate HTML pages with shared `styles.css` and `app.js` fi
 
 ## Accounts and Firebase email setup
 
-Firebase Authentication handles email verification, email/password sign-in, and password reset after the Firebase project is configured. The website remains in its existing username/password mode until the Firebase web settings and server credentials are all present. In that setup mode, every new account must verify its email before its Helenumi profile is created. Password reset emails are sent by Firebase; users sign in again with the new password afterward.
+Firebase Authentication handles email verification, email/password sign-in, and password reset after the Firebase project is configured. The website remains in its existing username/password mode until the Firebase web settings and server credentials are all present. In that setup mode, every new account must verify its email before its Helunemi profile is created. Password reset emails are sent by Firebase; users sign in again with the new password afterward.
 
 ### Create and configure the Firebase project
 
@@ -28,7 +28,7 @@ Firebase Authentication handles email verification, email/password sign-in, and 
 2. In **Authentication → Sign-in method**, enable **Email/Password**.
 3. In **Authentication → Settings → Authorized domains**, add the Render hostname for the site (for example, `your-site.onrender.com`) and `localhost` for local development.
 4. In **Project settings → General**, register a Web app and copy its public web configuration values: API key, Auth domain, Project ID, App ID, and Storage bucket. The messaging sender ID is optional.
-5. In **Build → Storage**, create a Firebase Storage bucket. Deploy the rules in [`storage.rules`](storage.rules) to the bucket. Helenumi uploads Friend-Card assets through the server, which assigns an account-specific object path and download token; client-side direct writes are disabled.
+5. In **Build → Storage**, create a Firebase Storage bucket. Deploy the rules in [`storage.rules`](storage.rules) to the bucket. Helunemi uploads Friend-Card assets through the server, which assigns an account-specific object path and download token; client-side direct writes are disabled.
 6. In **Project settings → Service accounts**, generate a private key for the Firebase Admin SDK. Treat the downloaded JSON as a secret. Do not commit it, upload it to the repository, or paste it into chat.
 7. Add these variables to the Render web service’s **Environment** settings. Use the exact values from the Firebase Web app and service account. For the private key, paste the full PEM value; if Render requires a single line, preserve newlines as `\n`.
 
@@ -49,17 +49,17 @@ Firebase Authentication handles email verification, email/password sign-in, and 
 
 If you store the private key as a Render Secret File, Render mounts it at `/etc/secrets/<filename>`; a secret file named `FIREBASE_PRIVATE_KEY` is detected automatically. For another filename, add `FIREBASE_PRIVATE_KEY_FILE=/etc/secrets/<filename>` as an environment variable. If the secret file contains the full downloaded JSON, set `FIREBASE_SERVICE_ACCOUNT_FILE=/etc/secrets/<filename>` instead. Render secret files are files, so adding one does not create a same-named environment variable.
 
-Firebase sends verification and password reset messages directly, so Helenumi does not need a separate email server. For local testing, use the same environment variables and make sure `localhost` is an authorized Firebase domain.
+Firebase sends verification and password reset messages directly, so Helunemi does not need a separate email server. For local testing, use the same environment variables and make sure `localhost` is an authorized Firebase domain.
 
-### Existing Helenumi accounts
+### Existing Helunemi accounts
 
-Existing username accounts keep working after Firebase is configured. While signed in, open the profile’s **Email security** section, enter an email and a Firebase password, and choose **Connect email**. Verify the address, return to the profile, and submit the same email and password again. The existing Helenumi profile, roles, tickets, and posts remain attached. After the connection, use the verified email and Firebase password to log in. If a password is reset, the updated password is synchronized after the next successful Firebase login.
+Existing username accounts keep working after Firebase is configured. While signed in, open the profile’s **Email security** section, enter an email and a Firebase password, and choose **Connect email**. Verify the address, return to the profile, and submit the same email and password again. The existing Helunemi profile, roles, tickets, and posts remain attached. After the connection, use the verified email and Firebase password to log in. If a password is reset, the updated password is synchronized after the next successful Firebase login.
 
-New sign-ups verify their email before the Helenumi account is activated. Use the same browser when returning from the verification link so it can finish the pending profile setup. The Owner setup code is entered only from an eligible existing account’s profile; it is not part of sign-up.
+New sign-ups verify their email before the Helunemi account is activated. Use the same browser when returning from the verification link so it can finish the pending profile setup. The Owner setup code is entered only from an eligible existing account’s profile; it is not part of sign-up.
 
 If the Firebase variables are missing or incomplete, the site stays in legacy username/password mode. In that mode, email verification and password recovery are unavailable until Firebase is configured.
 
-## The Helenumi Owner
+## The Helunemi Owner
 
 To set up the Owner role, add these variables in the server’s hosting settings. Keep the setup code private and do not put it in source files.
 
@@ -68,15 +68,15 @@ To set up the Owner role, add these variables in the server’s hosting settings
 | `SOLARIS_OWNER_USERNAME` | Reserved Owner username. Defaults to `Fritzz Xenon`. |
 | `SOLARIS_OWNER_SETUP_TOKEN` | A long, private, one-time setup code. |
 
-If `Fritzz Xenon` already has an account, log into it after setting the variables and use **Claim the Helenumi Owner role** on that account’s profile. If the account does not exist yet, sign up with the reserved username, then claim Owner from the profile using the setup code. The sign-up form does not ask for an Owner code. The first eligible claim becomes Owner. Remove `SOLARIS_OWNER_SETUP_TOKEN` after the role is claimed. The server prevents a second Owner claim, including while the first Owner account is paused.
+If `Fritzz Xenon` already has an account, log into it after setting the variables and use **Claim the Helunemi Owner role** on that account’s profile. If the account does not exist yet, sign up with the reserved username, then claim Owner from the profile using the setup code. The sign-up form does not ask for an Owner code. The first eligible claim becomes Owner. Remove `SOLARIS_OWNER_SETUP_TOKEN` after the role is claimed. The server prevents a second Owner claim, including while the first Owner account is paused.
 
 The Owner assigns primary roles and secondary role tags from the role controls on another user’s full profile. The Owner profile’s **Assign account roles** panel only manages the Owner’s own secondary role tags. The assignable primary roles are **Assistant**, **AI Assistant**, **Developer**, and **Member**. The Owner permission is protected and separate from those choices. **Visitor** is reserved for guest browsing and cannot be assigned to a registered account. The List shows the Owner plus accounts assigned Assistant, AI Assistant, or Developer; Member accounts stay off the studio team directory. Secondary tags such as Scripter, Modeler, Tester, Updater, Announcer, Debugger, App tester, and Artist appear on the List as tags. Assistant, AI Assistant, Developer, and Owner profiles show role tags; only studio-role accounts have secondary role tags.
 
 Members can edit a Friend-Card from the profile options menu. The Canva-inspired workspace has a canvas, element and layer panel, and properties panel. Layers can be added, renamed, moved, resized, rotated, styled, hidden, locked, duplicated, reordered, or deleted. It includes linked account details, text, image stickers, shapes, buttons, custom fonts, reusable stickers, and imported design artwork. Canvas zoom, pan, fit, undo/redo, custom dimensions, preview, PNG export, and `.scfc` import/export are available. The `.scfc` file is a versioned ZIP package with a manifest and portable image and font assets; importing a design does not publish it. The editor supports the 1:1, 2:3, 3:2, 4:5, and 5:4 presets as well as custom dimensions. A custom frame has four separate square corners and four side images, with stretch or repeat modes and alignment controls. A local recovery draft is kept in the browser; use **Save** to sync the design to the account. A revision check warns if another session saved the same Friend-Card first. Existing cards without a layer design open using a default editable layout. Images and fonts uploaded in the editor are stored in Firebase Storage under the member’s account folder. Configure `FIREBASE_STORAGE_BUCKET` and deploy `storage.rules` before enabling uploads. A card stays private until its owner selects **Post custom friend card**. The Members page shows only posted Friend-Cards; members can search profiles from the shared header search, even before a card is posted. Other roles use their studio profiles instead.
 
-The fixed Helenumi Community button opens a full-screen chat area. Members can send and accept friend requests from posted Member Friend-Cards, chat with accepted friends, and send bug reports to the studio team. The report inbox is limited to Owner, Assistant, AI Assistant, and Developer accounts. Friend connections, messages, and reports are stored with account data, so use PostgreSQL or a persistent disk on Render to keep them across service restarts.
+The fixed Helunemi Community button opens a full-screen chat area. Members can send and accept friend requests from posted Member Friend-Cards, chat with accepted friends, and send bug reports to the studio team. The report inbox is limited to Owner, Assistant, AI Assistant, and Developer accounts. Friend connections, messages, and reports are stored with account data, so use PostgreSQL or a persistent disk on Render to keep them across service restarts.
 
-Card and button stroke images can be imported or exported as `.stk` files. A Helenumi `.stk` is a JSON file with the `solaris-stroke-v1` format and an embedded PNG, JPEG, or WebP data URL; ordinary image files work too. Helenumi resizes the images in the browser before saving them. Private account information, including phone numbers and secondary email addresses, is available from **View Personal Profile Information** and is not included in public profiles. Passwords cannot be viewed: Helenumi and Firebase store password credentials in forms that cannot be reversed into the original password. Use Firebase’s reset email to choose a new password.
+Card and button stroke images can be imported or exported as `.stk` files. A Helunemi `.stk` is a JSON file with the `solaris-stroke-v1` format and an embedded PNG, JPEG, or WebP data URL; ordinary image files work too. Helunemi resizes the images in the browser before saving them. Private account information, including phone numbers and secondary email addresses, is available from **View Personal Profile Information** and is not included in public profiles. Passwords cannot be viewed: Helunemi and Firebase store password credentials in forms that cannot be reversed into the original password. Use Firebase’s reset email to choose a new password.
 
 The profile options menu also links to **Edit Profile**, **View Personal Profile Information**, and—on Member accounts—**Edit Custom Friend-Card**. Email verification, password reset, and password management are handled by Firebase when it is configured.
 
@@ -92,7 +92,7 @@ Members can save their **Country / region of residence** in **Personal Profile I
 
 **Payment processing is not configured.** Paid products show **Checkout coming soon**. Both the new product claim endpoint and the legacy ticket endpoint reject paid claims using the stored server price. Free products can be claimed up to 99 per product; ticket benefits add to the existing ticket inventory. No currency balance or simulated payment is used.
 
-At the bottom of a profile, a member can pause their account for 30 days or permanently delete it. Pausing removes the account from the active site, blocks login, and keeps a private backup that is restored after 30 days. Deletion removes the account and any Helenumi-managed pause backup. Backups retained separately by Git or the hosting/database provider follow their own retention policies.
+At the bottom of a profile, a member can pause their account for 30 days or permanently delete it. Pausing removes the account from the active site, blocks login, and keeps a private backup that is restored after 30 days. Deletion removes the account and any Helunemi-managed pause backup. Backups retained separately by Git or the hosting/database provider follow their own retention policies.
 
 ## Render and persistent account storage
 
@@ -135,7 +135,7 @@ Every CFC in a profile, including an expanded card, stays in **Preview Mode**. L
 
 ## Persistent website-hosted uploads
 
-New **game binaries are never uploaded to Firebase Storage**. Games use Helenumi backend upload and download routes, with metadata saved alongside existing site records. New post media and gallery/CFC previews also use the website’s controlled storage. Firebase Authentication, existing Friend-Card editor assets/fonts, and existing chat uploads continue using their existing Firebase integrations.
+New **game binaries are never uploaded to Firebase Storage**. Games use Helunemi backend upload and download routes, with metadata saved alongside existing site records. New post media and gallery/CFC previews also use the website’s controlled storage. Firebase Authentication, existing Friend-Card editor assets/fonts, and existing chat uploads continue using their existing Firebase integrations.
 
 Choose one persistent upload backend:
 
