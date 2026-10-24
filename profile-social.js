@@ -71,7 +71,7 @@
   }
   async function mountPostPage(root) {
     const user = getUser();
-    if (!user) { root.innerHTML = '<div class="wrap"><div class="page-head"><h1>Create a post</h1><p>Log in to write a post for the Solaris community.</p><a class="btn btn-primary" href="account.html?mode=login">Log in</a></div></div>'; return; }
+    if (!user) { root.innerHTML = '<div class="wrap"><div class="page-head"><h1>Create a post</h1><p>Log in to write a post for the Helenumi community.</p><a class="btn btn-primary" href="account.html?mode=login">Log in</a></div></div>'; return; }
     try {
       const query = new URLSearchParams(location.search);
       const existing = query.has('edit') ? (await api('/api/social/posts/' + encodeURIComponent(query.get('edit')))).post : null;
@@ -184,7 +184,7 @@
       } catch (error) { formError(form, error); }
       finally { saving = false; editor.contentEditable = 'true'; controls.forEach(control => control.disabled = false); formBusy(form, false); }
     });
-    document.title = (existing ? 'Edit Post' : 'Create Post') + ' | Solaris Studio';
+    document.title = (existing ? 'Edit Post' : 'Create Post') + ' | Helenumi';
     if (focusVisibility) form.elements.visibility.focus(); else editor.focus();
   }
 

@@ -28,10 +28,10 @@ const BUILT_IN_GAME_IDS = new Set(['gamma-frost', 'omiwo']);
 const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'publish.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js', 'profile-social.js', 'profile-social.css', 'storefront.js', 'create-post.html', 'shop-product.html']);
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.png': 'image/png' };
 const PRIMARY_ROLES = {
-  assistant: { label: 'Assistant', explanation: 'Supports studio coordination and helps keep Solaris projects moving.' },
-  'ai-assistant': { label: 'AI Assistant', explanation: 'An AI contributor that helps with Solaris Studio work under human direction.' },
-  developer: { label: 'Developer', explanation: 'Builds, tests, or maintains Solaris Studio projects.' },
-  member: { label: 'Member', explanation: 'A member of the Solaris Studio community.' }
+  assistant: { label: 'Assistant', explanation: 'Supports studio coordination and helps keep Helenumi projects moving.' },
+  'ai-assistant': { label: 'AI Assistant', explanation: 'An AI contributor that helps with Helenumi work under human direction.' },
+  developer: { label: 'Developer', explanation: 'Builds, tests, or maintains Helenumi projects.' },
+  member: { label: 'Member', explanation: 'A member of the Helenumi community.' }
 };
 const PROJECT_TAGS = ['Gamma Frost', 'OmiWo: Collide'];
 const FRIEND_CARD_STROKES = new Set(['solid', 'dashed', 'dotted', 'double', 'groove', 'ridge']);
@@ -842,7 +842,7 @@ async function handleApi(req, res, pathname) {
   }
   if (req.method === 'GET' && pathname === '/api/community') {
     const account = await getAccount(req);
-    if (!account) return send(res, 401, { error: 'Log in to use Solaris Community.' });
+    if (!account) return send(res, 401, { error: 'Log in to use Helenumi Community.' });
     return send(res, 200, { community: communitySnapshot(account) });
   }
   if (req.method === 'POST' && pathname === '/api/community/presence') {
@@ -962,7 +962,7 @@ async function handleApi(req, res, pathname) {
   }
   if (req.method === 'POST' && pathname === '/api/community/bug-report') {
     const account = await getAccount(req);
-    if (!account) return send(res, 401, { error: 'Log in to send a report to Solaris Studio.' });
+    if (!account) return send(res, 401, { error: 'Log in to send a report to Helenumi.' });
     const input = await readBody(req), title = text(input.title, 120), details = text(input.details, 4000);
     if (!title || !details) return send(res, 400, { error: 'Add a short title and describe what happened.' });
     const recipients = accounts.filter(isStudioStaff);
@@ -975,11 +975,11 @@ async function handleApi(req, res, pathname) {
     }
     try { await saveAccounts(); }
     catch (error) { for (const [member, old] of previous) member.community.bugReports = JSON.parse(old); throw error; }
-    return send(res, 201, { message: 'Your report was sent to the Solaris Studio team.' });
+    return send(res, 201, { message: 'Your report was sent to the Helenumi team.' });
   }
   if (req.method === 'GET' && pathname === '/api/community/bug-reports') {
     const account = await getAccount(req);
-    if (!account || !isStudioStaff(account)) return send(res, 403, { error: 'Only Solaris Studio staff can view reports.' });
+    if (!account || !isStudioStaff(account)) return send(res, 403, { error: 'Only Helenumi staff can view reports.' });
     normalizeAccount(account);
     return send(res, 200, { reports: account.community.bugReports });
   }
@@ -1034,7 +1034,7 @@ async function handleApi(req, res, pathname) {
       const bucket = getFirebaseStorageBucket();
       await bucket.file(objectPath).save(buffer, { resumable: false, metadata: { contentType: `image/${match[1]}`, cacheControl: 'private, max-age=31536000', metadata: { ownerAccountId: account.id, ownerFirebaseUid: account.firebaseUid || '', published: 'false', firebaseStorageDownloadTokens: token } } });
       const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
-      return send(res, 201, { url, path: objectPath, message: 'Image uploaded to your Solaris Friend-Card assets.' });
+      return send(res, 201, { url, path: objectPath, message: 'Image uploaded to your Helenumi Friend-Card assets.' });
     } catch (error) {
       if (error.status) return send(res, error.status, { error: error.message });
       console.error('FIREBASE FRIEND-CARD ASSET UPLOAD ERROR:', error);
@@ -1057,7 +1057,7 @@ async function handleApi(req, res, pathname) {
       const bucket = getFirebaseStorageBucket();
       await bucket.file(objectPath).save(buffer, { resumable: false, metadata: { contentType: `font/${match[1]}`, cacheControl: 'private, max-age=31536000', metadata: { ownerAccountId: account.id, ownerFirebaseUid: account.firebaseUid || '', published: 'false', firebaseStorageDownloadTokens: token } } });
       const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
-      return send(res, 201, { url, format: match[1], message: 'Font uploaded to your Solaris Friend-Card assets.' });
+      return send(res, 201, { url, format: match[1], message: 'Font uploaded to your Helenumi Friend-Card assets.' });
     } catch (error) {
       if (error.status) return send(res, error.status, { error: error.message });
       console.error('FIREBASE FRIEND-CARD FONT UPLOAD ERROR:', error);
@@ -1098,13 +1098,13 @@ async function handleApi(req, res, pathname) {
   }
   if (req.method === 'GET' && pathname === '/api/admin/accounts') {
     const owner = await getAccount(req);
-    if (!owner || owner.role !== 'owner') return send(res, 403, { error: 'Only the Solaris Owner can assign account roles.' });
+    if (!owner || owner.role !== 'owner') return send(res, 403, { error: 'Only the Helenumi Owner can assign account roles.' });
     const list = accounts.map(account => ({ id: account.id, username: account.profile.username, accountRole: account.role || 'member', primaryRole: account.role === 'owner' ? 'owner' : (account.profile.primaryRole || 'member'), secondaryRoles: cleanSecondaryRoles(account.profile.secondaryRoles) }));
     return send(res, 200, { accounts: list });
   }
   if (req.method === 'PUT' && pathname === '/api/admin/account-roles') {
     const owner = await getAccount(req);
-    if (!owner || owner.role !== 'owner') return send(res, 403, { error: 'Only the Solaris Owner can assign account roles.' });
+    if (!owner || owner.role !== 'owner') return send(res, 403, { error: 'Only the Helenumi Owner can assign account roles.' });
     const input = await readBody(req);
     const target = accounts.find(item => item.id === input.accountId);
     if (!target) return send(res, 404, { error: 'That account could not be found.' });
@@ -1130,7 +1130,7 @@ async function handleApi(req, res, pathname) {
   if (req.method === 'POST' && pathname === '/api/owner/claim') {
     if (!allowAttempt(req)) return send(res, 429, { error: 'Too many Owner setup attempts. Please try again later.' });
     const account = await getAccount(req);
-    if (!account) return send(res, 401, { error: 'Log in to claim the Solaris Owner account.' });
+    if (!account) return send(res, 401, { error: 'Log in to claim the Helenumi Owner account.' });
     const input = await readBody(req);
     const ownerUsername = text(process.env.SOLARIS_OWNER_USERNAME || 'Fritzz Xenon', 24);
     const ownerExists = accounts.some(item => item.role === 'owner') || pausedAccounts.some(item => item.account.role === 'owner');
@@ -1144,13 +1144,13 @@ async function handleApi(req, res, pathname) {
   }
   if (req.method === 'POST' && pathname === '/api/auth/link') {
     const account = await getAccount(req);
-    if (!account) return send(res, 401, { error: 'Log in to connect an email to this Solaris profile.' });
+    if (!account) return send(res, 401, { error: 'Log in to connect an email to this Helenumi profile.' });
     const input = await readBody(req);
     const claims = await verifyFirebaseToken(input.idToken);
     const otherAccount = accounts.find(item => item.id !== account.id && item.firebaseUid === claims.uid);
     const otherPaused = pausedAccounts.find(item => item.account.id !== account.id && (item.account.firebaseUid === claims.uid || item.account.email?.toLowerCase() === String(claims.email).toLowerCase()));
-    if (otherAccount || otherPaused) return send(res, 409, { error: 'That verified email is already connected to another Solaris account.' });
-    if (account.firebaseUid && account.firebaseUid !== claims.uid) return send(res, 409, { error: 'This Solaris account is already connected to a different verified email.' });
+    if (otherAccount || otherPaused) return send(res, 409, { error: 'That verified email is already connected to another Helenumi account.' });
+    if (account.firebaseUid && account.firebaseUid !== claims.uid) return send(res, 409, { error: 'This Helenumi account is already connected to a different verified email.' });
     const previous = { firebaseUid: account.firebaseUid, email: account.email, emailVerified: account.emailVerified, salt: account.salt, passwordHash: account.passwordHash };
     try {
       await updatePasswordMirror(account, input.password);
@@ -1162,7 +1162,7 @@ async function handleApi(req, res, pathname) {
       Object.assign(account, previous);
       throw error;
     }
-    return send(res, 200, { user: privateProfile(account), message: 'Your verified email is connected to this Solaris account.' });
+    return send(res, 200, { user: privateProfile(account), message: 'Your verified email is connected to this Helenumi account.' });
   }
   if (req.method === 'POST' && pathname === '/api/signup') {
     if (!allowAttempt(req)) return send(res, 429, { error: 'Too many sign-up attempts. Please try again later.' });
@@ -1170,7 +1170,7 @@ async function handleApi(req, res, pathname) {
     const firebaseEnabled = firebaseWebConfig().enabled;
     let claims = null;
     if (firebaseEnabled) {
-      if (!input.idToken) return send(res, 403, { error: 'Create a verified Firebase email account before signing up to Solaris.' });
+      if (!input.idToken) return send(res, 403, { error: 'Create a verified Firebase email account before signing up to Helenumi.' });
       claims = await verifyFirebaseToken(input.idToken);
     }
     else if (input.idToken) return send(res, 503, { error: 'Firebase email sign-in is not fully configured on the server.' });
@@ -1182,7 +1182,7 @@ async function handleApi(req, res, pathname) {
     const password = typeof input.password === 'string' && input.password.length >= 10 ? input.password : crypto.randomBytes(48).toString('base64url');
     const passwordHash = Buffer.from(await scrypt(password, salt, 64)).toString('hex');
     const id = crypto.randomUUID();
-    if (claims && (accounts.some(item => item.firebaseUid === claims.uid) || pausedAccounts.some(item => item.account.firebaseUid === claims.uid || item.account.email?.toLowerCase() === String(claims.email).toLowerCase()))) return send(res, 409, { error: 'This verified email already has a Solaris account. Log in instead.' });
+    if (claims && (accounts.some(item => item.firebaseUid === claims.uid) || pausedAccounts.some(item => item.account.firebaseUid === claims.uid || item.account.email?.toLowerCase() === String(claims.email).toLowerCase()))) return send(res, 409, { error: 'This verified email already has a Helenumi account. Log in instead.' });
     const account = { id, salt, passwordHash, ...(claims ? { firebaseUid: claims.uid, email: String(claims.email).toLowerCase(), emailVerified: true } : {}), role: 'member', tickets: { namecard: 0, who: 0 }, community: emptyCommunity(),
       profile: cleanProfile({ ...input.profile, username }, {}, true, id) };
     accounts.push(account);
@@ -1200,7 +1200,7 @@ async function handleApi(req, res, pathname) {
       if (!account) {
         const paused = pausedAccounts.find(item => item.account.firebaseUid === claims.uid || item.account.email?.toLowerCase() === String(claims.email).toLowerCase());
         if (paused) return send(res, 403, { error: `This account is paused until ${new Date(paused.resumeAt).toLocaleString('en-US', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' })} UTC.` });
-        return send(res, 404, { error: 'This verified email has no Solaris profile yet. Create an account or connect it from your existing profile.' });
+        return send(res, 404, { error: 'This verified email has no Helenumi profile yet. Create an account or connect it from your existing profile.' });
       }
       const previous = { salt: account.salt, passwordHash: account.passwordHash, email: account.email, emailVerified: account.emailVerified };
       try {
@@ -1303,7 +1303,7 @@ async function handleApi(req, res, pathname) {
       throw error;
     }
     await socialSystem.removeAccount(account.id);
-    return send(res, 200, { message: 'Your account and Solaris pause backups have been permanently deleted.' });
+    return send(res, 200, { message: 'Your account and Helenumi pause backups have been permanently deleted.' });
   }
   return send(res, 404, { error: 'Not found.' });
 }
@@ -1382,7 +1382,7 @@ loadStore().then(async () => {
   if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL && !process.env.SOLARIS_DATA_DIR) {
     console.warn('Account data is using local files and may be lost after a restart. Configure DATABASE_URL or a persistent SOLARIS_DATA_DIR.');
   }
-  server.listen(PORT, HOST, () => console.log(`Solaris Studio is running at http://localhost:${PORT}`));
+  server.listen(PORT, HOST, () => console.log(`Helenumi is running at http://localhost:${PORT}`));
   if(siteContent.gameBuilds.some(build=>build.storagePath&&!build.fileKey))migrateGameBuilds().catch(error=>console.error('GAME BUILD MIGRATION NEEDS ATTENTION:',error));
   fileStore.prune([...siteContent.gameBuilds.map(build=>build.fileKey),...socialSystem.snapshot().assets.map(asset=>asset.id)]).catch(error=>console.warn('UPLOAD STORAGE SETUP:',error.message));
 }).catch(async error => {

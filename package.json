@@ -2,7 +2,7 @@
   "name": "solaris-studio-website",
   "version": "1.0.0",
   "private": true,
-  "description": "Solaris Studio website and account server",
+  "description": "Helenumi website and account server",
   "scripts": {
     "start": "node server.js",
     "test": "node --test tests/*.test.js"
