@@ -2,6 +2,9 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { Readable } = require('node:stream');
 const { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { createFileStorage } = require('../file-storage');
@@ -129,4 +132,37 @@ test('Neon S3 uploads use generated images keys and preserve legacy PostgreSQL c
   assert.equal(objects.has(saved.objectKey), false);
   assert.equal(pool.rows.has(saved.key), false);
   assert.equal(pool.rows.has(legacyId), true);
+});
+test('Neon reads the AWS secret from a Render secret file without exposing it', async t => {
+  const names = ['AWS_ENDPOINT_URL_S3','AWS_REGION','AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_SECRET_ACCESS_KEY_FILE','NEON_STORAGE_BUCKET','SOLARIS_UPLOAD_DIR'];
+  const old = Object.fromEntries(names.map(name => [name, process.env[name]]));
+  t.after(() => {
+    for (const name of names) {
+      if (old[name] === undefined) delete process.env[name];
+      else process.env[name] = old[name];
+    }
+  });
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'neon-secret-file-test-'));
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+  const secretFile = path.join(tempDir, 'AWS_SECRET_ACCESS_KEY');
+  fs.writeFileSync(secretFile, 'test-secret-from-file' + String.fromCharCode(10), { mode: 0o600 });
+  process.env.AWS_ENDPOINT_URL_S3 = 'https://storage.test.invalid';
+  process.env.AWS_REGION = 'ap-southeast-1';
+  process.env.AWS_ACCESS_KEY_ID = 'test-access-key';
+  delete process.env.AWS_SECRET_ACCESS_KEY;
+  process.env.AWS_SECRET_ACCESS_KEY_FILE = secretFile;
+  process.env.NEON_STORAGE_BUCKET = 'useruploads';
+  delete process.env.SOLARIS_UPLOAD_DIR;
+  let passedSecret = '';
+  const store = createFileStorage({
+    getPool: () => fakePool(),
+    dataDir: 'unused-test-directory',
+    s3ClientFactory: options => {
+      passedSecret = options.credentials.secretAccessKey;
+      return { async send() { return {}; } };
+    }
+  });
+  await store.ready();
+  assert.equal(passedSecret, 'test-secret-from-file');
+  assert.deepEqual(await store.status(), { available: true, backend: 'neon-object-storage' });
 });

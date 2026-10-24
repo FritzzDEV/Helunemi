@@ -12,6 +12,17 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const CHUNK_SIZE = 1024 * 1024;
 const validKey = key => /^[a-f0-9-]{36}$/.test(String(key));
 const failure = (message, status = 400) => Object.assign(new Error(message), { status });
+function readSecretFileValue(envName, fileEnvName, defaultPath) {
+  const direct = String(process.env[envName] || '').trim();
+  if (direct) return direct;
+  const filename = String(process.env[fileEnvName] || defaultPath || '').trim();
+  if (!filename) return '';
+  try { return fs.readFileSync(filename, 'utf8').trim(); }
+  catch (error) {
+    if (error.code === 'ENOENT' || error.code === 'EISDIR') return '';
+    throw failure('Neon Object Storage secret file could not be read.', 503);
+  }
+}
 
 function rangeFor(header, size) {
   if (!header) return { start: 0, end: size - 1, status: 200 };
@@ -35,7 +46,7 @@ function createFileStorage({ getPool, dataDir, s3ClientFactory, signGetUrl } = {
     endpoint: String(process.env.AWS_ENDPOINT_URL_S3 || '').trim(),
     region: String(process.env.AWS_REGION || '').trim(),
     accessKeyId: String(process.env.AWS_ACCESS_KEY_ID || '').trim(),
-    secretAccessKey: String(process.env.AWS_SECRET_ACCESS_KEY || '').trim(),
+    secretAccessKey: readSecretFileValue('AWS_SECRET_ACCESS_KEY', 'AWS_SECRET_ACCESS_KEY_FILE', '/etc/secrets/AWS_SECRET_ACCESS_KEY'),
     bucket: String(process.env.NEON_STORAGE_BUCKET || '').trim()
   };
   const anyS3 = Object.values(s3cfg).some(Boolean), allS3 = Object.values(s3cfg).every(Boolean);
