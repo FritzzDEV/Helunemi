@@ -5,11 +5,11 @@ const fsSync = require('node:fs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { Transform } = require('node:stream');
+const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const { promisify } = require('node:util');
 const { createFileStorage } = require('./file-storage');
-const { createSocialSystem } = require('./social-system');
+const { createSocialSystem, sniffMedia } = require('./social-system');
 const DEFAULT_CONTENT = require('./site-defaults.json');
 const { createShopSystem, countryCode } = require('./shop-system');
 
@@ -261,7 +261,7 @@ async function uploadGameBuild(req, res) {
   const fileName=cleanGameBuildFilename(rawName,platform),size=Number(req.headers['content-length']);
   if(!fileName) return send(res,400,{error:'Choose a supported installer or game archive.'});
   if(!Number.isSafeInteger(size)||size<=0||Number(req.headers['x-upload-size'])!==size)return send(res,400,{error:'The upload needs a valid file size.'});
-  const stored=await fileStore.save(req,{size,maxBytes:MAX_GAME_BUILD_BYTES,name:fileName,mime:'application/octet-stream',ownerId:user.id,validate:buffer=>gameSignature(fileName,buffer)});
+  const stored=await fileStore.save(req,{size,maxBytes:MAX_GAME_BUILD_BYTES,name:fileName,mime:'application/octet-stream',ownerId:user.id,prefix:'game-builds',validate:buffer=>gameSignature(fileName,buffer)});
   return send(res,201,{buildId,fileName,size,platform,fileKey:stored.key,sha256:stored.sha256});
 }
 async function downloadGameBuild(req,res,id) {
@@ -523,23 +523,40 @@ function friendCardAsset(value, maxLength = 950_000, ownerId = '') {
   if (value == null || value === '') return '';
   if (typeof value === 'string' && value.startsWith('data:image/')) return imageData(value, maxLength);
   if (typeof value !== 'string' || value.length > 2000 || !ownerId) throw Object.assign(new Error('That Friend-Card image is not a supported saved asset.'), { status: 400 });
+  const neon = /^\/api\/friend-card\/assets\/([a-f0-9-]{36})\/([a-f0-9-]{36})$/i.exec(value);
+  if (neon) { if (neon[1].toLowerCase() !== String(ownerId).toLowerCase()) throw Object.assign(new Error('That Friend-Card image does not belong to this account.'), { status: 400 }); return value; }
   try {
-    const url = new URL(value);
-    const encodedPath = url.pathname.split('/o/')[1] || '';
-    const objectPath = decodeURIComponent(encodedPath);
-    const bucket = url.pathname.match(/^\/v0\/b\/([^/]+)\/o\//)?.[1];
-    if (url.protocol !== 'https:' || url.hostname !== 'firebasestorage.googleapis.com' || decodeURIComponent(bucket || '') !== firebaseStorageBucket() || url.searchParams.get('alt') !== 'media' || !/^[A-Za-z0-9-]{16,160}$/.test(url.searchParams.get('token') || '') || !objectPath.startsWith(`friend-cards/${ownerId}/`) || !/^[A-Za-z0-9_-]+\.(?:webp|png|jpg)$/.test(objectPath.slice(`friend-cards/${ownerId}/`.length))) throw new Error('invalid asset reference');
+    const url = new URL(value), encodedPath = url.pathname.split('/o/')[1] || '', objectPath = decodeURIComponent(encodedPath), bucket = url.pathname.match(/^\/v0\/b\/([^/]+)\/o\//)?.[1];
+    const bucketName = decodeURIComponent(bucket || ''), expectedBucket = firebaseStorageBucket();
+    if (url.protocol !== 'https:' || url.hostname !== 'firebasestorage.googleapis.com' || !/^[A-Za-z0-9._-]{3,200}$/.test(bucketName) || expectedBucket && bucketName !== expectedBucket || url.searchParams.get('alt') !== 'media' || !/^[A-Za-z0-9-]{16,160}$/.test(url.searchParams.get('token') || '') || !objectPath.startsWith('friend-cards/' + ownerId + '/') || !/^[A-Za-z0-9_-]+\.(?:webp|png|jpg)$/.test(objectPath.slice(('friend-cards/' + ownerId + '/').length))) throw new Error('invalid asset reference');
     return url.href;
-  } catch { throw Object.assign(new Error('That Friend-Card image does not belong to this account or its Firebase Storage bucket.'), { status: 400 }); }
+  } catch { throw Object.assign(new Error('That Friend-Card image does not belong to this account or a supported storage bucket.'), { status: 400 }); }
 }
 function friendCardFontAsset(value, ownerId = '') {
   if (value == null || value === '') return '';
   if (typeof value !== 'string' || value.length > 2200 || !ownerId) throw Object.assign(new Error('That Friend-Card font is not a supported saved asset.'), { status: 400 });
+  const neon = /^\/api\/friend-card\/fonts\/([a-f0-9-]{36})\/([a-f0-9-]{36})$/i.exec(value);
+  if (neon) { if (neon[1].toLowerCase() !== String(ownerId).toLowerCase()) throw Object.assign(new Error('That Friend-Card font does not belong to this account.'), { status: 400 }); return value; }
   try {
     const url = new URL(value), encodedPath = url.pathname.split('/o/')[1] || '', objectPath = decodeURIComponent(encodedPath), bucket = url.pathname.match(/^\/v0\/b\/([^/]+)\/o\//)?.[1];
-    if (url.protocol !== 'https:' || url.hostname !== 'firebasestorage.googleapis.com' || decodeURIComponent(bucket || '') !== firebaseStorageBucket() || url.searchParams.get('alt') !== 'media' || !/^[A-Za-z0-9-]{16,160}$/.test(url.searchParams.get('token') || '') || !objectPath.startsWith(`friend-cards/${ownerId}/fonts/`) || !/^[A-Za-z0-9_-]+\.(?:woff2?|ttf|otf)$/.test(objectPath.slice(`friend-cards/${ownerId}/fonts/`.length))) throw new Error('invalid font reference');
+    const bucketName = decodeURIComponent(bucket || ''), expectedBucket = firebaseStorageBucket();
+    if (url.protocol !== 'https:' || url.hostname !== 'firebasestorage.googleapis.com' || !/^[A-Za-z0-9._-]{3,200}$/.test(bucketName) || expectedBucket && bucketName !== expectedBucket || url.searchParams.get('alt') !== 'media' || !/^[A-Za-z0-9-]{16,160}$/.test(url.searchParams.get('token') || '') || !objectPath.startsWith('friend-cards/' + ownerId + '/fonts/') || !/^[A-Za-z0-9_-]+\.(?:woff2?|ttf|otf)$/.test(objectPath.slice(('friend-cards/' + ownerId + '/fonts/').length))) throw new Error('invalid asset reference');
     return url.href;
-  } catch { throw Object.assign(new Error('That Friend-Card font does not belong to this account or its Firebase Storage bucket.'), { status: 400 }); }
+  } catch { throw Object.assign(new Error('That Friend-Card font does not belong to this account or a supported storage bucket.'), { status: 400 }); }
+}
+function friendCardReferences(value, target) {
+  let found=false;
+  const visit=item=>{if(item===target){found=true;return;}if(item&&typeof item==='object')for(const child of Object.values(item))visit(child);};
+  visit(value);return found;
+}
+function chatMediaSignature(mime, buffer) {
+  if(mime.startsWith('image/'))return sniffMedia(mime,buffer);
+  if(mime==='audio/webm')return buffer.subarray(0,4).equals(Buffer.from([26,69,223,163]));
+  if(mime==='audio/ogg')return buffer.toString('ascii',0,4)==='OggS';
+  if(mime==='audio/mpeg')return buffer.toString('ascii',0,3)==='ID3'||buffer.length>1&&buffer[0]===255&&(buffer[1]&224)===224;
+  if(mime==='audio/mp4')return buffer.toString('ascii',4,8)==='ftyp';
+  if(mime==='audio/wav')return buffer.toString('ascii',0,4)==='RIFF'&&buffer.toString('ascii',8,12)==='WAVE';
+  return false;
 }
 function emptyFriendCard() {
   return { published: false, likes: '', dislikes: '', favoriteThing: '', lookingFor: '', personalityTags: [], aspectRatio: '1:1', backgroundImage: '', backgroundColor: '#fff8e9', backgroundOverlayColor: '#ffffff', backgroundOverlayOpacity: 18, borderStyle: 'solid', borderColor: '#dcae55', borderWidth: 2, borderImage: '', titleColor: '#302344', textColor: '#302344', mutedTextColor: '#766b7d', tagTextColor: '#302344', buttonColor: '#3c315b', buttonOverlayColor: '#ffffff', buttonOverlayOpacity: 0, buttonImage: '', buttonTextColor: '#ffffff', buttonBorderStyle: 'solid', buttonBorderColor: '#3c315b', buttonBorderImage: '', effect: 'glow' };
@@ -903,31 +920,40 @@ async function handleApi(req, res, pathname) {
   }
   if (req.method === 'POST' && pathname === '/api/community/asset') {
     const account = await getAccount(req);
-    if (!account) return send(res, 401, { error: 'Log in to send chat media.' });
-    const input = await readBody(req), target = accounts.find(item => item.id === input.recipientId);
+    if (!account) return send(res,401,{error:'Log in to send chat media.'});
+    const input=await readBody(req),target=accounts.find(item=>item.id===input.recipientId);
     normalizeAccount(account);
-    if (!target || !account.community.friends.includes(target.id)) return send(res, 403, { error: 'You can only send media to an accepted friend.' });
-    const match = typeof input.data === 'string' ? /^data:(image\/(?:webp|png|jpeg|gif)|audio\/(?:webm|ogg|mpeg|mp4|wav));base64,([A-Za-z0-9+/]+={0,2})$/.exec(input.data) : null;
-    if (!match) return send(res, 400, { error: 'Choose a JPG, PNG, WebP, GIF, or supported audio recording.' });
-    if (!['image','gif','sticker','voice'].includes(input.kind)) return send(res,400,{error:'Choose an image, GIF, sticker, or voice recording.'});
-    const mimeType = match[1], isImage = mimeType.startsWith('image/');
-    if (isImage !== ['image','gif','sticker'].includes(input.kind)) return send(res, 400, { error: 'The selected media does not match its file type.' });
-    if (input.kind === 'gif' && mimeType !== 'image/gif' || input.kind === 'voice' && !mimeType.startsWith('audio/')) return send(res, 400, { error: 'The selected media does not match its file type.' });
-    const buffer = Buffer.from(match[2],'base64');
-    if (!buffer.length || buffer.length > 1_800_000) return send(res, 413, { error: 'Choose a chat media file smaller than 1.8 MB.' });
-    const extension = ({'image/webp':'webp','image/png':'png','image/jpeg':'jpg','image/gif':'gif','audio/webm':'webm','audio/ogg':'ogg','audio/mpeg':'mp3','audio/mp4':'m4a','audio/wav':'wav'})[mimeType];
-    const objectPath = `community/${account.id}/${target.id}/${crypto.randomUUID()}.${extension}`;
-    const token = crypto.randomUUID();
+    if(!target||!account.community.friends.includes(target.id))return send(res,403,{error:'You can only send media to an accepted friend.'});
+    const match=typeof input.data==='string'?/^data:(image\/(?:webp|png|jpeg|gif)|audio\/(?:webm|ogg|mpeg|mp4|wav));base64,([A-Za-z0-9+/]+={0,2})$/.exec(input.data):null;
+    if(!match)return send(res,400,{error:'Choose a JPG, PNG, WebP, GIF, or supported audio recording.'});
+    if(!['image','gif','sticker','voice'].includes(input.kind))return send(res,400,{error:'Choose an image, GIF, sticker, or voice recording.'});
+    const mime=match[1],isImage=mime.startsWith('image/');
+    if(isImage!==['image','gif','sticker'].includes(input.kind))return send(res,400,{error:'The selected media does not match its file type.'});
+    if(input.kind==='gif'&&mime!=='image/gif'||input.kind==='voice'&&!mime.startsWith('audio/'))return send(res,400,{error:'The selected media does not match its file type.'});
+    const buffer=Buffer.from(match[2],'base64');
+    if(!buffer.length||buffer.length>1800000)return send(res,413,{error:'Choose a chat media file smaller than 1.8 MB.'});
+    const extension=({'image/webp':'webp','image/png':'png','image/jpeg':'jpg','image/gif':'gif','audio/webm':'webm','audio/ogg':'ogg','audio/mpeg':'mp3','audio/mp4':'m4a','audio/wav':'wav'})[mime];
     try {
-      const bucket = getFirebaseStorageBucket();
-      await bucket.file(objectPath).save(buffer,{resumable:false,metadata:{contentType:mimeType,cacheControl:'private, max-age=31536000',metadata:{senderAccountId:account.id,recipientAccountId:target.id,firebaseStorageDownloadTokens:token}}});
-      const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
-      return send(res,201,{url,path:objectPath});
-    } catch (error) {
-      if (error.status) return send(res,error.status,{error:error.message});
-      console.error('FIREBASE COMMUNITY MEDIA UPLOAD ERROR:',error);
-      return send(res,503,{error:'Chat media could not be uploaded. Check Firebase Storage and its service-account permissions.'});
+      const stored=await fileStore.save(Readable.from([buffer]),{size:buffer.length,maxBytes:1800000,name:crypto.randomUUID()+'.'+extension,mime,ownerId:account.id,recipientId:target.id,prefix:'community/'+account.id+'/'+target.id,validate:data=>chatMediaSignature(mime,data)});
+      return send(res,201,{url:'/api/community/assets/'+stored.key,path:stored.storagePath});
+    } catch(error) {
+      if(error.status)return send(res,error.status,{error:error.message});
+      console.error('NEON COMMUNITY MEDIA UPLOAD ERROR:',error);
+      return send(res,503,{error:'Chat media could not be uploaded. Check Neon Object Storage setup.'});
     }
+  }
+  const communityAssetRoute=/^\/api\/community\/assets\/([a-f0-9-]{36})$/i.exec(pathname);
+  if((req.method==='GET'||req.method==='HEAD')&&communityAssetRoute){
+    const account=await getAccount(req),key=communityAssetRoute[1];
+    if(!account)return send(res,401,{error:'Log in to view chat media.'});
+    normalizeAccount(account);
+    const message=account.community.messages.find(item=>item.mediaKey===key&&(item.senderId===account.id||item.recipientId===account.id));
+    if(!message)return send(res,404,{error:'That chat media is no longer available.'});
+    const otherId=message.senderId===account.id?message.recipientId:message.senderId;
+    if(!account.community.friends.includes(otherId))return send(res,403,{error:'You can only view media from an accepted friend.'});
+    const stored=await fileStore.metadata(key);
+    if(!stored||stored.ownerId!==message.senderId||stored.recipientId!==message.recipientId)return send(res,404,{error:'That chat media is no longer available.'});
+    return fileStore.serve(req,res,key);
   }
   if (req.method === 'POST' && pathname === '/api/community/message') {
     const account = await getAccount(req);
@@ -940,19 +966,22 @@ async function handleApi(req, res, pathname) {
     const type = ['text','image','gif','voice','sticker'].includes(input.type) ? input.type : 'text';
     if (type === 'text' && (!body || body.length > 2000)) return send(res, 400, { error: 'Write a message of 1–2,000 characters.' });
     if (type === 'sticker' && ((!body && !input.mediaUrl) || body.length > 24)) return send(res,400,{error:'Choose a sticker to send.'});
-    let mediaUrl = '', mediaPath = '';
-    if (['image','gif','voice'].includes(type) || type === 'sticker' && input.mediaUrl) {
-      let parsed, urlBucket;
-      try {
-        parsed = new URL(String(input.mediaUrl || ''));
-        mediaUrl = parsed.href;
-        mediaPath = decodeURIComponent(parsed.pathname.split('/o/')[1] || '');
-        urlBucket = decodeURIComponent(parsed.pathname.split('/')[3] || '');
-      } catch (_) { return send(res,400,{error:'Upload the image or voice message again.'}); }
-      if (parsed.hostname !== 'firebasestorage.googleapis.com' || parsed.protocol !== 'https:' || urlBucket !== firebaseStorageBucket() || mediaPath !== String(input.mediaPath || '') || !mediaPath.startsWith(`community/${account.id}/${target.id}/`) || !parsed.searchParams.has('token')) return send(res,400,{error:'That chat media upload is not valid.'});
+    let mediaUrl='',mediaPath='',mediaKey='';
+    if(['image','gif','voice'].includes(type)||type==='sticker'&&input.mediaUrl){
+      const neonRoute=/^\/api\/community\/assets\/([a-f0-9-]{36})$/i.exec(String(input.mediaUrl||''));
+      if(neonRoute){
+        const stored=await fileStore.metadata(neonRoute[1]);
+        if(!stored||stored.ownerId!==account.id||stored.recipientId!==target.id||input.mediaPath!==stored.storagePath||!stored.storagePath.startsWith('images/community/'+account.id+'/'+target.id+'/'))return send(res,400,{error:'Upload the image or voice message again.'});
+        mediaUrl=neonRoute[0];mediaPath=stored.storagePath;mediaKey=stored.key;
+      }else{
+        let parsed,urlBucket;
+        try{parsed=new URL(String(input.mediaUrl||''));mediaUrl=parsed.href;mediaPath=decodeURIComponent(parsed.pathname.split('/o/')[1]||'');urlBucket=decodeURIComponent(parsed.pathname.split('/')[3]||'');}
+        catch(_){return send(res,400,{error:'Upload the image or voice message again.'});}
+        if(parsed.hostname!=='firebasestorage.googleapis.com'||parsed.protocol!=='https:'||urlBucket!==firebaseStorageBucket()||mediaPath!==String(input.mediaPath||'')||!mediaPath.startsWith('community/'+account.id+'/'+target.id+'/')||!parsed.searchParams.has('token'))return send(res,400,{error:'That chat media upload is not valid.'});
+      }
     }
     if (body.length > 2000) return send(res,400,{error:'Keep messages under 2,000 characters.'});
-    const message = { id: crypto.randomUUID(), senderId: account.id, recipientId: target.id, type, text: body, ...(mediaUrl ? {mediaUrl,mediaPath} : {}), caption: typeof input.caption === 'string' ? input.caption.trim().slice(0,240) : '', createdAt: Date.now() };
+    const message = { id: crypto.randomUUID(), senderId: account.id, recipientId: target.id, type, text: body, ...(mediaUrl ? {mediaUrl,mediaPath,...(mediaKey?{mediaKey}:{})} : {}), caption: typeof input.caption === 'string' ? input.caption.trim().slice(0,240) : '', createdAt: Date.now() };
     const beforeAccount = JSON.stringify(account.community.messages), beforeTarget = JSON.stringify(target.community.messages);
     account.community.messages = [...account.community.messages, message].slice(-250);
     target.community.messages = [...target.community.messages, message].slice(-250);
@@ -1017,52 +1046,50 @@ async function handleApi(req, res, pathname) {
     }));
     return send(res, 200, { members });
   }
-  if (req.method === 'POST' && pathname === '/api/friend-card/asset') {
-    const account = await getAccount(req);
-    if (!account) return send(res, 401, { error: 'Log in to upload Friend-Card images.' });
-    if (account.role === 'owner' || account.profile.primaryRole !== 'member') return send(res, 403, { error: 'Only Member accounts can upload Friend-Card images.' });
-    const input = await readBody(req);
-    const match = typeof input.image === 'string' ? /^data:image\/(webp|png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/.exec(input.image) : null;
-    if (!match) return send(res, 400, { error: 'Choose a supported JPG, PNG, or WebP image.' });
-    const buffer = Buffer.from(match[2], 'base64');
-    if (!buffer.length || buffer.length > 650_000) return send(res, 413, { error: 'That Friend-Card image is too large after resizing.' });
-    const extension = match[1] === 'jpeg' ? 'jpg' : match[1];
-    const filename = `${crypto.randomUUID()}.${extension}`;
-    const objectPath = `friend-cards/${account.id}/${filename}`;
-    const token = crypto.randomUUID();
-    try {
-      const bucket = getFirebaseStorageBucket();
-      await bucket.file(objectPath).save(buffer, { resumable: false, metadata: { contentType: `image/${match[1]}`, cacheControl: 'private, max-age=31536000', metadata: { ownerAccountId: account.id, ownerFirebaseUid: account.firebaseUid || '', published: 'false', firebaseStorageDownloadTokens: token } } });
-      const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
-      return send(res, 201, { url, path: objectPath, message: 'Image uploaded to your Helunemi Friend-Card assets.' });
-    } catch (error) {
-      if (error.status) return send(res, error.status, { error: error.message });
-      console.error('FIREBASE FRIEND-CARD ASSET UPLOAD ERROR:', error);
-      return send(res, 503, { error: 'The image could not be uploaded to Firebase Storage. Check the storage bucket and service-account permissions.' });
-    }
+  const friendCardFileRoute=/^\/api\/friend-card\/(assets|fonts)\/([a-f0-9-]{36})\/([a-f0-9-]{36})$/i.exec(pathname);
+  if((req.method==='GET'||req.method==='HEAD')&&friendCardFileRoute){
+    const [,kind,ownerId,key]=friendCardFileRoute;
+    const owner=accounts.find(item=>String(item.id||'').toLowerCase()===ownerId.toLowerCase());
+    if(!owner)return send(res,404,{error:'That Friend-Card asset is no longer available.'});
+    const stored=await fileStore.metadata(key),allowed=kind==='assets'?['image/png','image/jpeg','image/webp']:['font/woff2','font/woff','font/ttf','font/otf'];
+    if(!stored||String(stored.ownerId||'').toLowerCase()!==owner.id.toLowerCase()||!allowed.includes(stored.mime))return send(res,404,{error:'That Friend-Card asset is no longer available.'});
+    normalizeAccount(owner);
+    const assetUrl='/api/friend-card/'+kind+'/'+owner.id+'/'+stored.key,viewer=await getAccount(req);
+    const publicReference=owner.profile.friendCard?.published===true&&friendCardReferences(owner.profile.friendCard,assetUrl);
+    if(viewer?.id!==owner.id&&!publicReference)return send(res,404,{error:'That Friend-Card asset is not published.'});
+    return fileStore.serve(req,res,key);
   }
-  if (req.method === 'POST' && pathname === '/api/friend-card/font') {
-    const account = await getAccount(req);
-    if (!account) return send(res, 401, { error: 'Log in to upload Friend-Card fonts.' });
-    if (account.role === 'owner' || account.profile.primaryRole !== 'member') return send(res, 403, { error: 'Only Member accounts can upload Friend-Card fonts.' });
-    const input = await readBody(req);
-    const match = typeof input.data === 'string' ? /^data:font\/(woff2|woff|ttf|otf);base64,([A-Za-z0-9+/]+={0,2})$/.exec(input.data) : null;
-    if (!match) return send(res, 400, { error: 'Choose a WOFF2, WOFF, TTF, or OTF font file.' });
-    const buffer = Buffer.from(match[2], 'base64');
-    if (!buffer.length || buffer.length > 1_500_000) return send(res, 413, { error: 'Choose a font file smaller than 1.5 MB.' });
-    const signatures = { woff2: buffer.subarray(0,4).toString('ascii') === 'wOF2', woff: buffer.subarray(0,4).toString('ascii') === 'wOFF', otf: buffer.subarray(0,4).toString('ascii') === 'OTTO', ttf: buffer.subarray(0,4).equals(Buffer.from([0,1,0,0])) || buffer.subarray(0,4).toString('ascii') === 'true' };
-    if (!signatures[match[1]]) return send(res, 400, { error: 'The file contents do not match the selected font format.' });
-    const filename = `${crypto.randomUUID()}.${match[1]}`, objectPath = `friend-cards/${account.id}/fonts/${filename}`, token = crypto.randomUUID();
-    try {
-      const bucket = getFirebaseStorageBucket();
-      await bucket.file(objectPath).save(buffer, { resumable: false, metadata: { contentType: `font/${match[1]}`, cacheControl: 'private, max-age=31536000', metadata: { ownerAccountId: account.id, ownerFirebaseUid: account.firebaseUid || '', published: 'false', firebaseStorageDownloadTokens: token } } });
-      const url = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket.name)}/o/${encodeURIComponent(objectPath)}?alt=media&token=${token}`;
-      return send(res, 201, { url, format: match[1], message: 'Font uploaded to your Helunemi Friend-Card assets.' });
-    } catch (error) {
-      if (error.status) return send(res, error.status, { error: error.message });
-      console.error('FIREBASE FRIEND-CARD FONT UPLOAD ERROR:', error);
-      return send(res, 503, { error: 'The font could not be uploaded to Firebase Storage. Check the storage bucket and service-account permissions.' });
-    }
+  if(req.method==='POST'&&pathname==='/api/friend-card/asset'){
+    const account=await getAccount(req);
+    if(!account)return send(res,401,{error:'Log in to upload Friend-Card images.'});
+    if(account.role==='owner'||account.profile.primaryRole!=='member')return send(res,403,{error:'Only Member accounts can upload Friend-Card images.'});
+    const input=await readBody(req),match=typeof input.image==='string'?/^data:image\/(webp|png|jpeg);base64,([A-Za-z0-9+/]+={0,2})$/.exec(input.image):null;
+    if(!match)return send(res,400,{error:'Choose a supported JPG, PNG, or WebP image.'});
+    const buffer=Buffer.from(match[2],'base64');
+    if(!buffer.length||buffer.length>650000)return send(res,413,{error:'That Friend-Card image is too large after resizing.'});
+    const ext=match[1]==='jpeg'?'jpg':match[1],mime='image/'+match[1],name=crypto.randomUUID()+'.'+ext;
+    try{
+      const stored=await fileStore.save(Readable.from([buffer]),{size:buffer.length,maxBytes:650000,name,mime,ownerId:account.id,prefix:'friend-cards/'+account.id,validate:data=>sniffMedia(mime,data)});
+      const url='/api/friend-card/assets/'+account.id+'/'+stored.key;
+      return send(res,201,{url,path:stored.storagePath,message:'Image uploaded to your private Helunemi storage.'});
+    }catch(error){if(error.status)return send(res,error.status,{error:error.message});console.error('NEON FRIEND-CARD ASSET UPLOAD ERROR:',error);return send(res,503,{error:'The image could not be uploaded to Neon Object Storage.'});}
+  }
+  if(req.method==='POST'&&pathname==='/api/friend-card/font'){
+    const account=await getAccount(req);
+    if(!account)return send(res,401,{error:'Log in to upload Friend-Card fonts.'});
+    if(account.role==='owner'||account.profile.primaryRole!=='member')return send(res,403,{error:'Only Member accounts can upload Friend-Card fonts.'});
+    const input=await readBody(req),match=typeof input.data==='string'?/^data:font\/(woff2|woff|ttf|otf);base64,([A-Za-z0-9+/]+={0,2})$/.exec(input.data):null;
+    if(!match)return send(res,400,{error:'Choose a WOFF2, WOFF, TTF, or OTF font file.'});
+    const buffer=Buffer.from(match[2],'base64');
+    if(!buffer.length||buffer.length>1500000)return send(res,413,{error:'Choose a font file smaller than 1.5 MB.'});
+    const sig={woff2:buffer.subarray(0,4).toString('ascii')==='wOF2',woff:buffer.subarray(0,4).toString('ascii')==='wOFF',otf:buffer.subarray(0,4).toString('ascii')==='OTTO',ttf:buffer.subarray(0,4).equals(Buffer.from([0,1,0,0]))||buffer.subarray(0,4).toString('ascii')==='true'};
+    if(!sig[match[1]])return send(res,400,{error:'The file contents do not match the selected font format.'});
+    const name=crypto.randomUUID()+'.'+match[1],mime='font/'+match[1];
+    try{
+      const stored=await fileStore.save(Readable.from([buffer]),{size:buffer.length,maxBytes:1500000,name,mime,ownerId:account.id,prefix:'friend-cards/'+account.id+'/fonts',validate:()=>sig[match[1]]});
+      const url='/api/friend-card/fonts/'+account.id+'/'+stored.key;
+      return send(res,201,{url,format:match[1],message:'Font uploaded to your private Helunemi storage.'});
+    }catch(error){if(error.status)return send(res,error.status,{error:error.message});console.error('NEON FRIEND-CARD FONT UPLOAD ERROR:',error);return send(res,503,{error:'The font could not be uploaded to Neon Object Storage.'});}
   }
   if (req.method === 'PUT' && pathname === '/api/member-friend-card/save') {
     const account = await getAccount(req);
@@ -1377,6 +1404,16 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+function retainedUploadKeys() {
+  const retained=new Set([...siteContent.gameBuilds.map(build=>build.fileKey),...socialSystem.snapshot().assets.map(asset=>asset.id)].filter(key=>/^[a-f0-9-]{36}$/i.test(String(key||''))));
+  const collect=value=>{
+    if(typeof value==='string'){const match=/^\/api\/friend-card\/(?:assets|fonts)\/[a-f0-9-]{36}\/([a-f0-9-]{36})$/i.exec(value);if(match)retained.add(match[1]);}
+    else if(Array.isArray(value))value.forEach(collect);
+    else if(value&&typeof value==='object')Object.values(value).forEach(collect);
+  };
+  for(const account of accounts){for(const message of account.community?.messages||[])if(/^[a-f0-9-]{36}$/i.test(String(message.mediaKey||'')))retained.add(message.mediaKey);collect(account.profile?.friendCard);}
+  return [...retained];
+}
 loadStore().then(async () => {
   await restoreExpiredAccounts();
   if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL && !process.env.SOLARIS_DATA_DIR) {
@@ -1384,7 +1421,7 @@ loadStore().then(async () => {
   }
   server.listen(PORT, HOST, () => console.log(`Helunemi is running at http://localhost:${PORT}`));
   if(siteContent.gameBuilds.some(build=>build.storagePath&&!build.fileKey))migrateGameBuilds().catch(error=>console.error('GAME BUILD MIGRATION NEEDS ATTENTION:',error));
-  fileStore.prune([...siteContent.gameBuilds.map(build=>build.fileKey),...socialSystem.snapshot().assets.map(asset=>asset.id)]).catch(error=>console.warn('UPLOAD STORAGE SETUP:',error.message));
+  fileStore.prune(retainedUploadKeys()).catch(error=>console.warn('UPLOAD STORAGE SETUP:',error.message));
 }).catch(async error => {
   if (pool) await pool.end().catch(() => {});
   console.error('Could not load the account store:', error);

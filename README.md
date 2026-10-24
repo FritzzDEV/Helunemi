@@ -174,3 +174,19 @@ Run `npm test` for isolated backend integration checks. The tests use temporary 
 ## Explore AIs
 
 `explore-ais.html` lists **Hene** and **Lumi**, each marked **Soon to be developed**. Their names come from Helunemi: split **He · lu · ne · mi**, swap **lu** and **ne**, then pair **He + ne** and **Lu + mi**. The page contains no AI functionality or additional AI details yet.
+
+## Neon Object Storage
+
+When the complete Neon S3 environment is configured, new social uploads, chat media, Friend-Card images and fonts, and game builds are written to the private useruploads bucket under generated keys in images/. The existing solaris_files metadata and authorization checks remain in use. Existing PostgreSQL chunks and older Firebase URLs continue to be read through their current paths; deployment does not copy or rewrite those PostgreSQL rows.
+
+Add these values to the Render web service environment. Take the four AWS values from the Helunemi production branch's Neon Object Storage integration, and set the bucket name exactly as shown:
+
+| Environment variable | Value source |
+| --- | --- |
+| AWS_ENDPOINT_URL_S3 | Neon production branch storage endpoint |
+| AWS_REGION | Neon production branch storage region |
+| AWS_ACCESS_KEY_ID | Neon production branch storage credential |
+| AWS_SECRET_ACCESS_KEY | Neon production branch storage credential |
+| NEON_STORAGE_BUCKET | useruploads |
+
+Keep the AWS values in Render's encrypted environment settings. Do not commit .env files or paste secret values into chat. Uploads continue through the authenticated server so it can enforce account access, size limits, and file signatures before writing. The authenticated game-download endpoint uses a five-minute presigned GET for private installer downloads. Images, chat media, and range requests stay on the same-origin server path. Direct presigned PUT is not used because it would bypass the site's current validation and ownership checks.

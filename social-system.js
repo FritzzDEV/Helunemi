@@ -126,7 +126,7 @@ function createSocialSystem(context) {
     const size = Number(req.headers['content-length']), maxBytes = kind === 'video' ? 100*1024*1024 : 20*1024*1024;
     const extension = {'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif','video/mp4':'mp4','video/webm':'webm'}[mime];
     const name = text(query.get('name'),100).replace(/[^A-Za-z0-9._ -]/g,'_') || 'upload.'+extension;
-    const stored = await files.save(req, {size,maxBytes,name,mime,ownerId:user.id,validate:buffer=>sniffMedia(mime,buffer)});
+    const stored = await files.save(req, {size,maxBytes,name,mime,ownerId:user.id,prefix:'social/' + kind,validate:buffer=>sniffMedia(mime,buffer)});
     let dimensions = {};
     if(mime.startsWith('image/')){
       try{const chunks=[];for await(const chunk of files.read(stored.key,0,size-1))chunks.push(chunk);const info=await sharp(Buffer.concat(chunks),{limitInputPixels:40_000_000}).metadata();if(!info.width||!info.height||info.width*info.height>40_000_000)throw new Error('Image dimensions are too large.');dimensions={width:info.width,height:info.pageHeight||info.height};}
