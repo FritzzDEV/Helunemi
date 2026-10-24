@@ -25,7 +25,7 @@ const USERNAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY = 16 * 1024 * 1024;
 const MAX_GAME_BUILD_BYTES = Math.min(4 * 1024 ** 3, Math.max(50 * 1024 ** 2, Number(process.env.SOLARIS_MAX_GAME_BUILD_BYTES) || 2 * 1024 ** 3));
 const BUILT_IN_GAME_IDS = new Set(['gamma-frost', 'omiwo']);
-const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'publish.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js', 'profile-social.js', 'profile-social.css', 'storefront.js', 'create-post.html', 'shop-product.html']);
+const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'publish.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js', 'profile-social.js', 'profile-social.css', 'storefront.js', 'create-post.html', 'shop-product.html', 'explore-ais.html', 'assets/menu-icon.png']);
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.png': 'image/png' };
 const PRIMARY_ROLES = {
   assistant: { label: 'Assistant', explanation: 'Supports studio coordination and helps keep Helunemi projects moving.' },

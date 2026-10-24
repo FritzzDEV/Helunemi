@@ -34,7 +34,7 @@
   const paragraphs = value => String(value || '').split(/\n\s*\n/).map(part => part.trim()).filter(Boolean).map(part => `<p>${esc(part)}</p>`).join('');
   const app = $('#app');
   const page = document.body.dataset.page || 'home';
-  const titles = {home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat',publish:'Publish','create-post':'Create Post','shop-product':'Manage Product'};
+  const titles = {home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat',publish:'Publish','create-post':'Create Post','shop-product':'Manage Product','explore-ais':'Explore AIs'};
   let currentUser = null;
   let ownerPosts = {games:[],arts:[],updates:[],downloads:[],gameBuilds:[],deletedBuiltins:[]};
   let contentPermissions={games:[],arts:[],updates:[]};
@@ -918,19 +918,45 @@
   function isCurrentUserStaff() {
     return currentUser?.accountRole === 'owner' || ['assistant','ai-assistant','developer'].includes(currentUser?.primaryRole);
   }
+  function setQuickMenuOpen(open, focusLink = '') {
+    const panel = $('#quick-menu-panel'), toggle = $('#quick-menu-toggle');
+    if (!panel || !toggle) return;
+    if (open) { closeProfile(); closeGlobalSearch(); }
+    panel.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Close quick menu' : 'Open quick menu');
+    if (open && focusLink) {
+      const links = $$('a', panel);
+      (focusLink === 'last' ? links.at(-1) : links[0])?.focus();
+    }
+  }
+  function closeQuickMenu(restoreFocus = false) {
+    const panel = $('#quick-menu-panel');
+    if (!panel || panel.hidden) return false;
+    setQuickMenuOpen(false);
+    if (restoreFocus) $('#quick-menu-toggle')?.focus();
+    return true;
+  }
   function ensureCommunityMessenger() {
     if (page === 'chat') {
       document.body.classList.add('community-page-body');
-      $('#community-launcher')?.remove();
+      $('#site-quick-menu')?.remove();
       return;
     }
-    if (!$('#community-launcher')) {
-      const launch = document.createElement('a');
-      launch.id = 'community-launcher'; launch.className = 'community-launcher'; launch.href = 'chat.html'; launch.setAttribute('aria-label','Open Helunemi Community chat');
-      launch.innerHTML = '<img src="assets/golden-spiral-sun-icon.png" alt=""><span>Community</span>';
-      document.body.append(launch);
-    }
+    if ($('#site-quick-menu')) return;
+    const menu = document.createElement('div');
+    menu.id = 'site-quick-menu'; menu.className = 'quick-menu';
+    menu.innerHTML = `<button class="quick-menu-toggle" id="quick-menu-toggle" type="button" data-quick-menu-toggle aria-label="Open quick menu" aria-expanded="false" aria-controls="quick-menu-panel" title="Menu"><span class="quick-menu-icon" aria-hidden="true"></span></button><nav class="quick-menu-panel" id="quick-menu-panel" aria-label="Quick links" hidden><a href="chat.html" data-quick-menu-link><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 2v-10a9 9 0 0 1 18 0Z"></path><path d="M7 11h8M7 15h5"></path></svg><span>Community</span></a><a href="explore-ais.html" data-quick-menu-link${page === 'explore-ais' ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8Z"></path></svg><span>Explore AIs</span></a></nav>`;
+    document.body.append(menu);
+    $('#quick-menu-toggle', menu).addEventListener('keydown', event => {
+      if (!['ArrowDown','ArrowUp'].includes(event.key)) return;
+      event.preventDefault(); setQuickMenuOpen(true, event.key === 'ArrowUp' ? 'last' : 'first');
+    });
+    menu.addEventListener('focusout', event => {
+      if (event.relatedTarget && !menu.contains(event.relatedTarget)) closeQuickMenu();
+    });
   }
+
   function renderCommunitySidebar() {
     const sidebar = $('[data-community-sidebar]');
     if (!sidebar) return;
@@ -1517,6 +1543,9 @@
       }
       const target = Object.hasOwn(ownerPostSectionLabels,section) ? section : 'games';
       return `<div class="wrap publish-page"><div class="page-head"><a class="publish-back" href="${target === 'downloads' ? 'download.html' : `${target === 'arts' ? 'arts' : target}.html`}">← Back to ${esc(ownerPostSectionLabels[target])}</a><span class="section-eyebrow">OWNER PUBLISHING</span><h1>${esc(ownerPostActionLabels[target])}</h1><p>Create and manage content for the ${esc(ownerPostSectionLabels[target].toLowerCase())} page.</p></div>${ownerContentManager(target)}</div>`;
+    },
+    'explore-ais'() {
+      return `<div class="wrap ai-explore-page"><div class="page-head"><h1>Explore AIs</h1></div><section class="ai-explore-grid" aria-label="Upcoming AIs"><article class="ai-explore-card"><h2>Hene</h2><p class="ai-development-note">Soon to be developed</p></article><article class="ai-explore-card"><h2>Lumi</h2><p class="ai-development-note">Soon to be developed</p></article></section><section class="ai-name-origin" aria-labelledby="ai-name-origin-title"><span class="section-eyebrow">From the name Helunemi</span><h2 id="ai-name-origin-title">Where Hene and Lumi come from</h2><p>Hene and Lumi come from the website title itself. Split <strong>Helunemi</strong> into syllables:</p><p class="ai-syllable-sequence">He · lu · ne · mi</p><p>Swap <strong>lu</strong> and <strong>ne</strong> to get:</p><p class="ai-syllable-sequence">He · ne · lu · mi</p><p>Pair the syllables as <strong>He + ne</strong> and <strong>Lu + mi</strong> to create <strong>Hene</strong> and <strong>Lumi</strong>.</p></section></div>`;
     },
     'create-post'() { return '<div class="wrap"><p class="social-loading">Opening post editor…</p></div>'; },
     'shop-product'() { return '<div class="wrap"><p class="social-loading">Opening product editor…</p></div>'; },
@@ -2345,6 +2374,9 @@
   });
 
   document.addEventListener('click', async event => {
+    const quickMenuToggle = event.target.closest('[data-quick-menu-toggle]');
+    if (quickMenuToggle) { setQuickMenuOpen($('#quick-menu-panel')?.hidden === true); return; }
+    if (!event.target.closest('#site-quick-menu') || event.target.closest('[data-quick-menu-link]')) closeQuickMenu();
     const gameOsTab = event.target.closest('[data-game-os-select]');
     if (gameOsTab) {
       const downloads = gameOsTab.closest('.game-os-downloads'), selected = gameOsTab.dataset.gameOsSelect;
@@ -3043,6 +3075,7 @@
       event.preventDefault(); undoFriendCard(true); return;
     }
     if (event.key !== 'Escape') return;
+    if (closeQuickMenu(true)) return;
     if (cancelFriendCardTransform()) return;
     closeProfile();
     closeGlobalSearch();
