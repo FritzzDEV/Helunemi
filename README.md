@@ -55,7 +55,7 @@ Firebase sends verification and password reset messages directly, so Solaris doe
 
 Existing username accounts keep working after Firebase is configured. While signed in, open the profile’s **Email security** section, enter an email and a Firebase password, and choose **Connect email**. Verify the address, return to the profile, and submit the same email and password again. The existing Solaris profile, roles, tickets, and posts remain attached. After the connection, use the verified email and Firebase password to log in. If a password is reset, the updated password is synchronized after the next successful Firebase login.
 
-New sign-ups verify their email before the Solaris account is activated. Use the same browser when returning from the verification link so it can finish the pending profile setup. An Owner sign-up must enter the one-time Owner setup code again after verification if the form asks for it; setup codes are not stored in the browser.
+New sign-ups verify their email before the Solaris account is activated. Use the same browser when returning from the verification link so it can finish the pending profile setup. The Owner setup code is entered only from an eligible existing account’s profile; it is not part of sign-up.
 
 If the Firebase variables are missing or incomplete, the site stays in legacy username/password mode. In that mode, email verification and password recovery are unavailable until Firebase is configured.
 
@@ -72,7 +72,7 @@ If `Fritzz Xenon` already has an account, log into it after setting the variable
 
 The Owner assigns primary roles and secondary role tags from the role controls on another user’s full profile. The Owner profile’s **Assign account roles** panel only manages the Owner’s own secondary role tags. The assignable primary roles are **Assistant**, **AI Assistant**, **Developer**, and **Member**. The Owner permission is protected and separate from those choices. **Visitor** is reserved for guest browsing and cannot be assigned to a registered account. The List shows the Owner plus accounts assigned Assistant, AI Assistant, or Developer; Member accounts stay off the studio team directory. Secondary tags such as Scripter, Modeler, Tester, Updater, Announcer, Debugger, App tester, and Artist appear on the List as tags. Assistant, AI Assistant, Developer, and Owner profiles show role tags; only studio-role accounts have secondary role tags.
 
-Members can edit a Friend-Card from the profile options menu. The Canva-inspired workspace has a canvas, element and layer panel, and properties panel. Layers can be added, renamed, moved, resized, rotated, styled, hidden, locked, duplicated, reordered, or deleted. It includes linked account details, text, image stickers, shapes, buttons, custom fonts, reusable stickers, and freehand drawing with a brush and eraser. Canvas zoom, pan, fit, undo/redo, custom dimensions, preview, PNG export, and `.scfc` import/export are available. The `.scfc` file is a versioned ZIP package with a manifest and portable image and font assets; importing a design does not publish it. The editor supports the 1:1, 2:3, 3:2, 4:5, and 5:4 presets as well as custom dimensions. A custom frame has four separate square corners and four side images, with stretch or repeat modes and alignment controls. A local recovery draft is kept in the browser; use **Save** to sync the design to the account. A revision check warns if another session saved the same Friend-Card first. Existing cards without a layer design open using a default editable layout. Images and fonts uploaded in the editor are stored in Firebase Storage under the member’s account folder. Configure `FIREBASE_STORAGE_BUCKET` and deploy `storage.rules` before enabling uploads. A card stays private until its owner selects **Post custom friend card**. The Members page shows only posted Friend-Cards; members can search profiles from the shared header search, even before a card is posted. Other roles use their studio profiles instead.
+Members can edit a Friend-Card from the profile options menu. The Canva-inspired workspace has a canvas, element and layer panel, and properties panel. Layers can be added, renamed, moved, resized, rotated, styled, hidden, locked, duplicated, reordered, or deleted. It includes linked account details, text, image stickers, shapes, buttons, custom fonts, reusable stickers, and imported design artwork. Canvas zoom, pan, fit, undo/redo, custom dimensions, preview, PNG export, and `.scfc` import/export are available. The `.scfc` file is a versioned ZIP package with a manifest and portable image and font assets; importing a design does not publish it. The editor supports the 1:1, 2:3, 3:2, 4:5, and 5:4 presets as well as custom dimensions. A custom frame has four separate square corners and four side images, with stretch or repeat modes and alignment controls. A local recovery draft is kept in the browser; use **Save** to sync the design to the account. A revision check warns if another session saved the same Friend-Card first. Existing cards without a layer design open using a default editable layout. Images and fonts uploaded in the editor are stored in Firebase Storage under the member’s account folder. Configure `FIREBASE_STORAGE_BUCKET` and deploy `storage.rules` before enabling uploads. A card stays private until its owner selects **Post custom friend card**. The Members page shows only posted Friend-Cards; members can search profiles from the shared header search, even before a card is posted. Other roles use their studio profiles instead.
 
 The fixed Solaris Community button opens a full-screen chat area. Members can send and accept friend requests from posted Member Friend-Cards, chat with accepted friends, and send bug reports to the studio team. The report inbox is limited to Owner, Assistant, AI Assistant, and Developer accounts. Friend connections, messages, and reports are stored with account data, so use PostgreSQL or a persistent disk on Render to keep them across service restarts.
 
@@ -97,3 +97,66 @@ When using the local file store, the server creates `data/accounts.json` on firs
 ## Before public launch
 
 Run the site behind HTTPS, set `NODE_ENV=production`, keep protected backups, and use a PostgreSQL plan with a retention period that meets your needs. The Owner setup code belongs in the hosting provider’s environment settings, never in source files.
+
+## Profile tabs and community content
+
+Profiles now have **General**, **Posts**, **Stickers**, **GIFs**, and **Custom Friend Card (CFC)** tabs, in that order. General preserves profile information, favorites, social links, roles, email security, and account management. The Installed Games cards identify games added by the member; they do not claim the website has detected local installations. A profile tab can be linked with `account.html?user=ACCOUNT_ID&tab=posts` (also `general`, `stickers`, `gifs`, and `cfc`).
+
+Posts support formatted text, images, GIFs, stickers, MP4/WebM video, and announcements. The server sanitizes rich HTML using an explicit formatting allowlist. Authors can edit/delete their posts, change visibility, and copy permanent post links. Signed-in viewers with access can like/unlike and comment; comment authors, the post author, the Owner, and Assistants can delete comments. Feeds load 15 posts per page.
+
+Visibility is enforced on the server for post reads, direct links, interactions, and attached files:
+
+| Audience | Access |
+| --- | --- |
+| Public | Public-profile visitors |
+| Friends | Author and accepted friends |
+| Party | Author and current members of the selected party |
+| Self | Author only |
+
+There was no on-site party/group membership system before this expansion. **General → Parties & groups** now supplies one membership model with two types: parties for post audiences and groups for CFC sharing. Creators invite accepted friends; invitees must accept. Removing a member or leaving revokes the related access immediately. This does not alter the Groups page’s existing Discord invitation.
+
+Sticker and GIF galleries separate **Free** and **Store** content. **Upload Only** publishes a gallery item without a post. **Upload and Announce** also creates one release announcement. Identical uploads reuse the creator’s stored asset, and announcements retain their IDs to prevent duplicates. Creators can edit details, remove items, and feature existing uploads in a manually composed post.
+
+Store prices are metadata in USD. **Payment processing is not configured.** Priced items display locked, server-generated blurred previews; there is no fake purchase or currency balance. Free items can be added to an account’s collection. Public APIs and file routes withhold priced originals from unauthorized viewers.
+
+The CFC tab shows **My CFCs**, **Shared With Me**, and **Group CFCs** only to the profile owner. Other profiles show only publicly listed cards and the member’s current posted card. Members can save visual snapshots of their current CFC, set names, profile visibility and prices, and grant access to accepted friends or joined groups. Saving a snapshot preserves that version’s appearance rather than changing it when the editor’s current design is updated. Public paid snapshots expose only an independently generated blurred image until access is granted.
+
+Every CFC in a profile, including an expanded card, stays in **Preview Mode**. Live card DOM is inert and ignores pointer/keyboard interaction. Saved versions are images, so embedded buttons, inputs, navigation, and other card actions cannot operate in a profile preview. The existing Member Friend-Card editor remains available from profile options.
+
+## Persistent website-hosted uploads
+
+New **game binaries are never uploaded to Firebase Storage**. Games use Solaris backend upload and download routes, with metadata saved alongside existing site records. New post media and gallery/CFC previews also use the website’s controlled storage. Firebase Authentication, existing Friend-Card editor assets/fonts, and existing chat uploads continue using their existing Firebase integrations.
+
+Choose one persistent upload backend:
+
+| Configuration | File location |
+| --- | --- |
+| `DATABASE_URL` set; `SOLARIS_UPLOAD_DIR` unset | PostgreSQL, in `solaris_files` and `solaris_file_chunks` tables. Binaries are streamed in bounded 1 MiB chunks. This works without a writable web-service disk. |
+| `SOLARIS_UPLOAD_DIR` set | The configured directory. On Render, it must be inside an actual attached persistent disk mount. A disk at `/var/data` can use `SOLARIS_UPLOAD_DIR=/var/data/solaris-uploads`. |
+| Local development, neither set | `data/uploads/`, alongside the local account store. |
+
+**For a disk deployment, persist the metadata too:** use `DATABASE_URL`, or set `SOLARIS_DATA_DIR=/var/data/solaris-data` on the same attached disk. A persistent binary directory with an ephemeral account store is insufficient.
+
+For Render:
+
+1. Run `npm install` as the build command and `npm start` as the start command. New dependencies include `sanitize-html` and `sharp`.
+2. Keep your existing persistent `DATABASE_URL` to store accounts, posts, collections, memberships, and file metadata. With no upload directory configured, file contents also use that database.
+3. For larger installers, prefer a paid web service with an attached persistent disk. Set `SOLARIS_UPLOAD_DIR` inside the mount and keep account metadata persistent as described above. The server checks the actual Linux mount on Render instead of treating an ordinary application directory as persistent.
+4. If there is no persistent database or attached disk, production uploads return a clear setup error. Render Free web services cannot attach persistent disks and lose local changes on restarts. See [Render persistent disks](https://render.com/docs/disks) and [free service storage limitations](https://render.com/docs/free).
+5. Use a database that does not expire and has enough storage for your uploads. Database-backed binaries consume database capacity; disk-backed binaries consume the attached disk. Keep both file content and metadata in your backup plan.
+
+Existing Firebase game builds are retained as migration records. When persistent website storage is available, the server attempts to stream them into the new backend. It saves each new reference before deleting that build’s old Firebase object. If migration is blocked by storage configuration or Firebase access, the Owner can retry using **Manage game downloads → Move existing builds to website storage**. A build awaiting migration is not delivered from Firebase; its download route shows an explanatory error until it has moved. Existing outside HTTPS download links remain supported with an **Outside download** button.
+
+Downloads use stable `/api/game-build/BUILD_ID` links, require sign-in, stream without loading the full installer into memory, support HEAD/byte ranges, and use attachment/nosniff headers. Uploads enforce studio permissions, filename/type checks, format signatures, size limits, random storage identifiers, and SHA-256 metadata. Failed uploads are removed; replacing/removing builds deletes obsolete stored binaries. Abandoned uploads older than 24 hours that have no saved reference are pruned on startup.
+
+The game upload limit defaults to **2 GiB**, configurable with `SOLARIS_MAX_GAME_BUILD_BYTES` (50 MiB–4 GiB). Post images/GIFs/stickers/CFC snapshots allow 20 MiB per upload and 40 megapixels; videos allow 100 MiB. SVG/HTML uploads are not accepted as community media. Paid thumbnails are separately rasterized/blurred on the server, so CSS removal cannot reveal the original.
+
+## Content management permissions
+
+Games, Arts, Updates, and social posts use consistent vertical-dot menus. Studio staff (Owner, Assistant, AI Assistant, Developer) can edit games and manage game downloads. Artwork/update creators can edit and remove their own entries; the Owner can manage every entry. New studio content is still published by the Owner. The original built-in games, two artworks, and studio update are now persisted/editable records; deleting a built-in item records a tombstone so it does not reappear after restart.
+
+Public site-content responses omit internal file identifiers and storage paths. Management endpoints validate authorization independently from visible menus. Existing account IDs, roles, friendships, profile details, authentication and file/database stores are reused. The existing account-store JSON gains a `social` object with safe empty defaults for older saves; migrations do not replace existing account data.
+
+## Verification
+
+Run `npm test` for isolated backend integration checks. The tests use temporary accounts and a temporary local store; they do not contact your Firebase project or production database. They cover post audiences and direct links, comment/like ownership, HTML sanitization, media protection, CFC sharing/revocation, content management, file downloads/ranges/replacement, pagination, upload validation, and persistence across a server restart. Desktop/mobile browser checks should also be performed when changing UI behavior. A local disk restart check does not verify your actual Render mount, database capacity, or a live Firebase migration; confirm those in the deployed environment.

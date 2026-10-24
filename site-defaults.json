@@ -1,0 +1,106 @@
+{
+  "games": [
+    {
+      "id": "gamma-frost",
+      "name": "Gamma Frost",
+      "subtitle": "Hollow Shift",
+      "genre": "MMORPG",
+      "status": "In Development",
+      "version": "v0.0.2",
+      "cover": "frost",
+      "icon": "assets/hollow-shift-icon.webp",
+      "banner": "assets/gamma-frost-banner.webp",
+      "blurb": "Tame animals, explore a living world, adventure, and experiment in an MMORPG shaped by the time of day where you play.",
+      "details": "Gamma Frost is Solaris Studio’s current work in progress. Its world follows realistic local time: daytime where you are brings day to the game, and nighttime brings night. Hollow Shift is its secondary title.",
+      "worldIntro": "Welcome to Granvoil, a world where humans and monsters live together. Granvoil was once peaceful, until an anomaly drove many monsters berserk. The chaos lasted three days and three nights. Only those who escaped the kingdom survived, and many people were killed, greatly reducing humanity’s numbers.\n\nThree years later, humans learned to control nictrons: magical molecules that float through the air. Nictrons are everywhere and began to spread after the anomaly. Scientists discovered that they could be used to create powers such as fire and water, and to control the ground and air. They cannot create light, gravity, or darkness.\n\nIn the new generation, humans fight for their lives against the berserk monsters. For reasons still unknown, monsters with humanlike forms—such as cat people, dog people, dwarves, and elves—were not affected by the anomaly. Scientists theorize that elves escaped its effects because they are considered a higher class than humans. After the discovery of nictrons became public, elves were the first to access them, though only some have a high aptitude for their use.\n\nOver time, guilds became a way for people to make a living by fighting monsters or setting out as adventurers.",
+      "playerIntro": "After a very long time without a day off, you finally have one—and you’re excited to decide how to spend it. Lost in thought, you don’t notice a truck speeding toward you. By the time you see it, it’s too late. The truck hits you and sends you flying.\n\nYour consciousness slowly fades, leaving you trapped in darkness. After a while in the void, you slowly open your eyes to a bright sky. You have been reincarnated in Granvoil.",
+      "releasePlan": "Gamma Frost is planned for an early access release in the future. Its early access launch will not be an MMORPG; the game will begin in a more limited form while its larger online world continues to develop."
+    },
+    {
+      "id": "omiwo",
+      "name": "OmiWo: Collide",
+      "subtitle": "Ominous World",
+      "genre": "Open-world gacha",
+      "status": "Future project",
+      "version": "",
+      "cover": "collide",
+      "blurb": "A planned open-world gacha game featuring six main characters and three partners.",
+      "details": "OmiWo means “Ominous World.” Each partner has a unique storyline, and all three storylines follow the same path. The characters know one another and belong to Six Arrows, the famous party of the adventurers’ guild. This is a future project and is not currently in development."
+    }
+  ],
+  "members": [],
+  "arts": [
+    {
+      "id": "gamma-frost-icon",
+      "title": "Gamma Frost Icon",
+      "image": "assets/hollow-shift-icon.webp",
+      "shape": "icon",
+      "type": "Game icon",
+      "projectId": "gamma-frost",
+      "mainTag": "From Gamma Frost",
+      "tags": [
+        "AI artwork",
+        "No owner",
+        "1girl",
+        "cute",
+        "short",
+        "blush",
+        "high quality",
+        "black hair",
+        "medium hair",
+        "wavy hair",
+        "headband",
+        "bridal veil",
+        "white crown",
+        "white background",
+        "open smile",
+        "blue eyes",
+        "facing viewer",
+        "4k"
+      ]
+    },
+    {
+      "id": "gamma-frost-banner",
+      "title": "Gamma Frost Banner",
+      "image": "assets/gamma-frost-banner.webp",
+      "shape": "banner",
+      "type": "Game banner",
+      "projectId": "gamma-frost",
+      "mainTag": "From Gamma Frost",
+      "tags": [
+        "AI artwork",
+        "No owner",
+        "1girl",
+        "cute",
+        "short",
+        "blush",
+        "high quality",
+        "black hair",
+        "medium hair",
+        "wavy hair",
+        "headband",
+        "bridal veil",
+        "white crown",
+        "white background",
+        "open smile",
+        "full body",
+        "blue eyes",
+        "facing viewer",
+        "4k",
+        "cinematic pose",
+        "lying on ground",
+        "looking back at viewer"
+      ]
+    }
+  ],
+  "updates": [
+    {
+      "id": "gamma-frost-production-slow",
+      "category": "Game",
+      "title": "Gamma Frost production is slow",
+      "content": "Gamma Frost production is moving slowly because I’m currently the only person working on it. That means I can’t build every part of the game at once, so development will take time.\n\nWhen Gamma Frost reaches early access, it will not yet be an MMORPG. The game will begin in a more limited form, and its larger online world will take longer to build. Thank you for your patience while I keep working on it.",
+      "gameId": "gamma-frost",
+      "publishedAt": 1792281600000
+    }
+  ]
+}

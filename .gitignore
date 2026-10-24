@@ -1,3 +1,7 @@
-/data/accounts.json
-/data/accounts.json.*.tmp
+/data/
 /node_modules/
+/.qa-*
+/.env
+/.env.*
+/FIREBASE_PRIVATE_KEY
+/firebase-service-account.json
