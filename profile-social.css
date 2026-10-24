@@ -1,4 +1,31 @@
 /* Profile expansion: reuse Solaris' palette, fonts, and shared controls. */
+.post-compose-page{max-width:940px;padding-top:2rem;padding-bottom:3rem}
+.post-compose-heading{display:flex;align-items:start;justify-content:space-between;gap:1rem;margin-bottom:1.3rem}
+.post-compose-heading h1{font:700 clamp(1.5rem,4vw,2.1rem) var(--font-display);margin:1rem 0 .5rem}
+.post-compose-heading p{color:var(--muted);font-size:.9rem}
+.post-compose-card{padding:clamp(1rem,3vw,1.7rem);border:1px solid var(--line);border-radius:18px;background:var(--surface)}
+.post-compose-card form{display:grid;gap:1rem;min-width:0}
+.post-compose-card label{display:grid;gap:.4rem;font-size:.85rem;min-width:0}
+.post-compose-card select{width:100%;min-width:0;padding:.7rem .8rem;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit}
+.post-compose-card label small{color:var(--muted);font-size:.75rem;line-height:1.5}
+.post-compose-card .rich-editor{min-height:260px;max-height:55dvh}
+.post-compose-card>.actions,.post-compose-card .actions{justify-content:flex-end;flex-wrap:wrap}
+.post-draft-notice{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;margin-bottom:1rem;padding:1rem;border:1px solid var(--line);border-radius:12px;background:var(--surface);font-size:.8rem}
+.post-draft-notice[hidden]{display:none!important}.post-draft-notice>span{flex:1}
+.shop-country-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,.8fr);gap:1.5rem;margin-bottom:1.4rem;max-width:1000px}
+.shop-country-panel h2{font-size:1rem;margin:0 0 .5rem}.shop-country-panel form{display:grid;gap:.6rem;justify-items:start;min-width:0}.shop-country-panel form>label{width:100%}
+.shop-country-panel select{width:100%}.shop-country-panel small{color:var(--muted);font-size:.74rem;line-height:1.5}
+.shop-page .shop-ticket-list{max-width:1000px}.shop-product-card{position:relative;padding-right:2.6rem}
+.shop-product-card>.content-options{position:absolute;right:.35rem;top:.4rem}
+.shop-product-card .shop-ticket-copy p{white-space:pre-wrap;overflow-wrap:anywhere}
+.shop-product-price{display:block;margin-top:.7rem;font-size:1.2rem;font-family:var(--font-display)}
+.shop-base-price{display:block;margin-top:.25rem;color:var(--muted);font-size:.75rem}.shop-product-actions{flex:none;max-width:200px}.shop-product-actions .btn{white-space:normal;text-align:center}
+.shop-product-placeholder{display:grid;place-items:center;flex:0 0 6rem;width:6rem;height:6rem;border:1px dashed var(--line);border-radius:15px;color:var(--ember);font-size:2rem}
+.shop-product-editor{max-width:900px;padding-bottom:3rem}.shop-product-editor form{display:grid;gap:1rem}.shop-product-editor label{display:grid;gap:.45rem;min-width:0}.shop-product-editor small{color:var(--muted);font-size:.75rem;line-height:1.5}
+.shop-country-panel select,.personal-info-page select,.shop-product-editor input,.shop-product-editor select,.shop-product-editor textarea{width:100%;min-width:0;box-sizing:border-box;padding:.7rem .8rem;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+.personal-info-page label>small{color:var(--muted);font-size:.75rem;line-height:1.5}.shop-product-actions .btn:disabled{opacity:.6;cursor:not-allowed}.shop-page .shop-intro{max-width:1000px}
+.shop-image-preview{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}.shop-image-preview img{width:160px;height:160px;object-fit:contain;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
+@media(max-width:650px){.shop-country-panel{grid-template-columns:minmax(0,1fr)}.shop-product-actions{width:100%;max-width:none}.shop-product-actions .btn{width:100%}.shop-product-placeholder{flex-basis:4.5rem;width:4.5rem;height:4.5rem}.post-compose-heading{flex-wrap:wrap}.post-compose-card .rich-editor{min-height:220px}}
 .profile-tabs{display:flex;gap:.3rem;overflow-x:auto;overscroll-behavior-x:contain;padding:.45rem;margin:1rem 0 1.4rem;border:1px solid var(--line);border-radius:15px;background:var(--surface);scrollbar-width:none}
 .profile-tabs button{flex:1 0 auto;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--muted);padding:.8rem 1rem;font:700 .78rem var(--font-display);cursor:pointer;white-space:nowrap;transition:background .18s,color .18s,border-color .18s}
 .profile-tabs button:hover{color:var(--ink);background:color-mix(in srgb,var(--ember) 9%,transparent)}

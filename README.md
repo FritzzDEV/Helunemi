@@ -7,7 +7,7 @@ Solaris Studio is an early game development community. The site introduces the s
 - **Gamma Frost** is the studio’s work in progress, currently at **v0.0.2**. *Hollow Shift* is its secondary title. Its project page includes the Granvoil setting, the player’s opening story, and the plan for a smaller early access release before the game becomes an MMORPG.
 - **OmiWo: Collide** (Ominous World) is a future open-world gacha project. It is not currently in development.
 
-Game builds will be linked from their project pages. The Download page is for extras such as skins, mods, add-ons, plugins, modding applications, and tools. The Shop currently offers free Namecard and WHO? profile tickets; there is no currency system yet.
+Game builds will be linked from their project pages. The Download page is for extras such as skins, mods, add-ons, plugins, modding applications, and tools. The Shop starts with a ₱90 Namecard ticket and a ₱350 WHO? ticket. The owner can manage products and peso prices. Payment checkout is not configured, so paid purchases are unavailable.
 
 ## Run locally
 
@@ -82,7 +82,15 @@ The profile options menu also links to **Edit Profile**, **View Personal Profile
 
 Visitors can browse the site pages, but they cannot download games or extras or buy Shop tickets. Their top-right guest profile opens a simple prompt to log in or create an account. The home page is public whether or not a visitor has selected guest mode.
 
-Real name is optional. A warning appears before the first save because that value becomes permanent; a WHO? ticket is required to change it later. Usernames can be changed once every seven days, or sooner by using a Namecard ticket. Both tickets are currently free and are added from the Shop.
+Real name is optional. A warning appears before the first save because that value becomes permanent; a WHO? ticket is required to change it later. Usernames can be changed once every seven days, or sooner by using a Namecard ticket. Previously acquired tickets are kept when their shop prices change.
+
+## Shop products and country currency
+
+The shop’s three-dot menu lets the Owner open **Add a product**. Each product’s menu offers **Edit product** and **Delete product**. The dedicated `shop-product.html` editor supports names, descriptions, imported transparent images, peso prices, and either a general inventory product or a Namecard/WHO? ticket benefit. There can be one listed product per ticket benefit. Deleting a listing does not delete existing inventory, and an empty shop stays empty after a restart. Products are saved with the same PostgreSQL or persistent-file store as accounts.
+
+Members can save their **Country / region of residence** in **Personal Profile Information → General information**, or in the shop’s **Your price display** section. Country stays private. Original prices are in PHP; the shop shows estimated local currency prices and the original peso amount. Conversion uses [Frankfurter’s daily reference-rate API](https://frankfurter.dev/), with server caching, timeouts, rate dates, and a peso fallback when a rate is unavailable. No API key is required. Country-to-currency mappings come from [Unicode CLDR](https://github.com/unicode-org/cldr-json), recorded as of October 24, 2026; its license is included in `country-currencies.LICENSE.txt`.
+
+**Payment processing is not configured.** Paid products show **Checkout coming soon**. Both the new product claim endpoint and the legacy ticket endpoint reject paid claims using the stored server price. Free products can be claimed up to 99 per product; ticket benefits add to the existing ticket inventory. No currency balance or simulated payment is used.
 
 At the bottom of a profile, a member can pause their account for 30 days or permanently delete it. Pausing removes the account from the active site, blocks login, and keeps a private backup that is restored after 30 days. Deletion removes the account and any Solaris-managed pause backup. Backups retained separately by Git or the hosting/database provider follow their own retention policies.
 
@@ -104,6 +112,8 @@ Profiles now have **General**, **Posts**, **Stickers**, **GIFs**, and **Custom F
 
 Posts support formatted text, images, GIFs, stickers, MP4/WebM video, and announcements. The server sanitizes rich HTML using an explicit formatting allowlist. Authors can edit/delete their posts, change visibility, and copy permanent post links. Signed-in viewers with access can like/unlike and comment; comment authors, the post author, the Owner, and Assistants can delete comments. Feeds load 15 posts per page.
 
+**Create post**, **Edit Post**, **Change Visibility**, and featuring gallery media open `create-post.html`. Changes are protected by the browser’s unsaved-changes warning on navigation, refresh, or closing the page. The Cancel button also asks before leaving. **Save draft** stores a draft in this browser tab without publishing it; typing also keeps a recovery copy. Reopening the editor in the same tab offers **Restore draft** or **Discard draft**. Drafts are scoped to the account and edited post. They are removed after successful publication and are not a substitute for server-saved posts. Upload failures and publish errors keep the editor open. Browser-level exit warnings require browser support and prior interaction with the page.
+
 Visibility is enforced on the server for post reads, direct links, interactions, and attached files:
 
 | Audience | Access |
@@ -117,7 +127,7 @@ There was no on-site party/group membership system before this expansion. **Gene
 
 Sticker and GIF galleries separate **Free** and **Store** content. **Upload Only** publishes a gallery item without a post. **Upload and Announce** also creates one release announcement. Identical uploads reuse the creator’s stored asset, and announcements retain their IDs to prevent duplicates. Creators can edit details, remove items, and feature existing uploads in a manually composed post.
 
-Store prices are metadata in USD. **Payment processing is not configured.** Priced items display locked, server-generated blurred previews; there is no fake purchase or currency balance. Free items can be added to an account’s collection. Public APIs and file routes withhold priced originals from unauthorized viewers.
+Sticker, GIF, and CFC store prices remain metadata in USD. **Payment processing is not configured.** Priced items display locked, server-generated blurred previews; there is no fake purchase or currency balance. Free items can be added to an account’s collection. Public APIs and file routes withhold priced originals from unauthorized viewers. These creator galleries are separate from the Owner-managed product shop, whose base currency is PHP.
 
 The CFC tab shows **My CFCs**, **Shared With Me**, and **Group CFCs** only to the profile owner. Other profiles show only publicly listed cards and the member’s current posted card. Members can save visual snapshots of their current CFC, set names, profile visibility and prices, and grant access to accepted friends or joined groups. Saving a snapshot preserves that version’s appearance rather than changing it when the editor’s current design is updated. Public paid snapshots expose only an independently generated blurred image until access is granted.
 

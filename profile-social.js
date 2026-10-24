@@ -61,32 +61,133 @@
       request.onload=()=>{let result={};try{result=JSON.parse(request.responseText);}catch{}if(request.status>=200&&request.status<300)resolve(result);else reject(new Error(result.error||'The file could not be uploaded.'));};request.send(file);
     });
   }
-  async function postEditor(existing=null,feature=null,focusVisibility=false) {
-    if(!getUser())return;
-    const context=await loadContext(getUser().id),parties=context.circles.filter(circle=>circle.kind==='party');
-    const dialog=shell(`<form data-post-editor><div class="social-form-grid"><label>Post type<select name="kind"><option value="post">Post</option><option value="announcement" ${existing?.kind==='announcement'?'selected':''}>Announcement</option></select></label><label>Visibility<select name="visibility">${[['public','Public'],['friends','Friends'],['party','Party'],['self','Self']].map(([key,label])=>`<option value="${key}" ${existing?.visibility===key?'selected':''}>${label}</option>`).join('')}</select></label><label data-post-party ${existing?.visibility==='party'?'':'hidden'}>Party<select name="partyId">${parties.map(circle=>`<option value="${circle.id}" ${existing?.partyId===circle.id?'selected':''}>${escape(circle.name)}</option>`).join('')}</select><small>${parties.length?'Only members of this party can view the post.':'Create a party from General → Parties & groups first.'}</small></label></div><div class="rich-toolbar" role="toolbar" aria-label="Text formatting">${[['bold','B','Bold'],['italic','I','Italic'],['underline','U','Underline'],['strikeThrough','S','Strikethrough'],['justifyLeft','⇤','Align left'],['justifyCenter','↔','Align center'],['justifyRight','⇥','Align right'],['insertUnorderedList','• List','Bulleted list'],['insertOrderedList','1. List','Numbered list'],['createLink','↗ Link','Add link'],['removeFormat','Clear','Clear formatting']].map(([command,label,title])=>`<button type="button" data-rich-command="${command}" aria-label="${title}" title="${title}">${label}</button>`).join('')}</div><div class="rich-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Post text"></div><div class="social-attachments" data-post-attachments></div><div class="social-composer-tools"><label class="btn btn-ghost btn-sm">Add images / video / GIF<input type="file" data-post-files accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm" multiple hidden></label><button class="btn btn-ghost btn-sm" type="button" data-post-library>Use a sticker / GIF</button></div><p class="panel-help">Up to 8 attachments. Images and GIFs: 20 MB each; videos: 100 MB each.</p><p class="form-message" data-social-message role="status"></p><div class="actions"><button class="btn btn-primary" type="submit">${existing?'Save changes':'Publish post'}</button><button class="btn btn-ghost" type="button" data-social-close>Cancel</button></div></form>`,'Edit post'.replace('Edit',existing?'Edit':'Create'),true);
-    const form=$('form',dialog),editor=$('.rich-editor',form);editor.innerHTML=existing?.html||'';
-    let attachments=existing?.attachments.map(item=>item.mediaId?{mediaId:item.mediaId,...item}:{assetId:item.assetId,...item})||[];
-    if(feature)attachments.push({mediaId:feature.id,...feature});
-    const paint=()=>{$('[data-post-attachments]',form).innerHTML=attachments.map((item,index)=>`<div class="social-attachment">${attachmentMarkup(item)}<button type="button" data-remove-attachment="${index}" aria-label="Remove attachment">×</button></div>`).join('');};paint();
-    form.elements.visibility.addEventListener('change',()=>{$('[data-post-party]',form).hidden=form.elements.visibility.value!=='party';});
-    let selection=null;
-    editor.addEventListener('keyup',()=>{const current=getSelection();if(current.rangeCount)selection=current.getRangeAt(0).cloneRange();});
-    editor.addEventListener('mouseup',()=>{const current=getSelection();if(current.rangeCount)selection=current.getRangeAt(0).cloneRange();});
-    editor.addEventListener('paste',event=>{event.preventDefault();document.execCommand('insertText',false,event.clipboardData.getData('text/plain'));});
-    form.addEventListener('click',async event=>{
-      const command=event.target.closest('[data-rich-command]');if(command){editor.focus();if(selection){const current=getSelection();current.removeAllRanges();current.addRange(selection);}let argument=null;if(command.dataset.richCommand==='createLink'){argument=window.prompt('Link address (https://…)');if(!argument)return;try{if(!['https:','http:','mailto:'].includes(new URL(argument).protocol))throw new Error();}catch{toast('Use a valid https:// link.');return;}}document.execCommand(command.dataset.richCommand,false,argument);return;}
-      const remove=event.target.closest('[data-remove-attachment]');if(remove){attachments.splice(Number(remove.dataset.removeAttachment),1);paint();return;}
-      if(event.target.closest('[data-post-library]')){try{
-        const [stickers,gifs]=await Promise.all([api('/api/social/media?user='+encodeURIComponent(getUser().id)+'&kind=sticker'),api('/api/social/media?user='+encodeURIComponent(getUser().id)+'&kind=gif')]);
-        const items=[...stickers.items,...gifs.items];const picker=shell(items.length?`<div class="social-library-picker">${items.map(item=>`<button type="button" data-pick-media="${item.id}"><img src="${escape(item.url||item.previewUrl)}" alt=""><span>${escape(item.name)}</span></button>`).join('')}</div>`:empty('Upload a sticker or GIF to your gallery first.'),'Your stickers & GIFs');
-        picker.addEventListener('click',event=>{const selected=event.target.closest('[data-pick-media]');if(!selected)return;if(attachments.length>=8){toast('A post can contain up to 8 attachments.');return;}const item=items.find(item=>item.id===selected.dataset.pickMedia);attachments.push({mediaId:item.id,...item});paint();picker.close();});
-      }catch(error){formError(form,error);}}
-    });
-    $('[data-post-files]',form).addEventListener('change',async event=>{formBusy(form,true);try{for(const file of event.target.files){if(attachments.length>=8)throw new Error('A post can contain up to 8 attachments.');const kind=file.type.startsWith('video/')?'video':file.type==='image/gif'?'gif':'image';const result=await uploadFile(file,kind,$('[data-social-message]',form));attachments.push(result);paint();}$('[data-social-message]',form).textContent='Uploads ready.';}catch(error){formError(form,error);}finally{formBusy(form,false);event.target.value='';}});
-    form.addEventListener('submit',async event=>{event.preventDefault();formBusy(form,true);try{await api('/api/social/posts'+(existing?'/'+existing.id:''),existing?'PUT':'POST',{html:editor.innerHTML,kind:form.elements.kind.value,visibility:form.elements.visibility.value,partyId:form.elements.partyId.value,attachments:attachments.map(item=>item.mediaId?{mediaId:item.mediaId}:{assetId:item.assetId}),clientId:form.dataset.clientId||(form.dataset.clientId=crypto.randomUUID())});dialog.close();toast(existing?'Post saved.':'Post published.');const url=new URL(location.href);url.searchParams.delete('post');history.replaceState(null,'',url);if(mounted)renderPosts($('[data-profile-panel="posts"]',mounted.root));}catch(error){formError(form,error);}finally{formBusy(form,false);}});
-    if(focusVisibility)form.elements.visibility.focus();else editor.focus();
+  let activePostEditor = null;
+  function openPostPage(existing = null, feature = null, focusVisibility = false) {
+    const query = new URLSearchParams();
+    if (existing) query.set('edit', existing.id);
+    if (feature) query.set('media', feature.id);
+    if (focusVisibility) query.set('focus', 'visibility');
+    location.assign('create-post.html' + (query.size ? '?' + query : ''));
   }
+  async function mountPostPage(root) {
+    const user = getUser();
+    if (!user) { root.innerHTML = '<div class="wrap"><div class="page-head"><h1>Create a post</h1><p>Log in to write a post for the Solaris community.</p><a class="btn btn-primary" href="account.html?mode=login">Log in</a></div></div>'; return; }
+    try {
+      const query = new URLSearchParams(location.search);
+      const existing = query.has('edit') ? (await api('/api/social/posts/' + encodeURIComponent(query.get('edit')))).post : null;
+      if (existing && !existing.canManage) throw new Error('You can only edit your own posts.');
+      const feature = !existing && query.has('media') ? (await api('/api/social/media/' + encodeURIComponent(query.get('media')))).item : null;
+      if (feature?.locked) throw new Error('You do not have access to this media.');
+      await postEditor(existing, feature, query.get('focus') === 'visibility', root);
+    } catch (error) { root.innerHTML = `<div class="wrap"><div class="page-head"><h1>Post editor unavailable</h1><p>${escape(error.message)}</p><a class="btn btn-ghost" href="account.html?tab=posts">Back to posts</a></div></div>`; }
+  }
+  window.addEventListener('beforeunload', event => {
+    if (activePostEditor?.dirty()) { activePostEditor.recover(); event.preventDefault(); event.returnValue = ''; }
+  });
+  async function postEditor(existing = null, feature = null, focusVisibility = false, root = null) {
+    if (!getUser()) return;
+    if (!root) { openPostPage(existing, feature, focusVisibility); return; }
+    const context = await loadContext(getUser().id), parties = context.circles.filter(circle => circle.kind === 'party');
+    root.innerHTML = `<div class="wrap post-compose-page"><div class="post-compose-heading"><div><a class="text-link" href="account.html?tab=posts">← Back to posts</a><h1>${existing ? 'Edit post' : 'Create a post'}</h1><p>Write, add media, and choose who can see your post.</p></div><button class="btn btn-ghost btn-sm" type="button" data-cancel-post>Cancel</button></div><section class="post-draft-notice" data-draft-notice hidden><span>A draft is available in this browser tab.</span><button class="btn btn-ghost btn-sm" type="button" data-restore-post-draft>Restore draft</button><button class="text-link" type="button" data-discard-post-draft>Discard draft</button></section><section class="post-compose-card">${`<form data-post-editor><div class="social-form-grid"><label>Post type<select name="kind"><option value="post">Post</option><option value="announcement" ${existing?.kind==='announcement'?'selected':''}>Announcement</option></select></label><label>Visibility<select name="visibility">${[['public','Public'],['friends','Friends'],['party','Party'],['self','Self']].map(([key,label])=>`<option value="${key}" ${existing?.visibility===key?'selected':''}>${label}</option>`).join('')}</select></label><label data-post-party ${existing?.visibility==='party'?'':'hidden'}>Party<select name="partyId">${parties.map(circle=>`<option value="${circle.id}" ${existing?.partyId===circle.id?'selected':''}>${escape(circle.name)}</option>`).join('')}</select><small>${parties.length?'Only members of this party can view the post.':'Create a party from General → Parties & groups first.'}</small></label></div><div class="rich-toolbar" role="toolbar" aria-label="Text formatting">${[['bold','B','Bold'],['italic','I','Italic'],['underline','U','Underline'],['strikeThrough','S','Strikethrough'],['justifyLeft','⇤','Align left'],['justifyCenter','↔','Align center'],['justifyRight','⇥','Align right'],['insertUnorderedList','• List','Bulleted list'],['insertOrderedList','1. List','Numbered list'],['createLink','↗ Link','Add link'],['removeFormat','Clear','Clear formatting']].map(([command,label,title])=>`<button type="button" data-rich-command="${command}" aria-label="${title}" title="${title}">${label}</button>`).join('')}</div><div class="rich-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Post text"></div><div class="social-attachments" data-post-attachments></div><div class="social-composer-tools"><label class="btn btn-ghost btn-sm">Add images / video / GIF<input type="file" data-post-files accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm" multiple hidden></label><button class="btn btn-ghost btn-sm" type="button" data-post-library>Use a sticker / GIF</button></div><p class="panel-help">Up to 8 attachments. Images and GIFs: 20 MB each; videos: 100 MB each.</p><p class="form-message" data-social-message role="status"></p><div class="actions"><button class="btn btn-ghost" type="button" data-save-post-draft>Save draft</button><button class="btn btn-primary" type="submit">${existing?'Save changes':'Publish post'}</button></div></form>`}</section><p class="panel-help">Drafts are kept in this browser tab. Publish to save a post to your account. Leaving with unsaved changes will show a warning.</p></div>`;
+    const form = $('[data-post-editor]', root), editor = $('.rich-editor', form), message = $('[data-social-message]', form);
+    editor.innerHTML = existing?.html || '';
+    let attachments = existing?.attachments.map(item => ({...item})) || [], uploading = false, saving = false;
+    if (feature) attachments.push({mediaId: feature.id, ...feature});
+    const draftKey = 'solaris-post-draft:' + getUser().id + ':' + (existing?.id || 'new');
+    const data = () => ({ html: editor.innerHTML, kind: form.elements.kind.value, visibility: form.elements.visibility.value, partyId: form.elements.partyId.value, attachments: attachments.map(item => item.mediaId ? {mediaId:item.mediaId} : {assetId:item.assetId}) });
+    const snapshot = () => JSON.stringify(data());
+    let baseline = feature ? JSON.stringify({...data(), attachments: []}) : snapshot(), draft = null;
+    const recover = () => {
+      try { sessionStorage.setItem(draftKey, JSON.stringify({ ...data(), previews: attachments, clientId: form.dataset.clientId, version: existing?.updatedAt || existing?.createdAt || 0, savedAt: Date.now() })); return true; }
+      catch { return false; }
+    };
+    try { draft = JSON.parse(sessionStorage.getItem(draftKey)); } catch {}
+    const dirty = () => uploading || saving || snapshot() !== baseline;
+    activePostEditor = { dirty, recover };
+    const paint = () => { $('[data-post-attachments]', form).innerHTML = attachments.map((item,index) => `<div class="social-attachment">${attachmentMarkup(item)}<button type="button" data-remove-attachment="${index}" aria-label="Remove attachment">×</button></div>`).join(''); };
+    const updateParty = () => { $('[data-post-party]', form).hidden = form.elements.visibility.value !== 'party'; };
+    paint(); updateParty();
+    if (draft && draft.version === (existing?.updatedAt || existing?.createdAt || 0)) {
+      const notice = $('[data-draft-notice]', root); notice.hidden = false;
+      $('[data-restore-post-draft]', root).onclick = () => {
+        editor.innerHTML = String(draft.html || ''); form.elements.kind.value = draft.kind || 'post'; form.elements.visibility.value = draft.visibility || 'public'; form.elements.partyId.value = draft.partyId || '';
+        attachments = Array.isArray(draft.previews) ? draft.previews.slice(0, 8) : [];
+        if (draft.clientId) form.dataset.clientId = draft.clientId;
+        paint(); updateParty(); notice.hidden = true; message.textContent = 'Draft restored. Publish when you are ready.';
+      };
+      $('[data-discard-post-draft]', root).onclick = () => { try { sessionStorage.removeItem(draftKey); } catch {} notice.hidden = true; };
+    }
+    form.elements.visibility.addEventListener('change', updateParty);
+    form.addEventListener('input', recover); form.addEventListener('change', recover);
+    $('[data-save-post-draft]', root).onclick = () => {
+      if (uploading || saving) return;
+      if (recover()) { baseline = snapshot(); message.textContent = 'Draft saved in this browser tab. It is not published yet.'; message.classList.remove('is-error'); }
+      else formError(form, new Error('This browser could not save a draft. Keep this page open until you publish.'));
+    };
+    $('[data-cancel-post]', root).onclick = () => {
+      if (dirty() && !confirm('Leave with unsaved post changes? You can return to recover the draft in this browser tab.')) return;
+      if (dirty()) recover(); activePostEditor = null; location.assign('account.html?tab=posts');
+    };
+    let selection = null;
+    const rememberSelection = () => { const current = getSelection(); if (current.rangeCount && editor.contains(current.anchorNode)) selection = current.getRangeAt(0).cloneRange(); };
+    editor.addEventListener('keyup', rememberSelection); editor.addEventListener('mouseup', rememberSelection);
+    editor.addEventListener('paste', event => { event.preventDefault(); document.execCommand('insertText', false, event.clipboardData.getData('text/plain')); });
+    form.addEventListener('click', async event => {
+      const command = event.target.closest('[data-rich-command]');
+      if (command) {
+        editor.focus(); if (selection && editor.contains(selection.commonAncestorContainer)) { const current = getSelection(); current.removeAllRanges(); current.addRange(selection); }
+        let argument = null;
+        if (command.dataset.richCommand === 'createLink') {
+          argument = window.prompt('Link address (https://…)'); if (!argument) return;
+          try { if (!['https:','http:','mailto:'].includes(new URL(argument).protocol)) throw new Error(); } catch { toast('Use a valid https:// link.'); return; }
+        }
+        document.execCommand(command.dataset.richCommand, false, argument); recover(); return;
+      }
+      const remove = event.target.closest('[data-remove-attachment]');
+      if (remove) { attachments.splice(Number(remove.dataset.removeAttachment), 1); paint(); recover(); return; }
+      if (event.target.closest('[data-post-library]')) try {
+        const [stickers, gifs] = await Promise.all([api('/api/social/media?user=' + encodeURIComponent(getUser().id) + '&kind=sticker'), api('/api/social/media?user=' + encodeURIComponent(getUser().id) + '&kind=gif')]);
+        const items = [...stickers.items, ...gifs.items].filter(item => !item.locked);
+        const picker = shell(items.length ? `<div class="social-library-picker">${items.map(item => `<button type="button" data-pick-media="${item.id}"><img src="${escape(item.url || item.previewUrl)}" alt=""><span>${escape(item.name)}</span></button>`).join('')}</div>` : empty('Upload a sticker or GIF to your gallery first.'), 'Your stickers & GIFs');
+        picker.addEventListener('click', event => {
+          const selected = event.target.closest('[data-pick-media]'); if (!selected) return;
+          if (saving) return;
+          if (attachments.length >= 8) { toast('A post can contain up to 8 attachments.'); return; }
+          const item = items.find(item => item.id === selected.dataset.pickMedia); attachments.push({mediaId:item.id, ...item}); paint(); recover(); picker.close();
+        });
+      } catch (error) { formError(form, error); }
+    });
+    $('[data-post-files]', form).addEventListener('change', async event => {
+      if (uploading || saving) return;
+      uploading = true; formBusy(form, true); $('[data-post-files]', form).disabled = true;
+      try {
+        for (const file of event.target.files) {
+          if (attachments.length >= 8) throw new Error('A post can contain up to 8 attachments.');
+          const kind = file.type.startsWith('video/') ? 'video' : file.type === 'image/gif' ? 'gif' : 'image';
+          const result = await uploadFile(file, kind, message);
+          if (attachments.length >= 8) throw new Error('A post can contain up to 8 attachments.');
+          attachments.push(result); paint(); recover();
+        }
+        message.textContent = 'Uploads ready.';
+      } catch (error) { formError(form, error); }
+      finally { uploading = false; formBusy(form, false); event.target.disabled = false; event.target.value = ''; }
+    });
+    form.addEventListener('submit', async event => {
+      event.preventDefault(); if (uploading || saving) return; saving = true; formBusy(form, true);
+      editor.contentEditable = 'false'; const submitted = data();
+      const controls = $$('button,input,select', form); controls.forEach(control => control.disabled = true);
+      try {
+        const result = await api('/api/social/posts' + (existing ? '/' + existing.id : ''), existing ? 'PUT' : 'POST', {...submitted, clientId:form.dataset.clientId || (form.dataset.clientId = crypto.randomUUID())});
+        try { sessionStorage.removeItem(draftKey); } catch {}
+        activePostEditor = null;
+        location.assign('account.html?tab=posts&post=' + encodeURIComponent(result.post.id));
+      } catch (error) { formError(form, error); }
+      finally { saving = false; editor.contentEditable = 'true'; controls.forEach(control => control.disabled = false); formBusy(form, false); }
+    });
+    document.title = (existing ? 'Edit Post' : 'Create Post') + ' | Solaris Studio';
+    if (focusVisibility) form.elements.visibility.focus(); else editor.focus();
+  }
+
   function galleryCard(item) {
     cache.set(item.id,item);
     return `<article class="creator-media-card"><button class="creator-media-preview" type="button" data-media-preview="${item.id}"><img src="${escape(item.kind==='gif'&&!item.locked?item.url:item.previewUrl)}" alt="${escape(item.name)}" loading="lazy">${item.locked?'<span class="social-lock">🔒</span>':''}</button><div class="creator-media-copy"><h3>${escape(item.name)}</h3><p>By ${escape(item.creator.username)}</p>${item.collection?`<small>${escape(item.collection)}</small>`:''}<div class="creator-media-meta"><span>${item.classification==='store'?'Store':'Free'}</span><strong>${escape(money(item))}</strong></div><small>${item.locked?'Paid checkout is not available yet.':'Available'}</small></div>${item.canManage?options(`<button type="button" data-media-edit="${item.id}">Edit details</button><button type="button" data-media-feature="${item.id}">Create a post</button><button class="is-danger" type="button" data-media-delete="${item.id}">Delete</button>`,'Gallery item options'):''}</article>`;
@@ -179,5 +280,5 @@
   });
   document.addEventListener('submit',async event=>{const form=event.target;if(!form.matches('[data-comment-form]'))return;event.preventDefault();formBusy(form,true);try{const result=await api('/api/social/posts/'+form.dataset.commentForm+'/comments','POST',{text:form.elements.text.value});$('#post-'+result.post.id).outerHTML=postMarkup(result.post);$('[data-comments="'+result.post.id+'"]').hidden=false;}catch(error){toast(error.message);}finally{formBusy(form,false);}});
   window.addEventListener('popstate',()=>{if(mounted&&mounted.root.isConnected)selectTab(new URLSearchParams(location.search).get('tab')||'general',false);});
-  window.SolarisSocial={configure(config){({api,getUser,toast,cardMarkup,captureCard}=config);},mount,options,copyLink};
+  window.SolarisSocial={configure(config){({api,getUser,toast,cardMarkup,captureCard}=config);},mount,mountPostPage,options,copyLink};
 })();

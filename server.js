@@ -11,6 +11,7 @@ const { promisify } = require('node:util');
 const { createFileStorage } = require('./file-storage');
 const { createSocialSystem } = require('./social-system');
 const DEFAULT_CONTENT = require('./site-defaults.json');
+const { createShopSystem, countryCode } = require('./shop-system');
 
 const scrypt = promisify(crypto.scrypt);
 const ROOT = __dirname;
@@ -24,7 +25,7 @@ const USERNAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY = 16 * 1024 * 1024;
 const MAX_GAME_BUILD_BYTES = Math.min(4 * 1024 ** 3, Math.max(50 * 1024 ** 2, Number(process.env.SOLARIS_MAX_GAME_BUILD_BYTES) || 2 * 1024 ** 3));
 const BUILT_IN_GAME_IDS = new Set(['gamma-frost', 'omiwo']);
-const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'publish.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js', 'profile-social.js', 'profile-social.css']);
+const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'publish.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js', 'profile-social.js', 'profile-social.css', 'storefront.js', 'create-post.html', 'shop-product.html']);
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.png': 'image/png' };
 const PRIMARY_ROLES = {
   assistant: { label: 'Assistant', explanation: 'Supports studio coordination and helps keep Solaris projects moving.' },
@@ -48,6 +49,7 @@ const communityPresence = new Map();
 let writeQueue = Promise.resolve();
 const fileStore = createFileStorage({ getPool: () => pool, dataDir: DATA_DIR });
 const socialSystem = createSocialSystem({ getAccounts: () => accounts, getAccount, send, readBody, save: saveAccounts, files: fileStore, cleanFriendCard });
+const shopSystem = createShopSystem({ getAccount, send, readBody, save: saveAccounts, privateProfile, cleanImage: siteContentImage });
 
 function send(res, status, value, headers = {}) {
   const body = JSON.stringify(value);
@@ -300,7 +302,7 @@ function privateProfile(account) {
   const ownerUsername = text(process.env.SOLARIS_OWNER_USERNAME || 'Fritzz Xenon', 24);
   const ownerExists = accounts.some(item => item.role === 'owner') || pausedAccounts.some(item => item.account.role === 'owner');
   const canClaimOwner = Boolean(process.env.SOLARIS_OWNER_SETUP_TOKEN && !ownerExists && account.profile.username.toLowerCase() === ownerUsername.toLowerCase());
-  return { ...publicProfile(account), friendCard: cleanFriendCard(account.profile.friendCard, account.id), tickets: account.tickets || { namecard: 0, who: 0 }, canClaimOwner, authEmail: account.email || '', emailVerified: account.emailVerified === true, personalInfo: cleanPersonalInfo(account.personalInfo) };
+  return { ...publicProfile(account), friendCard: cleanFriendCard(account.profile.friendCard, account.id), tickets: account.tickets || { namecard: 0, who: 0 }, shopInventory: account.shopInventory || {}, canClaimOwner, authEmail: account.email || '', emailVerified: account.emailVerified === true, personalInfo: cleanPersonalInfo(account.personalInfo) };
 }
 function emptyCommunity() {
   return { friends: [], friendRequestsSent: [], friendRequestsReceived: [], messages: [], bugReports: [] };
@@ -546,7 +548,7 @@ function cleanPersonalInfo(value) {
   const input = value && typeof value === 'object' ? value : {};
   const rawEmail = text(input.secondaryEmail, 254).toLowerCase();
   const secondaryEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : '';
-  return { phoneNumber: text(input.phoneNumber, 40).replace(/[^0-9+(). x-]/gi, ''), secondaryEmail };
+  return { phoneNumber: text(input.phoneNumber, 40).replace(/[^0-9+(). x-]/gi, ''), secondaryEmail, countryCode: countryCode(input.countryCode) };
 }
 function cleanPersonalityTags(value) {
   const source = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
@@ -714,7 +716,7 @@ function cleanProfile(input, existing = {}, allowMemberFriendCard = true, ownerI
   };
 }
 async function saveAccounts() {
-  const snapshot = JSON.stringify({ accounts, pausedAccounts, siteContent, social: socialSystem.snapshot() });
+  const snapshot = JSON.stringify({ accounts, pausedAccounts, siteContent, social: socialSystem.snapshot(), shop: shopSystem.snapshot() });
   writeQueue = writeQueue.catch(() => {}).then(async () => {
     if (pool) {
       await pool.query('INSERT INTO solaris_account_store (store_id, accounts) VALUES (1, $1::jsonb) ON CONFLICT (store_id) DO UPDATE SET accounts = EXCLUDED.accounts', [snapshot]);
@@ -745,6 +747,7 @@ async function removeAccountSessions(accountId, req, res) {
 async function handleApi(req, res, pathname) {
   if (!checkOrigin(req)) return send(res, 403, { error: 'This request was not accepted.' });
   await restoreExpiredAccounts();
+  if (await shopSystem.handle(req,res,pathname)) return;
   if (await socialSystem.handle(req,res,pathname)) return;
   if (req.method === 'GET' && pathname === '/api/firebase-config') {
     const setup = firebaseWebConfig();
@@ -986,11 +989,12 @@ async function handleApi(req, res, pathname) {
     const input = await readBody(req);
     const rawSecondaryEmail = text(input.secondaryEmail, 254).toLowerCase();
     if (rawSecondaryEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawSecondaryEmail)) return send(res, 400, { error: 'Enter a valid secondary email address.' });
+    if (input.countryCode && !countryCode(input.countryCode)) return send(res, 400, { error: 'Choose a valid country or region.' });
     const previous = account.personalInfo;
-    account.personalInfo = cleanPersonalInfo(input);
+    account.personalInfo = cleanPersonalInfo({ ...previous, ...input });
     try { await saveAccounts(); }
     catch (error) { account.personalInfo = previous; throw error; }
-    return send(res, 200, { user: privateProfile(account), message: 'Your private contact information has been saved.' });
+    return send(res, 200, { user: privateProfile(account), message: 'Your personal information has been saved.' });
   }
   if (req.method === 'GET' && pathname === '/api/public-profile') {
     const query = new URL(req.url, `http://${req.headers.host || 'localhost'}`).searchParams;
@@ -1137,20 +1141,6 @@ async function handleApi(req, res, pathname) {
     try { await saveAccounts(); }
     catch (error) { account.role = previousRole; throw error; }
     return send(res, 200, { user: { ...privateProfile(account), canClaimOwner: false } });
-  }
-  if (req.method === 'POST' && pathname === '/api/shop/purchase-ticket') {
-    const account = await getAccount(req);
-    if (!account) return send(res, 401, { error: 'Log in to add a ticket to your account.' });
-    const input = await readBody(req);
-    if (!['namecard', 'who'].includes(input.ticketType)) return send(res, 400, { error: 'Choose a valid ticket.' });
-    account.tickets ||= { namecard: 0, who: 0 };
-    const type = input.ticketType;
-    if (Number(account.tickets[type]) >= 99) return send(res, 409, { error: 'Your ticket inventory is full.' });
-    const previousCount = Number(account.tickets[type]) || 0;
-    account.tickets[type] = (Number(account.tickets[type]) || 0) + 1;
-    try { await saveAccounts(); }
-    catch (error) { account.tickets[type] = previousCount; throw error; }
-    return send(res, 200, { user: privateProfile(account), message: `${type === 'namecard' ? 'Namecard' : 'WHO?'} ticket added for free.` });
   }
   if (req.method === 'POST' && pathname === '/api/auth/link') {
     const account = await getAccount(req);
@@ -1324,7 +1314,7 @@ async function loadFileStore() {
   try {
     stored = JSON.parse(await fs.readFile(STORE_PATH, 'utf8'));
   } catch (error) {
-    if (error.code === 'ENOENT') { accounts = []; pausedAccounts = []; siteContent = cleanSiteContentState({}); socialSystem.load({}); return; }
+    if (error.code === 'ENOENT') { accounts = []; pausedAccounts = []; siteContent = cleanSiteContentState({}); socialSystem.load({}); shopSystem.load({}); return; }
     throw error;
   }
   const savedAccounts = Array.isArray(stored) ? stored : Array.isArray(stored?.accounts) ? stored.accounts : [];
@@ -1332,7 +1322,8 @@ async function loadFileStore() {
   pausedAccounts = Array.isArray(stored?.pausedAccounts) ? stored.pausedAccounts.filter(item => item?.account?.id && item.account.profile && item.account.passwordHash && item.account.salt && Number(item.resumeAt) > 0) : [];
   siteContent = cleanSiteContentState(stored?.siteContent);
   socialSystem.load(stored?.social);
-  let changed = Array.isArray(stored) || !stored?.siteContent;
+  shopSystem.load(stored?.shop);
+  let changed = Array.isArray(stored) || !stored?.siteContent || !stored?.shop;
   changed = accounts.reduce((didChange, account) => normalizeAccount(account) || didChange, changed);
   changed = pausedAccounts.reduce((didChange, item) => normalizeAccount(item.account) || didChange, changed);
   // Migrate legacy account arrays without dropping any existing profile data.
@@ -1353,8 +1344,9 @@ async function loadStore() {
     accounts = savedAccounts.filter(account => account && account.id && account.profile && account.passwordHash && account.salt);
     pausedAccounts = Array.isArray(stored?.pausedAccounts) ? stored.pausedAccounts.filter(item => item?.account?.id && item.account.profile && item.account.passwordHash && item.account.salt && Number(item.resumeAt) > 0) : [];
     siteContent = cleanSiteContentState(stored?.siteContent);
-  socialSystem.load(stored?.social);
-    let changed = Array.isArray(stored) || !stored?.siteContent;
+    socialSystem.load(stored?.social);
+    shopSystem.load(stored?.shop);
+    let changed = Array.isArray(stored) || !stored?.siteContent || !stored?.shop;
     changed = accounts.reduce((didChange, account) => normalizeAccount(account) || didChange, changed);
     changed = pausedAccounts.reduce((didChange, item) => normalizeAccount(item.account) || didChange, changed);
     if (changed) await saveAccounts();

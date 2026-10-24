@@ -34,7 +34,7 @@
   const paragraphs = value => String(value || '').split(/\n\s*\n/).map(part => part.trim()).filter(Boolean).map(part => `<p>${esc(part)}</p>`).join('');
   const app = $('#app');
   const page = document.body.dataset.page || 'home';
-  const titles = {home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat',publish:'Publish'};
+  const titles = {home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat',publish:'Publish','create-post':'Create Post','shop-product':'Manage Product'};
   let currentUser = null;
   let ownerPosts = {games:[],arts:[],updates:[],downloads:[],gameBuilds:[],deletedBuiltins:[]};
   let contentPermissions={games:[],arts:[],updates:[]};
@@ -78,6 +78,7 @@
   let toastTimer;
 
   window.SolarisSocial?.configure({api,getUser:()=>currentUser,toast,cardMarkup:member=>friendCardMarkup(member,false,false,'own'),captureCard:captureProfileCard});
+  window.SolarisShop?.configure({api,getUser:()=>currentUser,updateUser:user=>{currentUser=user;profilePreview();},toast});
   const avatarLetters = name => String(name || 'Solaris').trim().split(/\s+/).filter(Boolean).slice(0,2).map(word => word[0]).join('').toUpperCase() || 'SS';
   const avatar = (name, extra = '', image = '') => `<span class="avatar ${extra}" aria-hidden="true">${image ? `<img src="${esc(image)}" alt="">` : esc(avatarLetters(name))}</span>`;
   const bannerImage = image => image ? `<img class="profile-banner-image" src="${esc(image)}" alt="">` : '';
@@ -1517,11 +1518,9 @@
       const target = Object.hasOwn(ownerPostSectionLabels,section) ? section : 'games';
       return `<div class="wrap publish-page"><div class="page-head"><a class="publish-back" href="${target === 'downloads' ? 'download.html' : `${target === 'arts' ? 'arts' : target}.html`}">← Back to ${esc(ownerPostSectionLabels[target])}</a><span class="section-eyebrow">OWNER PUBLISHING</span><h1>${esc(ownerPostActionLabels[target])}</h1><p>Create and manage content for the ${esc(ownerPostSectionLabels[target].toLowerCase())} page.</p></div>${ownerContentManager(target)}</div>`;
     },
-    shop() {
-      const inventory = currentUser?.tickets || { namecard: 0, who: 0 };
-      const ticketCard = (kind, title, summary, count) => `<article class="shop-ticket-card"><img class="shop-ticket-art" src="assets/${kind === 'namecard' ? 'namecard-ticket' : 'who-ticket'}.png" alt="${title} artwork"><div class="shop-ticket-copy"><span class="section-eyebrow">PROFILE TICKET</span><h2>${title}</h2><p>${summary}</p><span class="shop-ticket-count">${currentUser ? `In your inventory: <strong>${count}</strong>` : 'Sign in to view your inventory.'}</span></div>${currentUser ? `<button class="btn btn-primary" type="button" data-shop-ticket="${kind}">Get for free</button>` : '<a class="btn btn-primary" href="account.html?mode=signup">Sign up or log in</a>'}</article>`;
-      return `<div class="wrap"><div class="page-head"><h1>Shop</h1><p>Get profile tickets for the changes you want to make.</p></div><section class="shop-intro"><span class="section-eyebrow">SOLARIS MEMBER SHOP</span><h2>Useful tickets, no currency needed</h2><p>The shop is new, so tickets are free while Solaris has no currency system. Add a ticket to your account here, then use it when editing your profile. Namecard tickets let you change your username during its one-week cooldown. A WHO? ticket lets you change the real name you made permanent when you first added it.</p><p>Tickets are saved to your account. You can keep up to 99 of each ticket.</p></section><div class="shop-ticket-list">${ticketCard('namecard','Namecard ticket','Change your username without waiting for the seven-day cooldown.',inventory.namecard || 0)}${ticketCard('who','WHO? ticket','Change a real name after the first saved value made it permanent.',inventory.who || 0)}</div><div class="page-end"></div></div>`;
-    },
+    'create-post'() { return '<div class="wrap"><p class="social-loading">Opening post editor…</p></div>'; },
+    'shop-product'() { return '<div class="wrap"><p class="social-loading">Opening product editor…</p></div>'; },
+    shop() { return '<div class="wrap"><p class="social-loading">Loading shop…</p></div>'; },
     project() {
       const requestedId = new URLSearchParams(location.search).get('id');
       const game = gameById(requestedId) || DATA.games[0];
@@ -1558,6 +1557,7 @@
     if ($('#nav-list')) $('#nav-list').innerHTML = ROUTES.map(([id,label,href]) => `<li><a href="${href}"${id === page ? ' aria-current="page"' : ''}>${label}</a></li>`).join('');
     ensureGlobalSearch();
     ensureCommunityMessenger();
+    if (page === 'shop') window.SolarisShop?.mount(app);
   }
   function ensureGlobalSearch() {
     const slot = $('.top-in');
@@ -1857,7 +1857,7 @@
     const email = user.authEmail || '';
     const verification = email ? (user.emailVerified ? 'Verified' : 'Not verified') : 'No email connected';
     const passwordRecovery = firebaseEnabled && email ? `<button class="btn btn-ghost btn-sm" type="button" data-password-reset data-reset-email="${esc(email)}">Send password reset email</button>` : '<p class="panel-help">Password recovery is available after Firebase email sign-in is connected.</p>';
-    return `<div class="wrap account-wrap personal-info-page"><div class="page-head"><h1>Personal Profile Information</h1><p>Private account details are visible only to you.</p></div><div class="account-grid"><section class="account-panel account-panel-wide personal-info-security"><div><span class="section-eyebrow">SIGN-IN DETAILS</span><h2>Email and password</h2></div><dl class="profile-facts"><dt>Email address</dt><dd>${esc(email || 'Not connected')}</dd><dt>Email status</dt><dd>${verification}</dd><dt>Password</dt><dd><span class="password-masked" aria-label="Password hidden">••••••••••••</span><small>Passwords are stored as secure one-way hashes, so they cannot be viewed or revealed with a code.</small></dd><dt>Account ID</dt><dd>${esc(user.id || 'Unavailable')}</dd><dt>Solaris role</dt><dd>${esc(user.accountRole === 'owner' ? 'Owner' : (PRIMARY_ROLE_LABELS[user.primaryRole] || 'Member'))}</dd></dl>${passwordRecovery}<p class="form-message" data-security-message role="status"></p></section><form id="personal-info-form" class="account-panel account-panel-wide"><span class="section-eyebrow">PRIVATE CONTACT DETAILS</span><h2>Phone and secondary email</h2><p class="panel-help">These details stay private and are never shown on your public profile.</p><label>Phone number <span class="optional">optional</span><input name="phoneNumber" type="tel" maxlength="40" autocomplete="tel" value="${esc(user.personalInfo?.phoneNumber || '')}" placeholder="Add a phone number"></label><label>Secondary email <span class="optional">optional</span><input name="secondaryEmail" type="email" maxlength="254" autocomplete="email" value="${esc(user.personalInfo?.secondaryEmail || '')}" placeholder="Add a recovery or contact email"></label><p class="form-message" id="personal-info-message" role="status"></p><div class="actions"><button class="btn btn-primary" type="submit">Save personal information</button><button class="btn btn-ghost" type="button" data-cancel-edit>Back to profile</button></div></form></div></div>`;
+    return `<div class="wrap account-wrap personal-info-page"><div class="page-head"><h1>Personal Profile Information</h1><p>Private account details are visible only to you.</p></div><div class="account-grid"><section class="account-panel account-panel-wide personal-info-security"><div><span class="section-eyebrow">SIGN-IN DETAILS</span><h2>Email and password</h2></div><dl class="profile-facts"><dt>Email address</dt><dd>${esc(email || 'Not connected')}</dd><dt>Email status</dt><dd>${verification}</dd><dt>Password</dt><dd><span class="password-masked" aria-label="Password hidden">••••••••••••</span><small>Passwords are stored as secure one-way hashes, so they cannot be viewed or revealed with a code.</small></dd><dt>Account ID</dt><dd>${esc(user.id || 'Unavailable')}</dd><dt>Solaris role</dt><dd>${esc(user.accountRole === 'owner' ? 'Owner' : (PRIMARY_ROLE_LABELS[user.primaryRole] || 'Member'))}</dd></dl>${passwordRecovery}<p class="form-message" data-security-message role="status"></p></section><form id="personal-info-form" class="account-panel account-panel-wide"><span class="section-eyebrow">GENERAL INFORMATION</span><h2>Country and contact details</h2><p class="panel-help">These details stay private and are never shown on your public profile.</p>${window.SolarisShop.countryControl(user.personalInfo?.countryCode || '')}<label>Phone number <span class="optional">optional</span><input name="phoneNumber" type="tel" maxlength="40" autocomplete="tel" value="${esc(user.personalInfo?.phoneNumber || '')}" placeholder="Add a phone number"></label><label>Secondary email <span class="optional">optional</span><input name="secondaryEmail" type="email" maxlength="254" autocomplete="email" value="${esc(user.personalInfo?.secondaryEmail || '')}" placeholder="Add a recovery or contact email"></label><p class="form-message" id="personal-info-message" role="status"></p><div class="actions"><button class="btn btn-primary" type="submit">Save personal information</button><button class="btn btn-ghost" type="button" data-cancel-edit>Back to profile</button></div></form></div></div>`;
   }
   function friendCardEditorPage(user) {
     return `<div class="friend-card-editor-page">${friendCardEditorSection(user)}</div>`;
@@ -2072,6 +2072,7 @@
     } else {
       app.innerHTML = editingFriendCard ? friendCardEditorPage(currentUser) : viewingPersonalInfo ? personalInfoPage(currentUser) : editingProfile ? profileEditor(currentUser) : profileDashboard(currentUser,true);
       if (editingFriendCard) prepareFriendCardEditorView();
+      if (viewingPersonalInfo) window.SolarisShop?.fillCountries(app);
       if (!editingProfile && !editingFriendCard && !viewingPersonalInfo && currentUser.accountRole === 'owner') loadOwnerAccounts();
     }
   }
@@ -2237,7 +2238,7 @@
     try {
       await api('/api/logout','POST',{});
       if (firebaseEnabled) { try { const client = await getFirebaseClient(); await client.sdk.signOut(client.auth); } catch (_) {} }
-      currentUser = null; leaveGuestMode(); editingProfile = false; editingFriendCard = false; viewingPersonalInfo = false; closeProfile(); profilePreview(); if (page === 'account') showAccount(); toast('You are logged out.');
+      currentUser = null; leaveGuestMode(); editingProfile = false; editingFriendCard = false; viewingPersonalInfo = false; closeProfile(); profilePreview(); if (page === 'account') showAccount(); if (page === 'shop') window.SolarisShop.mount(app); toast('You are logged out.');
     }
     catch (error) { toast(error.message); }
   }
@@ -2260,6 +2261,8 @@
     profilePreview();
     if (page === 'account') showAccount();
     if (page === 'chat') await initializeCommunityPage();
+    if (page === 'create-post') await window.SolarisSocial.mountPostPage(app);
+    if (page === 'shop-product') await window.SolarisShop.editor(app);
     if (['home','games','project','arts','artwork','updates','download','shop','publish'].includes(page)) renderPage();
     try { await resumePendingFirebaseSignup(); }
     catch (error) { if (page === 'account' && !currentUser) setMessage('#auth-message',error.message); }
@@ -2782,7 +2785,7 @@
       const form = event.target, submit = $('button[type="submit"]',form);
       submit.disabled = true;
       try {
-        const result = await api('/api/personal-info','PUT',{phoneNumber:form.elements.phoneNumber.value,secondaryEmail:form.elements.secondaryEmail.value});
+        const result = await api('/api/personal-info','PUT',{phoneNumber:form.elements.phoneNumber.value,secondaryEmail:form.elements.secondaryEmail.value,countryCode:form.elements.countryCode.value});
         currentUser = result.user;
         setMessage('#personal-info-message',result.message,false);
         toast(result.message);
