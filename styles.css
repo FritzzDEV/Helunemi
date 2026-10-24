@@ -1756,7 +1756,6 @@ body.friend-card-edit-mode .frame-piece-visibility input{width:14px;height:14px;
 .friend-layer-caption small,.friend-layer-caption>span{color:inherit}
 body.friend-card-edit-mode #friend-card-editor-stage[data-cfc-viewport="all"] .friend-card,
 body.friend-card-edit-mode #friend-card-editor-stage[data-cfc-viewport="all"] .friend-card-layer-canvas{overflow:visible}
-body.friend-card-edit-mode #friend-card-editor-stage:not([data-cfc-viewport="all"]) .friend-card,
 body.friend-card-edit-mode #friend-card-editor-stage:not([data-cfc-viewport="all"]) .friend-card-layer-canvas{overflow:hidden}
 body.friend-card-edit-mode .friend-canvas-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem .5rem;min-width:0;overflow:hidden}
 .friend-preview-switch{display:flex;align-items:center;flex-wrap:wrap;gap:.3rem;min-width:0;grid-column:1/-1}
@@ -1768,7 +1767,6 @@ body.friend-card-edit-mode .friend-canvas-toolbar{display:grid;grid-template-col
 [data-cfc-required-notice].is-error{color:#ff8179}
 .friend-dialog-view-switch{margin:.2rem 2rem 1rem 0}
 .friend-dialog-view-switch button{min-height:32px;padding:.35rem .65rem}
-.cfc-choice-page{padding-bottom:3rem}
 .cfc-choice-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
 .cfc-choice-action{display:grid;align-content:start;gap:.6rem;width:100%;text-align:left;color:var(--ink);cursor:pointer;font:inherit}
 .cfc-choice-action strong{font:700 1.05rem var(--font-display)}
@@ -1781,3 +1779,28 @@ body.friend-card-edit-mode .friend-canvas-toolbar{display:grid;grid-template-col
 @media(max-width:760px){body.friend-card-edit-mode .friend-canvas-toolbar{grid-template-columns:minmax(0,1fr)}body.friend-card-edit-mode .friend-canvas-zoom{justify-content:flex-start;flex-wrap:wrap}.cfc-choice-actions{grid-template-columns:minmax(0,1fr)}.cfc-choice-row{flex-wrap:wrap}.cfc-choice-row>.btn{margin-left:auto}}
 
 .friend-layer-username{font-family:inherit}
+
+/* The eight-piece frame lives behind, and strictly outside, the card surface. */
+.friend-card{overflow:visible}
+.friend-card-frame-space{display:block;box-sizing:border-box;width:100%;min-width:0}
+.friend-card-frame-space>.friend-card{width:100%;max-width:none;margin:0}
+.friend-card-exterior-frame{position:absolute;inset:calc(-1 * var(--friend-stroke-width,2px));z-index:-1;pointer-events:none}
+.friend-card-layer-canvas{z-index:0;border-radius:inherit}
+body.friend-card-edit-mode #friend-card-editor-stage .friend-card{overflow:visible}
+body.friend-card-edit-mode #friend-card-editor-stage[data-cfc-viewport="all"] .friend-card-layer-canvas{overflow:visible}
+body.friend-card-edit-mode #friend-card-editor-stage:not([data-cfc-viewport="all"]) .friend-card-layer-canvas{overflow:hidden}
+.friend-identity-help{color:var(--muted);font-size:.7rem;line-height:1.5}
+
+/* Choosing a design keeps the profile visible behind a dismissible popup. */
+.cfc-choice-dialog{width:min(720px,calc(100vw - 24px));max-height:85dvh;padding:0;border:1px solid var(--line);border-radius:18px;background:var(--surface);color:var(--ink);box-shadow:0 24px 90px #0008;overflow:hidden}
+.cfc-choice-dialog[open]{display:flex;flex-direction:column}
+.cfc-choice-dialog::backdrop{background:#0009;backdrop-filter:blur(5px)}
+.cfc-choice-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex:none;padding:1rem 1.2rem;border-bottom:1px solid var(--line)}
+.cfc-choice-head h2{margin:0;font:700 1rem var(--font-display)}
+.cfc-choice-close{display:grid;place-items:center;flex:none;width:32px;height:32px;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font-size:1.4rem;cursor:pointer}
+.cfc-choice-body{display:grid;align-content:start;gap:1rem;min-height:0;padding:1.2rem;overflow:auto;overscroll-behavior:contain}
+.cfc-choice-body>p{margin:0;color:var(--muted);font-size:.85rem;line-height:1.6}
+.cfc-choice-body .cfc-choice-back{justify-self:start}
+.cfc-choice-body .cfc-choice-action{height:auto;min-height:140px;padding:1rem}
+.cfc-choice-dialog button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+@media(max-width:500px){.cfc-choice-head,.cfc-choice-body{padding:1rem}.cfc-choice-body .cfc-choice-action{min-height:0}}

@@ -167,17 +167,49 @@
     const layers = card?.design?.layers || [];
     const missing = [['avatar','profile picture'],['username','username']].filter(([type])=>!layers.some(layer=>layer.type===type)).map(([,label])=>label);
     if (missing.length) return `Cannot save or post: add ${missing.join(' and ')} ${missing.length === 1 ? 'layer' : 'layers'} from Layers → Text & buttons.`;
-    for (const type of ['avatar','username']) if (layers.filter(layer=>layer.type===type).length > 3) return 'Profile picture and username each allow one original and two duplicates (three total).';
+    for (const [type,label] of [['avatar','Profile picture'],['username','Username']]) {
+      const identity = layers.filter(layer => layer.type === type);
+      if (identity.length > 3) return 'Profile picture and username each allow one original and two duplicates (three total).';
+      if (identity.some(layer => layer.visible === false || (layer.visibilityMode || 'both') !== 'both')) return `Cannot save or post: every ${label.toLowerCase()} layer must be visible and set to “Preview and full view”. Change Show in under Properties and turn on its eye in the Layer list.`;
+    }
     return '';
   }
   function updateFriendCardRequirementNotice() {
     const message = friendCardIdentityMessage(), notice = $('[data-cfc-required-notice]');
-    if (notice) { notice.textContent = message || 'Profile picture and username layers are present. Each allows up to two duplicates.'; notice.classList.toggle('is-error',Boolean(message)); }
+    if (notice) { notice.textContent = message || 'PFP and username must stay visible in both views. Each allows up to two duplicates.'; notice.classList.toggle('is-error',Boolean(message)); }
   }
-  function friendCardChoicePage() {
-    if (friendCardChoiceMode === 'existing') return `<div class="wrap account-wrap cfc-choice-page"><div class="page-head"><button class="text-link" type="button" data-cfc-choose-back>← Back to Friend-Card options</button><h1>Edit an existing CFC</h1><p>Choose one of your saved designs or saved collection cards.</p></div><div data-cfc-choice-list><p class="social-loading">Loading your Friend-Cards…</p></div></div>`;
-    return `<div class="wrap account-wrap cfc-choice-page"><div class="page-head"><button class="text-link" type="button" data-cancel-edit>← Back to profile</button><h1>Custom Friend-Cards</h1><p>Choose where you want to start.</p></div><div class="cfc-choice-actions"><button type="button" class="account-panel cfc-choice-action" data-cfc-choose-existing><strong>Edit existing CFC</strong><span>Choose from the cards you have already made.</span></button><button type="button" class="account-panel cfc-choice-action" data-cfc-create-new><strong>Create new CFC</strong><span>Start with only your profile picture and username.</span></button></div></div>`;
+  let friendCardChoiceGeneration = 0;
+  function friendCardChoiceContents() {
+    const existing = friendCardChoiceMode === 'existing';
+    const body = existing
+      ? '<button class="text-link cfc-choice-back" type="button" data-cfc-choose-back>← Friend-Card options</button><p>Choose one of your saved designs or collection cards.</p><div data-cfc-choice-list><p class="social-loading">Loading your Friend-Cards…</p></div>'
+      : '<p>Choose where you want to start.</p><div class="cfc-choice-actions"><button type="button" class="account-panel cfc-choice-action" data-cfc-choose-existing><strong>Edit existing CFC</strong><span>Choose from the cards you have already made.</span></button><button type="button" class="account-panel cfc-choice-action" data-cfc-create-new><strong>Create new CFC</strong><span>Start with only your profile picture and username.</span></button></div>';
+    return `<header class="cfc-choice-head"><h2 id="cfc-choice-title">${existing ? 'Edit an existing CFC' : 'Custom Friend-Cards'}</h2><button type="button" class="cfc-choice-close" data-cfc-close aria-label="Close Friend-Card options">×</button></header><div class="cfc-choice-body">${body}</div>`;
   }
+  function closeFriendCardChooser() {
+    friendCardChoiceMode = ''; friendCardChoiceGeneration++;
+    $('#cfc-choice-dialog')?.close();
+  }
+  function openFriendCardChooser(mode = 'options') {
+    if (!currentUser || currentUser.accountRole === 'owner' || currentUser.primaryRole !== 'member') return;
+    let dialog = $('#cfc-choice-dialog');
+    if (!dialog) {
+      dialog = document.createElement('dialog'); dialog.id = 'cfc-choice-dialog'; dialog.className = 'cfc-choice-dialog';
+      dialog.setAttribute('aria-labelledby','cfc-choice-title');
+      dialog.addEventListener('click',event => { if (event.target === dialog) closeFriendCardChooser(); });
+      dialog.addEventListener('cancel',event => { event.preventDefault(); closeFriendCardChooser(); });
+      dialog.addEventListener('close',() => { if (!dialog.open) { friendCardChoiceMode = ''; friendCardChoiceGeneration++; } });
+      document.body.append(dialog);
+    }
+    const options = $('#profile-options');
+    if (options) { options.hidden = true; $('.profile-options-button')?.setAttribute('aria-expanded','false'); }
+    friendCardChoiceMode = mode === 'existing' ? 'existing' : 'options'; friendCardChoiceGeneration++;
+    dialog.innerHTML = friendCardChoiceContents();
+    if (!dialog.open) dialog.showModal();
+    else dialog.querySelector('[data-cfc-choose-back],[data-cfc-choose-existing]')?.focus();
+    if (friendCardChoiceMode === 'existing') loadFriendCardChoices();
+  }
+
   async function loadFriendCardChoices() {
     const container = $('[data-cfc-choice-list]'); if (!container) return;
     try {
@@ -188,10 +220,11 @@
       const drafts=[];
       try{for(let index=0;index<localStorage.length;index++){const key=localStorage.key(index),prefix=`solaris-friend-card-draft:${currentUser.id}:`;if(!key?.startsWith(prefix))continue;const suffix=key.slice(prefix.length);if(!/^(?:new-|collection-)[a-f0-9-]{36}$/i.test(suffix))continue;const saved=JSON.parse(localStorage.getItem(key));if(saved?.design&&saved?.friendCard)drafts.push(`<article class="account-panel cfc-choice-row"><div><strong>${esc(saved.design.name||'Unsaved Friend-Card')}</strong><p>Unsaved draft · this browser only</p></div><button class="btn btn-ghost btn-sm" type="button" data-resume-cfc-draft="${esc(suffix)}">Resume draft</button></article>`);}}catch{}
       container.innerHTML = [...rows,...snapshots,...drafts].join('') || '<section class="account-panel"><p>No saved Friend-Cards yet.</p><button class="btn btn-primary" type="button" data-cfc-create-new>Create your first CFC</button></section>';
-    } catch (error) { container.innerHTML = `<section class="account-panel"><p>${esc(error.message)}</p><button class="btn btn-ghost" type="button" data-cfc-choose-existing>Try again</button></section>`; }
+    } catch (error) { if (container.isConnected && friendCardChoiceMode === 'existing') container.innerHTML = `<section class="account-panel"><p>${esc(error.message)}</p><button class="btn btn-ghost" type="button" data-cfc-choose-existing>Try again</button></section>`; }
   }
   function enterFriendCardEditor(context) {
-    friendCardEditorContext = context; friendCardChoiceMode = ''; friendCardViewMode = 'all';
+    closeFriendCardChooser();
+    friendCardEditorContext = context; friendCardViewMode = 'all';
     editingProfile = false; viewingPersonalInfo = false; editingFriendCard = true; showAccount();
   }
   function createNewFriendCard() {
@@ -200,10 +233,16 @@
     enterFriendCardEditor({id:null,draftId:'new-'+crypto.randomUUID(),revision:0,friendCard:card});
   }
   async function editLibraryFriendCard(id) {
-    try { const result = await api('/api/member-friend-cards/'+encodeURIComponent(id)); enterFriendCardEditor(result.card); }
+    const generation = $('#cfc-choice-dialog')?.open ? friendCardChoiceGeneration : null;
+    try {
+      const result = await api('/api/member-friend-cards/'+encodeURIComponent(id));
+      if (generation !== null && (generation !== friendCardChoiceGeneration || !$('#cfc-choice-dialog')?.open)) return;
+      enterFriendCardEditor(result.card);
+    }
     catch (error) { toast(error.message); }
   }
   async function editCollectionFriendCard(id) {
+    const generation = $('#cfc-choice-dialog')?.open ? friendCardChoiceGeneration : null;
     try {
       const {card:source} = await api('/api/social/cfcs/'+encodeURIComponent(id));
       let card;
@@ -214,6 +253,7 @@
         card = normalizedFriendCard({...EMPTY_FRIEND_CARD,published:false,revision:0,backgroundImage:image});
         card.design = defaultFriendCardDesign(card);
       }
+      if (generation !== null && (generation !== friendCardChoiceGeneration || !$('#cfc-choice-dialog')?.open)) return;
       card.design = {...card.design,name:source.name || 'My Friend-Card'};
       enterFriendCardEditor({id:null,draftId:'collection-'+id,revision:0,friendCard:card});
       toast(source.editableFriendCard ? 'Collection design opened as a new editable card.' : 'Saved image imported as the background. Its original layers were not stored.');
@@ -324,7 +364,7 @@
     const id = type => `${type}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
     const layer = (type, label, x, y, width, height, extra = {}) => ({id:id(type),type,label,x,y,width,height,rotation:0,fontSize:3.2,color:card.textColor,align:'left',opacity:100,visible:true,locked:false,...extra});
     const ratio = (card.aspectRatio || '1:1').split(':').map(Number), scale = Math.min(1000 / ratio[0],1600 / ratio[0],1200 / ratio[1]), width = Math.round(ratio[0] * scale), height = Math.round(ratio[1] * scale);
-    return {version:1,name:'My Friend-Card',width,height,aspectRatio:card.aspectRatio || '1:1',backgroundLocked:true,showGuides:false,background:{color:card.backgroundColor,image:card.backgroundImage,tint:card.backgroundOverlayColor,tintOpacity:card.backgroundOverlayOpacity,positionX:50,positionY:50,scale:100},frame:{corners:{},sides:{},cornerSize:9,cornerSizes:{topLeft:9,topRight:9,bottomLeft:9,bottomRight:9},visiblePieces:{topLeft:true,topRight:true,bottomLeft:true,bottomRight:true,top:true,bottom:true,left:true,right:true},horizontalThickness:5,verticalThickness:5,sideMode:'stretch',placement:'foreground',visible:true,alignments:{top:'center',bottom:'center',left:'middle',right:'middle'},presets:[]},layers:[
+    return {version:1,name:'My Friend-Card',width,height,aspectRatio:card.aspectRatio || '1:1',backgroundLocked:true,showGuides:false,background:{color:card.backgroundColor,image:card.backgroundImage,tint:card.backgroundOverlayColor,tintOpacity:card.backgroundOverlayOpacity,positionX:50,positionY:50,scale:100},frame:{corners:{},sides:{},cornerSize:9,cornerSizes:{topLeft:9,topRight:9,bottomLeft:9,bottomRight:9},visiblePieces:{topLeft:true,topRight:true,bottomLeft:true,bottomRight:true,top:true,bottom:true,left:true,right:true},horizontalThickness:5,verticalThickness:5,sideMode:'stretch',placement:'background',visible:true,alignments:{top:'center',bottom:'center',left:'middle',right:'middle'},presets:[]},layers:[
       layer('avatar','Profile picture',5,7,18,18,{fontSize:3.5,field:'avatar'}),
       layer('username','Username',27,9,68,12,{fontSize:5,field:'username',fontFamily:'Unbounded',color:card.titleColor,weight:700})
     ]};
@@ -348,7 +388,7 @@
     const customFontIds = new Set(customFonts.map(font => font.id));
     const normalizeFramePreset = input => {
       const sourceFrame = input && typeof input === 'object' ? input : {}, sourceAlignments = sourceFrame.alignments && typeof sourceFrame.alignments === 'object' ? sourceFrame.alignments : {};
-      return {name:String(sourceFrame.name || 'Frame preset').slice(0,60),corners:cleanFrameImages(sourceFrame.corners,cornerNames),sides:cleanFrameImages(sourceFrame.sides,sideNames),cornerSize:number(sourceFrame.cornerSize,9,1,30),cornerSizes:Object.fromEntries(cornerNames.map(key => [key,number(sourceFrame.cornerSizes?.[key],sourceFrame.cornerSize || 9,1,30)])),visiblePieces:Object.fromEntries(pieceNames.map(key => [key,sourceFrame.visiblePieces?.[key] !== false])),horizontalThickness:number(sourceFrame.horizontalThickness,5,1,25),verticalThickness:number(sourceFrame.verticalThickness,5,1,25),sideMode:sourceFrame.sideMode === 'repeat' ? 'repeat' : 'stretch',placement:sourceFrame.placement === 'background' ? 'background' : 'foreground',visible:sourceFrame.visible !== false,alignments:{top:['left','center','right'].includes(sourceAlignments.top) ? sourceAlignments.top : 'center',bottom:['left','center','right'].includes(sourceAlignments.bottom) ? sourceAlignments.bottom : 'center',left:['top','middle','bottom'].includes(sourceAlignments.left) ? sourceAlignments.left : 'middle',right:['top','middle','bottom'].includes(sourceAlignments.right) ? sourceAlignments.right : 'middle'}};
+      return {name:String(sourceFrame.name || 'Frame preset').slice(0,60),corners:cleanFrameImages(sourceFrame.corners,cornerNames),sides:cleanFrameImages(sourceFrame.sides,sideNames),cornerSize:number(sourceFrame.cornerSize,9,1,30),cornerSizes:Object.fromEntries(cornerNames.map(key => [key,number(sourceFrame.cornerSizes?.[key],sourceFrame.cornerSize || 9,1,30)])),visiblePieces:Object.fromEntries(pieceNames.map(key => [key,sourceFrame.visiblePieces?.[key] !== false])),horizontalThickness:number(sourceFrame.horizontalThickness,5,1,25),verticalThickness:number(sourceFrame.verticalThickness,5,1,25),sideMode:['stretch','repeat','connected'].includes(sourceFrame.sideMode) ? sourceFrame.sideMode : 'stretch',placement:'background',visible:sourceFrame.visible !== false,alignments:{top:['left','center','right'].includes(sourceAlignments.top) ? sourceAlignments.top : 'center',bottom:['left','center','right'].includes(sourceAlignments.bottom) ? sourceAlignments.bottom : 'center',left:['top','middle','bottom'].includes(sourceAlignments.left) ? sourceAlignments.left : 'middle',right:['top','middle','bottom'].includes(sourceAlignments.right) ? sourceAlignments.right : 'middle'}};
     };
     const normalizedFrame = normalizeFramePreset(frame);
     normalizedFrame.presets = (Array.isArray(frame.presets) ? frame.presets : []).slice(0,8).map(normalizeFramePreset);
@@ -419,29 +459,72 @@
     }).join('');
   }
 
-  function friendCardFrameMarkup(design) {
+  // Coordinates are percentages of the card surface. Every piece stays outside it.
+  function friendCardFramePieces(design) {
     const frame = design.frame || {};
-    if (frame.visible === false) return '';
-    const cornerSize = key => Math.min(30,Math.max(1,Number(frame.cornerSizes?.[key]) || Number(frame.cornerSize) || 9));
+    if (frame.visible === false) return [];
+    const corners = ['topLeft','topRight','bottomLeft','bottomRight'];
     const width = Math.max(320,Number(design.width) || 1000), height = Math.max(320,Number(design.height) || 1000);
-    const cornerX = key => Math.min(cornerSize(key),cornerSize(key) * height / width), cornerY = key => Math.min(cornerSize(key),cornerSize(key) * width / height);
+    const cornerSize = key => Math.min(30,Math.max(1,Number(frame.cornerSizes?.[key]) || Number(frame.cornerSize) || 9));
+    const cornerX = key => Math.min(cornerSize(key),cornerSize(key) * height / width);
+    const cornerY = key => Math.min(cornerSize(key),cornerSize(key) * width / height);
+    const cornerPresent = key => frame.visiblePieces?.[key] !== false && Boolean(frame.corners?.[key]);
     const horizontal = Math.min(25,Math.max(1,Number(frame.horizontalThickness) || 5));
     const vertical = Math.min(25,Math.max(1,Number(frame.verticalThickness) || 5));
-    const layer = frame.placement === 'background' ? 0 : 1000;
-    const topLeftX = cornerX('topLeft'), topRightX = cornerX('topRight'), bottomLeftX = cornerX('bottomLeft'), bottomRightX = cornerX('bottomRight');
-    const topLeftY = cornerY('topLeft'), topRightY = cornerY('topRight'), bottomLeftY = cornerY('bottomLeft'), bottomRightY = cornerY('bottomRight');
-    const styles = {topLeft:`left:0;top:0;width:${topLeftX}%;height:${topLeftY}%;`,topRight:`right:0;top:0;width:${topRightX}%;height:${topRightY}%;`,bottomLeft:`left:0;bottom:0;width:${bottomLeftX}%;height:${bottomLeftY}%;`,bottomRight:`right:0;bottom:0;width:${bottomRightX}%;height:${bottomRightY}%;`,top:`left:${topLeftX}%;top:0;width:${100 - topLeftX - topRightX}%;height:${horizontal}%;`,bottom:`left:${bottomLeftX}%;bottom:0;width:${100 - bottomLeftX - bottomRightX}%;height:${horizontal}%;`,left:`left:0;top:${topLeftY}%;width:${vertical}%;height:${100 - topLeftY - bottomLeftY}%;`,right:`right:0;top:${topRightY}%;width:${vertical}%;height:${100 - topRightY - bottomRightY}%;`};
-    return ['topLeft','topRight','bottomLeft','bottomRight','top','bottom','left','right'].map(key => {
-      if (frame.visiblePieces?.[key] === false) return '';
-      const image = ['topLeft','topRight','bottomLeft','bottomRight'].includes(key) ? frame.corners?.[key] : frame.sides?.[key];
-      if (!image) return '';
-      const repeat = frame.sideMode === 'repeat' && ['top','bottom','left','right'].includes(key);
-      const repeatAxis = ['top','bottom'].includes(key) ? 'auto 100%' : '100% auto';
-      const alignment = frame.alignments?.[key] || (['top','bottom'].includes(key) ? 'center' : 'middle');
-      const position = ['top','bottom'].includes(key) ? `${alignment} center` : `center ${alignment === 'middle' ? 'center' : alignment}`;
-      return `<div class="friend-custom-frame-piece frame-${key}" style="${styles[key]}z-index:${layer};background-image:url(&quot;${esc(image)}&quot;);background-size:${repeat ? repeatAxis : '100% 100%'};background-position:${position};background-repeat:${repeat ? ['top','bottom'].includes(key) ? 'repeat-x' : 'repeat-y' : 'no-repeat'}" aria-hidden="true"></div>`;
-    }).join('');
+    const geometry = {
+      topLeft:{x:-cornerX('topLeft'),y:-cornerY('topLeft'),width:cornerX('topLeft'),height:cornerY('topLeft')},
+      topRight:{x:100,y:-cornerY('topRight'),width:cornerX('topRight'),height:cornerY('topRight')},
+      bottomLeft:{x:-cornerX('bottomLeft'),y:100,width:cornerX('bottomLeft'),height:cornerY('bottomLeft')},
+      bottomRight:{x:100,y:100,width:cornerX('bottomRight'),height:cornerY('bottomRight')},
+      top:{x:0,y:-horizontal,width:100,height:horizontal},
+      bottom:{x:0,y:100,width:100,height:horizontal},
+      left:{x:-vertical,y:0,width:vertical,height:100},
+      right:{x:100,y:0,width:vertical,height:100}
+    };
+    if (frame.sideMode === 'connected') {
+      // Overlap the selected corner(s) from behind so the side has no open seam.
+      for (const [side,start,end,horizontalSide] of [
+        ['top','topLeft','topRight',true],['bottom','bottomLeft','bottomRight',true],
+        ['left','topLeft','bottomLeft',false],['right','topRight','bottomRight',false]
+      ]) {
+        const alignment = frame.alignments?.[side] || (horizontalSide ? 'center' : 'middle');
+        const startSize = alignment !== (horizontalSide ? 'right' : 'bottom') && cornerPresent(start) ? (horizontalSide ? cornerX(start) : cornerY(start)) : 0;
+        const endSize = alignment !== (horizontalSide ? 'left' : 'top') && cornerPresent(end) ? (horizontalSide ? cornerX(end) : cornerY(end)) : 0;
+        if (horizontalSide) { geometry[side].x = -startSize; geometry[side].width += startSize + endSize; }
+        else { geometry[side].y = -startSize; geometry[side].height += startSize + endSize; }
+      }
+    }
+    return Object.entries(geometry).flatMap(([key,bounds]) => {
+      const corner = corners.includes(key), image = (corner ? frame.corners : frame.sides)?.[key];
+      return frame.visiblePieces?.[key] === false || !image ? [] : [{key,image,corner,...bounds}];
+    });
   }
+  function friendCardFrameInsets(design) {
+    return friendCardFramePieces(design).reduce((insets,piece) => ({
+      top:Math.max(insets.top,-piece.y),right:Math.max(insets.right,piece.x + piece.width - 100),
+      bottom:Math.max(insets.bottom,piece.y + piece.height - 100),left:Math.max(insets.left,-piece.x)
+    }),{top:0,right:0,bottom:0,left:0});
+  }
+  function friendCardFrameMarkup(design) {
+    const pieces = friendCardFramePieces(design);
+    if (!pieces.length) return '';
+    return `<div class="friend-card-exterior-frame" aria-hidden="true">${pieces.map(piece => {
+      const horizontal = ['top','bottom'].includes(piece.key), repeat = design.frame.sideMode === 'repeat' && !piece.corner;
+      const style = `left:${piece.x}%;top:${piece.y}%;width:${piece.width}%;height:${piece.height}%;z-index:${piece.corner ? 1 : 0};background-image:url(&quot;${esc(piece.image)}&quot;);background-size:${repeat ? horizontal ? 'auto 100%' : '100% auto' : '100% 100%'};background-repeat:${repeat ? horizontal ? 'repeat-x' : 'repeat-y' : 'no-repeat'}`;
+      return `<div class="friend-custom-frame-piece frame-${piece.key}" style="${style}"></div>`;
+    }).join('')}</div>`;
+  }
+  function syncFriendCardFrameControls() {
+    if (!friendCardDesignState) return;
+    const frame = friendCardDesignState.frame;
+    $$('[data-frame-alignment]').forEach(label => { label.hidden = frame.sideMode !== 'connected'; });
+    $$('[data-frame-property]').forEach(input => {
+      const value = input.dataset.frameProperty.split('.').reduce((source,key) => source?.[key],frame);
+      if (input.type === 'checkbox') input.checked = value !== false;
+      else if (document.activeElement !== input && value != null) input.value = value;
+    });
+  }
+
   function friendCardButtonStyle(card) {
     const image = card.buttonImage ? `;background-image:linear-gradient(${colorWithOpacity(card.buttonOverlayColor,card.buttonOverlayOpacity)},${colorWithOpacity(card.buttonOverlayColor,card.buttonOverlayOpacity)}),url(&quot;${esc(card.buttonImage)}&quot;)` : '';
     return `--friend-button-bg:${esc(card.buttonColor)};--friend-button-text:${esc(card.buttonTextColor)};--friend-button-stroke:${esc(card.buttonBorderColor)};--friend-button-stroke-style:${esc(card.buttonBorderStyle)}${card.buttonBorderImage ? `;--friend-button-border-image:url(&quot;${esc(card.buttonBorderImage)}&quot;);border:2px solid transparent;border-image-source:var(--friend-button-border-image);border-image-slice:28;border-image-width:1` : ''}${image}`;
@@ -466,7 +549,12 @@
     const design = normalizedFriendCardDesign(card.design,card);
     ensureFriendCardFontFaces(design.fonts);
     const image = design.background.image ? `background-image:linear-gradient(${colorWithOpacity(design.background.tint,design.background.tintOpacity)},${colorWithOpacity(design.background.tint,design.background.tintOpacity)}),url(&quot;${esc(design.background.image)}&quot;);background-position:${design.background.positionX}% ${design.background.positionY}%;background-size:${design.background.scale}% auto;background-repeat:no-repeat` : '';
-    return `<article class="friend-card friend-card-effect-${effect}${full ? ' friend-card-full' : ' friend-card-preview'}${editor && design.showGuides ? ' friend-show-guides' : ''}" data-friend-aspect="${aspect}"${!full && !editor ? ` data-friend-member data-friend-search="${searchData}"` : ''} style="${friendCardStyle({...card,aspectRatio:design.aspectRatio === 'custom' ? '1:1' : design.aspectRatio})};--friend-ratio:${design.width} / ${design.height};--design-ratio:${design.width} / ${design.height};${image}"><div class="friend-card-layer-canvas">${friendCardFrameMarkup(design)}${friendCardLayersMarkup(card,member,editor,openAction,full)}</div><span class="visually-hidden">${title} Friend-Card</span></article>`;
+    const markup = `<article class="friend-card friend-card-effect-${effect}${full ? ' friend-card-full' : ' friend-card-preview'}${editor && design.showGuides ? ' friend-show-guides' : ''}" data-friend-aspect="${aspect}"${!full && !editor ? ` data-friend-member data-friend-search="${searchData}"` : ''} style="${friendCardStyle({...card,aspectRatio:design.aspectRatio === 'custom' ? '1:1' : design.aspectRatio})};--friend-ratio:${design.width} / ${design.height};--design-ratio:${design.width} / ${design.height};${image}">${friendCardFrameMarkup(design)}<div class="friend-card-layer-canvas">${friendCardLayersMarkup(card,member,editor,openAction,full)}</div><span class="visually-hidden">${title} Friend-Card</span></article>`;
+    const insets = friendCardFrameInsets(design);
+    if (!Object.values(insets).some(Boolean)) return markup;
+    const outerWidth = 100 + insets.left + insets.right, ratio = design.width / design.height;
+    const padding = [insets.top / ratio,insets.right,insets.bottom / ratio,insets.left].map(value => `${value / outerWidth * 100}%`).join(' ');
+    return `<div class="friend-card-frame-space" style="padding:${padding}">${markup}</div>`;
   }
   function friendCardAssetRow(title, field, value, supportsStk = false) {
     const thumb = value ? `<span class="friend-card-image-thumb" data-friend-card-thumb="${field}" style="background-image:url(&quot;${esc(value)}&quot;)"></span>` : `<span class="friend-card-image-thumb friend-card-image-empty" data-friend-card-thumb="${field}">No image selected</span>`;
@@ -509,7 +597,7 @@
     const linkedContent = linkedField ? (['likes','dislikes','lookingFor'].includes(layer.type) ? `<label>${layer.type === 'likes' ? 'What I like' : layer.type === 'dislikes' ? 'What I dislike' : 'What I’m looking for'}<textarea data-layer-content-field rows="3" maxlength="400">${esc(getContent())}</textarea></label>` : `<label>${layer.type === 'tags' ? 'Tags (comma separated)' : layer.type === 'favorite' ? 'Favorite thing' : 'Content'}<input data-layer-content-field value="${esc(getContent())}" maxlength="${layer.type === 'favorite' ? 160 : 400}"></label>`) : '';
     const positionControls = friendCardSquareLayer(layer) ? `<label>X position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="x" value="${esc(layer.x)}"></label><label>Y position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="y" value="${esc(layer.y)}"></label><label>Size<input type="number" min="1" max="10000" step="0.1" data-layer-property="width" value="${esc(layer.width)}"></label><label>Rotation<input type="number" min="-180" max="180" step="1" data-layer-property="rotation" value="${esc(layer.rotation)}"></label><label>Opacity<input type="range" min="0" max="100" data-layer-property="opacity" value="${esc(layer.opacity)}"></label>` : `<label>X position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="x" value="${esc(layer.x)}"></label><label>Y position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="y" value="${esc(layer.y)}"></label><label>Width<input type="number" min="1" max="10000" step="0.1" data-layer-property="width" value="${esc(layer.width)}"></label><label>Height<input type="number" min="1" max="10000" step="0.1" data-layer-property="height" value="${esc(layer.height)}"></label><label>Rotation<input type="number" min="-180" max="180" step="1" data-layer-property="rotation" value="${esc(layer.rotation)}"></label><label>Opacity<input type="range" min="0" max="100" data-layer-property="opacity" value="${esc(layer.opacity)}"></label>`;
     const tab = friendCardPropertiesTab === 'assets' ? 'assets' : 'properties';
-    return `<div class="friend-properties-shell"><div class="friend-properties-heading"><span class="friend-layer-kind" aria-hidden="true">✦</span><div><strong>${esc(layer.label)}</strong><small>${esc(layer.type)} layer</small></div></div><nav class="friend-properties-tabs" aria-label="Selected layer settings"><button type="button" data-property-pane-tab="properties" aria-pressed="${tab === 'properties'}">Properties</button><button type="button" data-property-pane-tab="assets" aria-pressed="${tab === 'assets'}">Assets</button></nav><div class="friend-properties-panes"><div class="friend-properties-content" data-property-pane-content="properties"${tab === 'properties' ? '' : ' hidden'}>${!['avatar','username'].includes(layer.type) ? `<label>Layer name<input data-layer-property="label" maxlength="80" value="${esc(layer.label)}"></label>` : ''}${linkedContent}${['text','textbox','button'].includes(layer.type) ? `<label>${layer.type === 'button' ? 'Button label' : 'Text'}<textarea data-layer-property="text" rows="3" maxlength="500">${esc(layer.text || '')}</textarea></label>` : ''}<label>Show in<select data-layer-property="visibilityMode"><option value="both"${layer.visibilityMode === 'both' ? ' selected' : ''}>Preview and full view</option><option value="preview"${layer.visibilityMode === 'preview' ? ' selected' : ''}>Preview only</option><option value="full"${layer.visibilityMode === 'full' ? ' selected' : ''}>Full view only</option></select></label><div class="friend-property-grid friend-layer-position-grid">${positionControls}</div>${typographyControls}${layer.type === 'shape' ? `<div class="friend-property-grid">${friendColorControl('Shape color','',layer.fill || '#f5a300','data-layer-property="fill"')}<label>Shape type<select data-layer-property="shapeStyle">${[['rectangle','Rectangle'],['square','Square'],['rounded','Rounded square'],['circle','Circle'],['triangle','Triangle'],['diamond','Diamond'],['star','Star'],['hexagon','Hexagon']].map(([value,label]) => `<option value="${value}"${layer.shapeStyle === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label><label>Corner roundness<input type="number" min="0" max="100" data-layer-property="radius" value="${esc(layer.radius || 8)}"></label></div>` : ''}<div class="friend-layer-controls"><button type="button" class="btn btn-ghost btn-sm" data-duplicate-layer="${esc(layer.id)}">Duplicate</button><button type="button" class="btn btn-ghost btn-sm" data-lock-layer="${esc(layer.id)}">${layer.locked ? 'Unlock' : 'Lock'}</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="up" data-layer-id="${esc(layer.id)}">Move up</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="down" data-layer-id="${esc(layer.id)}">Move down</button><button type="button" class="btn btn-danger btn-sm" data-delete-layer="${esc(layer.id)}">Delete</button></div></div><div class="friend-properties-content friend-property-assets" data-property-pane-content="assets"${tab === 'assets' ? '' : ' hidden'}>${assetContent}</div></div></div>`;
+    return `<div class="friend-properties-shell"><div class="friend-properties-heading"><span class="friend-layer-kind" aria-hidden="true">✦</span><div><strong>${esc(layer.label)}</strong><small>${esc(layer.type)} layer</small></div></div><nav class="friend-properties-tabs" aria-label="Selected layer settings"><button type="button" data-property-pane-tab="properties" aria-pressed="${tab === 'properties'}">Properties</button><button type="button" data-property-pane-tab="assets" aria-pressed="${tab === 'assets'}">Assets</button></nav><div class="friend-properties-panes"><div class="friend-properties-content" data-property-pane-content="properties"${tab === 'properties' ? '' : ' hidden'}>${!['avatar','username'].includes(layer.type) ? `<label>Layer name<input data-layer-property="label" maxlength="80" value="${esc(layer.label)}"></label>` : ''}${linkedContent}${['text','textbox','button'].includes(layer.type) ? `<label>${layer.type === 'button' ? 'Button label' : 'Text'}<textarea data-layer-property="text" rows="3" maxlength="500">${esc(layer.text || '')}</textarea></label>` : ''}<label>Show in<select data-layer-property="visibilityMode"><option value="both"${layer.visibilityMode === 'both' ? ' selected' : ''}>Preview and full view</option><option value="preview"${layer.visibilityMode === 'preview' ? ' selected' : ''}>Preview only</option><option value="full"${layer.visibilityMode === 'full' ? ' selected' : ''}>Full view only</option></select></label>${['avatar','username'].includes(layer.type) ? '<p class="friend-identity-help">To save or post, every PFP and username must be visible in Preview and full view.</p>' : ''}<div class="friend-property-grid friend-layer-position-grid">${positionControls}</div>${typographyControls}${layer.type === 'shape' ? `<div class="friend-property-grid">${friendColorControl('Shape color','',layer.fill || '#f5a300','data-layer-property="fill"')}<label>Shape type<select data-layer-property="shapeStyle">${[['rectangle','Rectangle'],['square','Square'],['rounded','Rounded square'],['circle','Circle'],['triangle','Triangle'],['diamond','Diamond'],['star','Star'],['hexagon','Hexagon']].map(([value,label]) => `<option value="${value}"${layer.shapeStyle === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label><label>Corner roundness<input type="number" min="0" max="100" data-layer-property="radius" value="${esc(layer.radius || 8)}"></label></div>` : ''}<div class="friend-layer-controls"><button type="button" class="btn btn-ghost btn-sm" data-duplicate-layer="${esc(layer.id)}">Duplicate</button><button type="button" class="btn btn-ghost btn-sm" data-lock-layer="${esc(layer.id)}">${layer.locked ? 'Unlock' : 'Lock'}</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="up" data-layer-id="${esc(layer.id)}">Move up</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="down" data-layer-id="${esc(layer.id)}">Move down</button><button type="button" class="btn btn-danger btn-sm" data-delete-layer="${esc(layer.id)}">Delete</button></div></div><div class="friend-properties-content friend-property-assets" data-property-pane-content="assets"${tab === 'assets' ? '' : ' hidden'}>${assetContent}</div></div></div>`;
   }
   function hiddenFriendCardFields(card) {
     const fields = {friendCardLikes:card.likes,friendCardDislikes:card.dislikes,friendCardFavoriteThing:card.favoriteThing,friendCardLookingFor:card.lookingFor,friendCardPersonalityTags:card.personalityTags.join(', '),friendCardTitleColor:card.titleColor,friendCardTextColor:card.textColor,friendCardMutedTextColor:card.mutedTextColor,friendCardTagTextColor:card.tagTextColor,friendCardButtonOverlayColor:card.buttonOverlayColor,friendCardButtonOverlayOpacity:card.buttonOverlayOpacity,friendCardButtonBorderStyle:card.buttonBorderStyle};
@@ -539,11 +627,11 @@
     const frameNames = [['topLeft','Top-left corner'],['topRight','Top-right corner'],['bottomLeft','Bottom-left corner'],['bottomRight','Bottom-right corner']].map(([key,label]) => friendFrameAssetRow('corners',key,label)).join('') + [['top','Top side'],['bottom','Bottom side'],['left','Left side'],['right','Right side']].map(([key,label]) => friendFrameAssetRow('sides',key,label)).join('');
     const framePresets = `<div class="friend-frame-presets"><button type="button" class="btn btn-ghost btn-sm" data-save-frame-preset>Save current frame preset</button><div data-frame-preset-list>${friendCardFramePresetsMarkup()}</div></div>`;
     const cardAppearance = `<details class="friend-editor-section friend-global-style"><summary><strong>Card &amp; button appearance</strong><small>Colors, strokes, and effects.</small></summary>${friendColorControl('Card stroke','friendCardBorderColor',card.borderColor)}<label>Stroke style<select name="friendCardBorderStyle">${options(['solid','dashed','dotted','double'],card.borderStyle,['Solid','Dashed','Dotted','Double'])}</select></label><label>Stroke width<select name="friendCardBorderWidth">${options(['1','2','3','4','5','6','7','8'],String(card.borderWidth))}</select></label><label>Card effect<select name="friendCardEffect">${options(['none','glow','lift','shine'],card.effect,['None','Soft glow','Lift on hover','Shine'])}</select></label><h3>Button appearance</h3>${friendColorControl('Button background','friendCardButtonColor',card.buttonColor)}${friendColorControl('Button text','friendCardButtonTextColor',card.buttonTextColor)}${friendColorControl('Button stroke','friendCardButtonBorderColor',card.buttonBorderColor)}</details>`;
-    return `<form id="friend-card-form" class="friend-card-editor-form" novalidate>${hiddenFriendCardFields(card)}<section class="friend-card-workspace"><header class="friend-editor-toolbar"><div class="friend-editor-title"><span class="section-eyebrow">HELUNEMI FRIEND-CARD STUDIO</span><input data-design-name aria-label="Design name" maxlength="80" value="${esc(friendCardDesignState.name)}"></div><div class="friend-editor-history"><button type="button" data-friend-undo disabled aria-label="Undo">↶</button><button type="button" data-friend-redo disabled aria-label="Redo">↷</button><span data-friend-save-status>${recoveredDraft ? 'Recovered unsaved changes · save to sync your account' : 'All changes saved to your account'}</span></div><div class="friend-editor-toolbar-actions"><button type="button" class="btn btn-ghost btn-sm" data-friend-export>Export .scfc</button><label class="btn btn-ghost btn-sm friend-import-label">Import design<input type="file" accept=".scfc,application/json" data-friend-import hidden></label><button type="button" class="btn btn-ghost btn-sm" data-friend-png>Download PNG</button><button type="button" class="btn btn-primary btn-sm" data-friend-save>Save</button></div></header>
+    return `<form id="friend-card-form" class="friend-card-editor-form" novalidate>${hiddenFriendCardFields(card)}<section class="friend-card-workspace"><header class="friend-editor-toolbar"><div class="friend-editor-title"><span class="section-eyebrow">HELUNEMI FRIEND-CARD STUDIO</span><input data-design-name aria-label="Design name" maxlength="80" value="${esc(friendCardDesignState.name)}"></div><div class="friend-editor-history"><button type="button" data-friend-undo disabled aria-label="Undo">↶</button><button type="button" data-friend-redo disabled aria-label="Redo">↷</button><span data-friend-save-status>${recoveredDraft ? 'Recovered unsaved changes · save to sync your account' : 'All changes saved to your account'}</span></div><div class="friend-editor-toolbar-actions"><button type="button" class="btn btn-ghost btn-sm" data-friend-export>Export .hcfc</button><label class="btn btn-ghost btn-sm friend-import-label">Import design<input type="file" accept=".hcfc,.scfc,application/zip,application/json" data-friend-import hidden></label><button type="button" class="btn btn-ghost btn-sm" data-friend-png>Download PNG</button><button type="button" class="btn btn-primary btn-sm" data-friend-save>Save</button></div></header>
       <div class="friend-card-editor-layout friend-design-workspace"><aside class="friend-editor-panel friend-editor-left"><div class="friend-editor-panel-head"><div><span class="section-eyebrow">DESIGN</span><h2>Elements &amp; layers</h2></div><button type="button" class="friend-panel-collapse" aria-label="Collapse elements panel" data-collapse-editor-panel="left">‹</button></div>
         <div class="friend-editor-section"><h3>Card setup</h3><label>Aspect ratio<select name="friendCardAspectRatio" data-design-ratio><option value="custom"${friendCardDesignState.aspectRatio === 'custom' ? ' selected' : ''}>Custom dimensions</option>${options(friendCardRatios,friendCardDesignState.aspectRatio)}</select></label><div class="friend-property-grid friend-dimensions"><label>Width<input type="number" min="320" max="1600" step="10" data-design-dimension="width" value="${esc(friendCardDesignState.width)}"></label><label>Height<input type="number" min="320" max="1200" step="10" data-design-dimension="height" value="${esc(friendCardDesignState.height)}"></label></div><label>Background<input type="color" name="friendCardBackgroundColor" value="${esc(card.backgroundColor)}"></label><label>Background tint<input type="color" name="friendCardBackgroundOverlayColor" value="${esc(card.backgroundOverlayColor)}"></label>${friendRangeControl('Tint strength','friendCardBackgroundOverlayOpacity',card.backgroundOverlayOpacity)}<div class="friend-background-crop"><span>Background image position</span><div class="friend-property-grid"><label>Horizontal<input type="range" min="0" max="100" value="${esc(friendCardDesignState.background.positionX)}" data-background-property="positionX"></label><label>Vertical<input type="range" min="0" max="100" value="${esc(friendCardDesignState.background.positionY)}" data-background-property="positionY"></label><label>Scale<input type="range" min="50" max="300" value="${esc(friendCardDesignState.background.scale)}" data-background-property="scale"></label></div></div><label class="friend-check-row"><input type="checkbox" data-background-locked${friendCardDesignState.backgroundLocked ? ' checked' : ''}> Lock background from canvas selection</label><label class="friend-check-row"><input type="checkbox" data-show-guides${friendCardDesignState.showGuides ? ' checked' : ''}> Show safe-area guides</label></div>
         <div class="friend-editor-section"><h3>Add to card</h3><div class="friend-tool-grid"><button type="button" data-insert-layer="text">＋ Text</button><button type="button" data-insert-layer="button">▱ Button</button><button type="button" data-insert-sticker>▧ Sticker</button><button type="button" data-insert-sticker-url>↗ Image URL</button></div><div class="friend-sticker-library" data-friend-sticker-library>${friendCardStickerLibraryMarkup()}</div><input type="file" accept="image/png,image/jpeg,image/webp" data-sticker-input hidden></div>
-        <details class="friend-editor-section friend-frame-section"><summary><strong>Custom 8-piece frame</strong><small>Choose each corner and side separately.</small></summary><div class="friend-frame-assets">${frameNames}</div>${framePresets}<div class="friend-property-grid"><label>Default corner size<input type="number" min="1" max="30" data-frame-property="cornerSize" value="${esc(friendCardDesignState.frame.cornerSize || 9)}"></label><label>Horizontal width<input type="number" min="1" max="25" data-frame-property="horizontalThickness" value="${esc(friendCardDesignState.frame.horizontalThickness || 5)}"></label><label>Vertical width<input type="number" min="1" max="25" data-frame-property="verticalThickness" value="${esc(friendCardDesignState.frame.verticalThickness || 5)}"></label><label>Side mode<select data-frame-property="sideMode"><option value="stretch"${friendCardDesignState.frame.sideMode !== 'repeat' ? ' selected' : ''}>Stretch</option><option value="repeat"${friendCardDesignState.frame.sideMode === 'repeat' ? ' selected' : ''}>Repeat</option></select></label><label>Frame position<select data-frame-property="placement"><option value="foreground"${friendCardDesignState.frame.placement !== 'background' ? ' selected' : ''}>Foreground</option><option value="background"${friendCardDesignState.frame.placement === 'background' ? ' selected' : ''}>Behind layers</option></select></label><label>Top side alignment<select data-frame-property="alignments.top">${options(['left','center','right'],friendCardDesignState.frame.alignments.top,['Left','Center','Right'])}</select></label><label>Bottom side alignment<select data-frame-property="alignments.bottom">${options(['left','center','right'],friendCardDesignState.frame.alignments.bottom,['Left','Center','Right'])}</select></label><label>Left side alignment<select data-frame-property="alignments.left">${options(['top','middle','bottom'],friendCardDesignState.frame.alignments.left,['Top','Middle','Bottom'])}</select></label><label>Right side alignment<select data-frame-property="alignments.right">${options(['top','middle','bottom'],friendCardDesignState.frame.alignments.right,['Top','Middle','Bottom'])}</select></label></div><label class="friend-check-row"><input type="checkbox" data-frame-property="visible"${friendCardDesignState.frame.visible ? ' checked' : ''}> Show frame</label></details>
+        <details class="friend-editor-section friend-frame-section"><summary><strong>Custom 8-piece frame</strong><small>Outside the card, behind all its layers. Connected mode extends a side underneath its chosen corner(s).</small></summary><div class="friend-frame-assets">${frameNames}</div>${framePresets}<div class="friend-property-grid"><label>Default corner size<input type="number" min="1" max="30" data-frame-property="cornerSize" value="${esc(friendCardDesignState.frame.cornerSize || 9)}"></label><label>Horizontal width<input type="number" min="1" max="25" data-frame-property="horizontalThickness" value="${esc(friendCardDesignState.frame.horizontalThickness || 5)}"></label><label>Vertical width<input type="number" min="1" max="25" data-frame-property="verticalThickness" value="${esc(friendCardDesignState.frame.verticalThickness || 5)}"></label><label>Side mode<select data-frame-property="sideMode">${options(['stretch','repeat','connected'],friendCardDesignState.frame.sideMode,['Stretch','Repeat','Connected'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Top side alignment<select data-frame-property="alignments.top">${options(['left','center','right'],friendCardDesignState.frame.alignments.top,['Left corner','Both corners','Right corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Bottom side alignment<select data-frame-property="alignments.bottom">${options(['left','center','right'],friendCardDesignState.frame.alignments.bottom,['Left corner','Both corners','Right corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Left side alignment<select data-frame-property="alignments.left">${options(['top','middle','bottom'],friendCardDesignState.frame.alignments.left,['Top corner','Both corners','Bottom corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Right side alignment<select data-frame-property="alignments.right">${options(['top','middle','bottom'],friendCardDesignState.frame.alignments.right,['Top corner','Both corners','Bottom corner'])}</select></label></div><label class="friend-check-row"><input type="checkbox" data-frame-property="visible"${friendCardDesignState.frame.visible ? ' checked' : ''}> Show frame</label></details>
         <section class="friend-editor-section friend-layer-panel"><div class="friend-panel-title"><h3>Layers</h3><span>${friendCardDesignState.layers.length}</span></div><div data-friend-layer-list>${friendCardLayerListMarkup()}</div></section>
         <details class="friend-editor-section"><summary><strong>Image assets</strong><small>Card background and legacy frame images.</small></summary><div class="friend-card-asset-list">${imageRows}</div></details>
         <details class="friend-editor-section"><summary><strong>Font library</strong><small>Upload fonts you have permission to use.</small></summary><label class="btn btn-ghost btn-sm friend-font-upload">Upload font<input type="file" accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf" data-friend-font-input hidden></label><div class="friend-font-list" data-friend-font-list>${friendCardFontListMarkup()}</div></details>
@@ -562,6 +650,7 @@
     return card;
   }
   function updateFriendCardEditorPreview() {
+    syncFriendCardFrameControls();
     const form = $('#friend-card-form');
     $$('[data-friend-color-hex]').forEach(input => {
       const color = input.closest('.friend-color-picker')?.querySelector('input[type="color"]');
@@ -729,7 +818,8 @@
     if (direction === 'fit') {
       size.style.setProperty('--friend-editor-zoom',1);
       const availableWidth = Math.max(1,scroller.clientWidth - 32), availableHeight = Math.max(1,scroller.clientHeight - 32);
-      const width = Math.max(1,stage.offsetWidth), height = Math.max(1,stage.offsetHeight);
+      const bounds = $('#friend-card-editor-stage').getBoundingClientRect();
+      const width = Math.max(1,bounds.width), height = Math.max(1,bounds.height);
       friendCardZoom = Math.max(35,Math.min(100,Math.floor(Math.min(availableWidth / width,availableHeight / height) * 100)));
     } else friendCardZoom = Math.min(100,Math.max(35,friendCardZoom + (direction === 'in' ? 10 : -10)));
     size.style.setProperty('--friend-editor-zoom',friendCardZoom / 100);
@@ -784,8 +874,8 @@
     const design=options.design||friendCardDesignState;
     const width = design.width, height = design.height;
     let clone = stage.cloneNode(true);
-    if(!options.stage && $('#friend-card-form')){const template=document.createElement('template');template.innerHTML=friendCardMarkup({...currentUser,friendCard:friendCardFromForm($('#friend-card-form'))},friendCardViewMode==='full',false);clone=template.content.firstElementChild;}
-    clone.style.overflow='hidden';
+    if(!options.stage && $('#friend-card-form')){const template=document.createElement('template');template.innerHTML=friendCardMarkup({...currentUser,friendCard:friendCardFromForm($('#friend-card-form'))},friendCardViewMode==='full',false);clone=template.content.querySelector('.friend-card');}
+    clone.style.overflow='visible';
     clone.style.width = `${width}px`; clone.style.height = `${height}px`; clone.style.aspectRatio = 'auto'; clone.style.maxWidth = 'none';
     clone.classList.remove('friend-show-guides');
     clone.querySelectorAll('.friend-layer-resize,.friend-layer-rotate').forEach(handle => handle.remove());
@@ -802,6 +892,10 @@
         element.style.cssText = updated;
       }
     } catch (_) { toast('PNG export could not load an image. Check your connection and try again.'); return; }
+    const insets = friendCardFrameInsets(design);
+    const padding = {top:Math.ceil(insets.top * height / 100),right:Math.ceil(insets.right * width / 100),bottom:Math.ceil(insets.bottom * height / 100),left:Math.ceil(insets.left * width / 100)};
+    const exportWidth = width + padding.left + padding.right, exportHeight = height + padding.top + padding.bottom;
+    clone.style.position = 'absolute'; clone.style.left = `${padding.left}px`; clone.style.top = `${padding.top}px`; clone.style.margin = '0';
     const markup = clone.outerHTML;
     const css = [...document.styleSheets].flatMap(sheet => { try { return [...sheet.cssRules].map(rule => rule.cssText); } catch (_) { return []; } }).join('\n');
     let fontCss = '';
@@ -813,13 +907,13 @@
         fontCss += `@font-face{font-family:'${font.family}';src:url('data:${asset.mime};base64,${btoa(binary)}') format('${format}');font-display:block}`;
       }
     } catch (_) { toast('PNG export could not load one of your uploaded fonts.'); return; }
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%"><style>${css}${fontCss}</style>${markup}</div></foreignObject></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${exportWidth}" height="${exportHeight}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="position:relative;width:100%;height:100%"><style>${css}${fontCss}</style>${markup}</div></foreignObject></svg>`;
     const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), image = new Image();
     try {
       await new Promise((resolve,reject) => { image.onload = resolve; image.onerror = reject; image.src = url; });
-      const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+      const canvas = document.createElement('canvas'); canvas.width = exportWidth; canvas.height = exportHeight;
       const context = canvas.getContext('2d'); if (!context) throw new Error('PNG export is not available in this browser.');
-      context.drawImage(image,0,0,width,height);
+      context.drawImage(image,0,0,exportWidth,exportHeight);
       const png = await new Promise((resolve,reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('The PNG could not be created.')),'image/png'));
       if(options.download===false)return png;
       const link = document.createElement('a'); link.href = URL.createObjectURL(png); link.download = `${friendCardDesignState.name.toLowerCase().replace(/[^a-z0-9]+/g,'-') || 'friend-card'}.png`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href),1500);
@@ -877,7 +971,7 @@
     card.design = design;
     const manifest = {format:'solaris-custom-friend-card',version:1,exportedAt:new Date().toISOString(),friendCard:card,design}, files = [];
     const collect = async (value,parent,key) => {
-      if (typeof value === 'string' && (value.startsWith('data:image/') || value.startsWith('data:font/') || value.startsWith('https://firebasestorage.googleapis.com/'))) {
+      if (typeof value === 'string' && (value.startsWith('data:image/') || value.startsWith('data:font/') || value.startsWith('/api/friend-card/assets/') || value.startsWith('/api/friend-card/fonts/') || value.startsWith('https://firebasestorage.googleapis.com/'))) {
         const isFont = key === 'url' && Boolean(parent?.format), asset = await bytesFromAsset(value,isFont), extension = asset.mime.split('/')[1] === 'jpeg' ? 'jpg' : asset.mime.split('/')[1], name = `assets/${isFont ? 'font' : 'asset'}-${String(files.length + 1).padStart(3,'0')}.${extension}`;
         files.push({name,bytes:asset.bytes}); parent[key] = `asset://${name}`; return;
       }
@@ -888,7 +982,7 @@
     } catch (error) { toast(error.message); return; }
     files.unshift({name:'manifest.json',bytes:new TextEncoder().encode(JSON.stringify(manifest))});
     const blob = new Blob([makeZipStore(files)],{type:'application/vnd.solaris.friend-card'});
-    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${friendCardDesignState.name.toLowerCase().replace(/[^a-z0-9]+/g,'-') || 'friend-card'}.scfc`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href),1500);
+    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${friendCardDesignState.name.toLowerCase().replace(/[^a-z0-9]+/g,'-') || 'friend-card'}.hcfc`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href),1500);
   }
   async function importFriendCardDesign(file) {
     if (!file || file.size > 5_000_000) throw new Error('Choose a Friend-Card design smaller than 5 MB.');
@@ -2126,7 +2220,8 @@
   function fitFriendCardCanvas() {
     const frame = $('.friend-canvas-scroll'), size = $('.friend-canvas-size');
     if (!frame || !size || !friendCardDesignState) return;
-    const ratio = friendCardDesignState.width / Math.max(1,friendCardDesignState.height);
+    const insets = friendCardFrameInsets(friendCardDesignState);
+    const ratio = friendCardDesignState.width * (100 + insets.left + insets.right) / (Math.max(1,friendCardDesignState.height) * (100 + insets.top + insets.bottom));
     const maxWidth = Math.max(1,frame.clientWidth - 24), maxHeight = Math.max(1,frame.clientHeight - 24);
     size.style.width = `${Math.max(1,Math.floor(Math.min(maxWidth,maxHeight * ratio)))}px`;
   }
@@ -2246,9 +2341,8 @@
       if (isGuest && !params.has('mode')) app.innerHTML = guestDashboard();
       else app.innerHTML = authView(mode === 'login' ? 'login' : 'signup');
     } else {
-      app.innerHTML = friendCardChoiceMode ? friendCardChoicePage() : editingFriendCard ? friendCardEditorPage(currentUser) : viewingPersonalInfo ? personalInfoPage(currentUser) : editingProfile ? profileEditor(currentUser) : profileDashboard(currentUser,true);
+      app.innerHTML = editingFriendCard ? friendCardEditorPage(currentUser) : viewingPersonalInfo ? personalInfoPage(currentUser) : editingProfile ? profileEditor(currentUser) : profileDashboard(currentUser,true);
       if (editingFriendCard) prepareFriendCardEditorView();
-      if (friendCardChoiceMode === 'existing') loadFriendCardChoices();
       if (viewingPersonalInfo) window.SolarisShop?.fillCountries(app);
       if (!editingProfile && !editingFriendCard && !viewingPersonalInfo && currentUser.accountRole === 'owner') loadOwnerAccounts();
     }
@@ -2415,7 +2509,7 @@
     try {
       await api('/api/logout','POST',{});
       if (firebaseEnabled) { try { const client = await getFirebaseClient(); await client.sdk.signOut(client.auth); } catch (_) {} }
-      currentUser = null; friendCardChoiceMode='';friendCardEditorContext=null;friendCardClipboard=null; leaveGuestMode(); editingProfile = false; editingFriendCard = false; viewingPersonalInfo = false; closeProfile(); profilePreview(); if (page === 'account') showAccount(); if (page === 'shop') window.SolarisShop.mount(app); toast('You are logged out.');
+      closeFriendCardChooser(); currentUser = null;friendCardEditorContext=null;friendCardClipboard=null; leaveGuestMode(); editingProfile = false; editingFriendCard = false; viewingPersonalInfo = false; closeProfile(); profilePreview(); if (page === 'account') showAccount(); if (page === 'shop') window.SolarisShop.mount(app); toast('You are logged out.');
     }
     catch (error) { toast(error.message); }
   }
@@ -2519,8 +2613,9 @@
   });
 
   document.addEventListener('click', async event => {
-    if(event.target.closest('[data-cfc-choose-existing]')){friendCardChoiceMode='existing';showAccount();return;}
-    if(event.target.closest('[data-cfc-choose-back]')){friendCardChoiceMode='options';showAccount();return;}
+    if(event.target.closest('[data-cfc-choose-existing]')){openFriendCardChooser('existing');return;}
+    if(event.target.closest('[data-cfc-choose-back]')){openFriendCardChooser();return;}
+    if(event.target.closest('[data-cfc-close]')){closeFriendCardChooser();return;}
     if(event.target.closest('[data-cfc-create-new]')){createNewFriendCard();return;}
     const resumeDraft=event.target.closest('[data-resume-cfc-draft]');if(resumeDraft){try{const draftId=resumeDraft.dataset.resumeCfcDraft;if(!/^(?:new-|collection-)[a-f0-9-]{36}$/i.test(draftId))return;const saved=JSON.parse(localStorage.getItem(`solaris-friend-card-draft:${currentUser.id}:${draftId}`));if(!saved?.design||!saved?.friendCard)throw new Error('This local draft is unavailable.');enterFriendCardEditor({id:null,draftId,revision:0,friendCard:normalizedFriendCard({...saved.friendCard,design:saved.design,published:false,revision:0})});}catch(error){toast(error.message);}return;}
     const editLibrary=event.target.closest('[data-edit-library-card]');if(editLibrary){await editLibraryFriendCard(editLibrary.dataset.editLibraryCard);return;}
@@ -2838,7 +2933,7 @@
     }
     if (event.target.closest('[data-edit-account]')) { friendCardChoiceMode=''; editingProfile = true; editingFriendCard = false; viewingPersonalInfo = false; showAccount(); return; }
     if (event.target.closest('[data-view-personal-info]')) { friendCardChoiceMode=''; editingProfile = false; editingFriendCard = false; viewingPersonalInfo = true; showAccount(); return; }
-    if (event.target.closest('[data-edit-friend-card]')) { editingProfile=false;viewingPersonalInfo=false;editingFriendCard=false;friendCardChoiceMode='options';showAccount();return; }
+    if (event.target.closest('[data-edit-friend-card]')) { openFriendCardChooser();return; }
     if (event.target.closest('[data-cancel-edit]')) { editingProfile=false;editingFriendCard=false;viewingPersonalInfo=false;friendCardChoiceMode='';friendCardEditorContext=null;showAccount();return; }
     if (!event.target.closest('.profile-wrap')) closeProfile();
     if (!event.target.closest('.global-search')) closeGlobalSearch();

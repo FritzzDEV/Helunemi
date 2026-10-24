@@ -9,6 +9,9 @@ function validateFriendCardIdentity(card) {
     const count = layers.filter(layer => layer.type === type).length;
     if (!count) throw fail(`Your Friend-Card needs a ${label} layer before it can be saved or posted. Add it from Layers → Text & buttons.`);
     if (count > MAX_IDENTITY_LAYERS) throw fail(`Keep at most three ${label} layers: one original and two duplicates.`);
+    if (layers.some(layer => layer.type === type && (layer.visible === false || (layer.visibilityMode || 'both') !== 'both'))) {
+      throw fail(`Every ${label} layer must be visible in Preview and full view before this Friend-Card can be saved or posted. Set Show in to Preview and full view and turn on the layer's visibility.`);
+    }
   }
 }
 function createFriendCardLibrary({ getAccount, send, readBody, save, clean, publishAssets, privateProfile }) {

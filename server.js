@@ -620,7 +620,7 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
     cornerSize: numeric(source?.cornerSize,9,1,30), cornerSizes: Object.fromEntries(cornerNames.map(name => [name,numeric(source?.cornerSizes?.[name],source?.cornerSize || 9,1,30)])),
     visiblePieces: Object.fromEntries(pieceNames.map(name => [name,source?.visiblePieces?.[name] !== false])),
     horizontalThickness: numeric(source?.horizontalThickness,5,1,25), verticalThickness: numeric(source?.verticalThickness,5,1,25),
-    sideMode: source?.sideMode === 'repeat' ? 'repeat' : 'stretch', placement: source?.placement === 'background' ? 'background' : 'foreground', visible: source?.visible !== false,
+    sideMode: ['stretch','repeat','connected'].includes(source?.sideMode) ? source.sideMode : 'stretch', placement: 'background', visible: source?.visible !== false,
     alignments: { top: ['left','center','right'].includes(source?.alignments?.top) ? source.alignments.top : 'center', bottom: ['left','center','right'].includes(source?.alignments?.bottom) ? source.alignments.bottom : 'center', left: ['top','middle','bottom'].includes(source?.alignments?.left) ? source.alignments.left : 'middle', right: ['top','middle','bottom'].includes(source?.alignments?.right) ? source.alignments.right : 'middle' }
   });
   const frame = cleanFramePreset(frameSource);
