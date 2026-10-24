@@ -451,7 +451,7 @@ function cleanSitePost(section, value = {}) {
     return game;
   }
   if (section === 'arts') {
-    const art = { id, authorId:text(value.authorId,100), description:text(value.description,6000), title: text(value.title, 120), image: siteContentImage(value.image), shape: ['icon', 'banner', 'square', 'circle'].includes(value.shape) ? value.shape : 'square', type: text(value.type, 80), projectId: /^[a-z0-9-]{1,100}$/.test(text(value.projectId, 100)) ? text(value.projectId, 100) : '', mainTag: text(value.mainTag, 80), tags: [...new Set((Array.isArray(value.tags) ? value.tags : []).map(tag => text(tag, 60)).filter(Boolean))].slice(0, 30) };
+    const art = { id, authorId:text(value.authorId,100), credit:text(value.credit,300), description:text(value.description,6000), title: text(value.title, 120), image: siteContentImage(value.image), shape: ['icon', 'banner', 'square', 'circle'].includes(value.shape) ? value.shape : 'square', type: text(value.type, 80), projectId: /^[a-z0-9-]{1,100}$/.test(text(value.projectId, 100)) ? text(value.projectId, 100) : '', mainTag: text(value.mainTag, 80), tags: [...new Set((Array.isArray(value.tags) ? value.tags : []).map(tag => text(tag, 60)).filter(Boolean))].slice(0, 30) };
     if (!art.title || !art.image || !art.type || !art.mainTag) throw Object.assign(new Error('Add the artwork title, imported image, type, and main tag.'), { status: 400 });
     if (value.image && !art.image) throw Object.assign(new Error('Import a valid artwork image.'), { status: 400 });
     return art;
