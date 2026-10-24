@@ -9,8 +9,10 @@ function validateFriendCardIdentity(card) {
     const count = layers.filter(layer => layer.type === type).length;
     if (!count) throw fail(`Your Friend-Card needs a ${label} layer before it can be saved or posted. Add it from Layers → Text & buttons.`);
     if (count > MAX_IDENTITY_LAYERS) throw fail(`Keep at most three ${label} layers: one original and two duplicates.`);
-    if (layers.some(layer => layer.type === type && (layer.visible === false || (layer.visibilityMode || 'both') !== 'both'))) {
-      throw fail(`Every ${label} layer must be visible in Preview and full view before this Friend-Card can be saved or posted. Set Show in to Preview and full view and turn on the layer's visibility.`);
+    const identity = layers.filter(layer => layer.type === type && layer.visible !== false);
+    const missingViews = ['preview','full'].filter(view => !identity.some(layer => ['both',view].includes(layer.visibilityMode || 'both')));
+    if (missingViews.length) {
+      throw fail(`Your ${label} must be visible in ${missingViews.map(view => view === 'full' ? 'full view' : 'preview').join(' and ')} before saving or posting. Use one layer in both views or separate visible layers for each view.`);
     }
   }
 }

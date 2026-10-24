@@ -1780,11 +1780,12 @@ body.friend-card-edit-mode .friend-canvas-toolbar{display:grid;grid-template-col
 
 .friend-layer-username{font-family:inherit}
 
-/* The eight-piece frame lives behind, and strictly outside, the card surface. */
+/* Frame pieces may overlap the surface, but their stack always stays underneath it. */
 .friend-card{overflow:visible}
 .friend-card-frame-space{display:block;box-sizing:border-box;width:100%;min-width:0}
-.friend-card-frame-space>.friend-card{width:100%;max-width:none;margin:0}
-.friend-card-exterior-frame{position:absolute;inset:calc(-1 * var(--friend-stroke-width,2px));z-index:-1;pointer-events:none}
+.friend-card-frame-stack{position:relative;isolation:isolate;min-width:0}
+.friend-card-frame-stack>.friend-card{z-index:1;width:100%;max-width:none;margin:0}
+.friend-card-exterior-frame{position:absolute;inset:0;z-index:0;pointer-events:none}
 .friend-card-layer-canvas{z-index:0;border-radius:inherit}
 body.friend-card-edit-mode #friend-card-editor-stage .friend-card{overflow:visible}
 body.friend-card-edit-mode #friend-card-editor-stage[data-cfc-viewport="all"] .friend-card-layer-canvas{overflow:visible}
@@ -1804,3 +1805,11 @@ body.friend-card-edit-mode #friend-card-editor-stage:not([data-cfc-viewport="all
 .cfc-choice-body .cfc-choice-action{height:auto;min-height:140px;padding:1rem}
 .cfc-choice-dialog button:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
 @media(max-width:500px){.cfc-choice-head,.cfc-choice-body{padding:1rem}.cfc-choice-body .cfc-choice-action{min-height:0}}
+
+.friend-card-stroke-controls{display:grid;gap:.45rem;min-width:0;margin:0;padding:0;border:0}
+.friend-card-stroke-controls:disabled{opacity:.45}
+.friend-card-stroke-controls:disabled input,.friend-card-stroke-controls:disabled select{cursor:not-allowed}
+.friend-stroke-notice{margin:.35rem 0;color:var(--muted);font-size:.7rem;line-height:1.5}
+.friend-card-asset-row.is-stroke-disabled{opacity:.45}
+body.friend-card-edit-mode .friend-frame-overlap{grid-column:1/-1}
+.friend-frame-overlap output{justify-self:end;color:var(--muted);font-size:.7rem}

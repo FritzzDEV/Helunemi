@@ -582,7 +582,7 @@ function cleanPersonalityTags(value) {
 }
 function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
   if (!value || typeof value !== 'object' || value.version !== 1 || !Array.isArray(value.layers)) return null;
-  const types = new Set(['avatar','username','likes','dislikes','favorite','lookingFor','tags','button','text','textbox','sticker','shape','frame-piece','drawing','eraser']);
+  const types = new Set(['avatar','username','likes','dislikes','favorite','lookingFor','tags','button','text','textbox','image','sticker','shape','frame-piece','drawing','eraser']);
   const idSafe = item => text(item, 80).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80);
   const numeric = (item, fallback, min, max) => Math.min(max, Math.max(min, Number.isFinite(Number(item)) ? Number(item) : fallback));
   const fonts = (Array.isArray(value.fonts) ? value.fonts : []).slice(0, 12).map(font => {
@@ -607,7 +607,7 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
       rotation: numeric(layer.rotation, 0, -180, 180), fontSize: numeric(layer.fontSize, 3.2, 1, 14), lineHeight: numeric(layer.lineHeight, 1.2, .8, 2.2), letterSpacing: numeric(layer.letterSpacing, 0, -.5, 2), italic: layer.italic === true, opacity: numeric(layer.opacity, 100, 0, 100),
       color: safeColor(layer.color, cardDefaults.textColor), fill: safeColor(layer.fill, cardDefaults.backgroundColor),
       align: ['left','center','right'].includes(layer.align) ? layer.align : 'left', weight: Number(layer.weight) === 700 ? 700 : 500, radius: numeric(layer.radius, 8, 0, 100), shapeStyle: ['circle','rounded','rectangle','square','triangle','diamond','star','hexagon'].includes(layer.shapeStyle) ? layer.shapeStyle : 'rounded',
-      text: text(layer.text, 500), fontFamily, fontId: uploadedFontIds.has(layer.fontId) ? layer.fontId : '', image: ['sticker','frame-piece'].includes(type) ? friendCardAsset(layer.image, 800_000, ownerId) : '', imageFit: ['contain','cover','fill'].includes(layer.imageFit) ? layer.imageFit : 'contain', imagePositionX: numeric(layer.imagePositionX, 50, 0, 100), imagePositionY: numeric(layer.imagePositionY, 50, 0, 100), imageMask: ['square','rounded','circle'].includes(layer.imageMask) ? layer.imageMask : 'square', path,
+      text: text(layer.text, 500), fontFamily, fontId: uploadedFontIds.has(layer.fontId) ? layer.fontId : '', image: ['image','sticker','frame-piece'].includes(type) ? friendCardAsset(layer.image, 800_000, ownerId) : '', imageFit: ['contain','cover','fill'].includes(layer.imageFit) ? layer.imageFit : 'contain', imagePositionX: numeric(layer.imagePositionX, 50, 0, 100), imagePositionY: numeric(layer.imagePositionY, 50, 0, 100), imageMask: ['square','rounded','circle'].includes(layer.imageMask) ? layer.imageMask : 'square', path,
       strokeWidth: numeric(layer.strokeWidth, 8, 1, 100), visible: layer.visible !== false, visibilityMode: ['preview','full','both'].includes(layer.visibilityMode) ? layer.visibilityMode : 'both', locked: layer.locked === true
     };
   }).filter(Boolean);
@@ -620,7 +620,7 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
     cornerSize: numeric(source?.cornerSize,9,1,30), cornerSizes: Object.fromEntries(cornerNames.map(name => [name,numeric(source?.cornerSizes?.[name],source?.cornerSize || 9,1,30)])),
     visiblePieces: Object.fromEntries(pieceNames.map(name => [name,source?.visiblePieces?.[name] !== false])),
     horizontalThickness: numeric(source?.horizontalThickness,5,1,25), verticalThickness: numeric(source?.verticalThickness,5,1,25),
-    sideMode: ['stretch','repeat','connected'].includes(source?.sideMode) ? source.sideMode : 'stretch', placement: 'background', visible: source?.visible !== false,
+    sideMode: ['stretch','repeat','connected'].includes(source?.sideMode) ? source.sideMode : 'stretch', placement: 'background', overlap: numeric(source?.overlap,0,0,100), visible: source?.visible !== false,
     alignments: { top: ['left','center','right'].includes(source?.alignments?.top) ? source.alignments.top : 'center', bottom: ['left','center','right'].includes(source?.alignments?.bottom) ? source.alignments.bottom : 'center', left: ['top','middle','bottom'].includes(source?.alignments?.left) ? source.alignments.left : 'middle', right: ['top','middle','bottom'].includes(source?.alignments?.right) ? source.alignments.right : 'middle' }
   });
   const frame = cleanFramePreset(frameSource);
