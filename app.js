@@ -77,7 +77,7 @@
   let cropDialog = null;
   let toastTimer;
 
-  window.SolarisSocial?.configure({api,getUser:()=>currentUser,toast,cardMarkup:member=>friendCardMarkup(member,false,false,'own'),captureCard:captureProfileCard});
+  window.SolarisSocial?.configure({api,getUser:()=>currentUser,toast,cardMarkup:member=>friendCardMarkup(member,false,false,'own'),captureCard:captureProfileCard,viewCard:member=>openFriendCardDialog(member,'preview',true)});
   window.SolarisShop?.configure({api,getUser:()=>currentUser,updateUser:user=>{currentUser=user;profilePreview();},toast});
   const avatarLetters = name => String(name || 'Helunemi').trim().split(/\s+/).filter(Boolean).slice(0,2).map(word => word[0]).join('').toUpperCase() || 'H';
   const avatar = (name, extra = '', image = '') => `<span class="avatar ${extra}" aria-hidden="true">${image ? `<img src="${esc(image)}" alt="">` : esc(avatarLetters(name))}</span>`;
@@ -265,70 +265,241 @@
     if (['avatar','username'].includes(layer.type) && friendCardDesignState.layers.filter(item=>item.type===layer.type).length >= 3) { toast(`${layer.type === 'avatar' ? 'Profile picture' : 'Username'} allows one original and two duplicates.`); return false; }
     return true;
   }
-  function copyFriendCardLayer(cut = false) {
-    const layer = friendCardDesignState?.layers.find(item=>item.id===friendCardSelectedLayer);
-    if (!layer) { toast('Select a layer first.'); return; }
-    if (cut && layer.locked) { toast('Unlock this layer before cutting it.'); return; }
+  let friendCardSelectedLayers = new Set();
+  let friendCardSelectedGroup = '';
+
+  function friendCardSetSelection(ids, groupId = '') {
+    const valid = new Set((friendCardDesignState?.layers || []).map(layer => layer.id));
+    const requested = [...ids].filter(id => valid.has(id));
+    friendCardSelectedLayers = new Set(requested);
+    friendCardSelectedLayer = requested.at(-1) || null;
+    const group = friendCardDesignState?.groups?.find(item => item.id === groupId);
+    const members = group ? friendCardDesignState.layers.filter(layer => layer.groupId === groupId) : [];
+    friendCardSelectedGroup = members.length && members.length === friendCardSelectedLayers.size && members.every(layer => friendCardSelectedLayers.has(layer.id)) ? groupId : '';
+    return friendCardSelection();
+  }
+  function friendCardSelection() {
+    return (friendCardDesignState?.layers || []).filter(layer => friendCardSelectedLayers.has(layer.id));
+  }
+  function syncFriendCardSelection() {
+    const layers = friendCardDesignState?.layers || [], valid = new Set(layers.map(layer => layer.id));
+    friendCardSelectedLayers = new Set([...friendCardSelectedLayers].filter(id => valid.has(id)));
+    if (!friendCardSelectedLayers.size && friendCardSelectedLayer && valid.has(friendCardSelectedLayer)) friendCardSelectedLayers.add(friendCardSelectedLayer);
+    if (!friendCardSelectedLayers.has(friendCardSelectedLayer)) friendCardSelectedLayer = friendCardSelection().at(-1)?.id || null;
+    const group = friendCardDesignState?.groups?.find(item => item.id === friendCardSelectedGroup);
+    const members = group ? layers.filter(layer => layer.groupId === group.id) : [];
+    if (!members.length || members.length !== friendCardSelectedLayers.size || !members.every(layer => friendCardSelectedLayers.has(layer.id))) friendCardSelectedGroup = '';
+  }
+  function revealFriendCardSelection() {
+    const selection = friendCardSelection();
+    if (friendCardViewMode !== 'all' && selection.some(layer => (layer.visibilityMode || 'both') !== 'both' && layer.visibilityMode !== friendCardViewMode)) friendCardViewMode = 'all';
+    friendCardPropertiesTab = 'properties';
+    repaintFriendCardEditor({dirty:false});
+  }
+  function selectFriendCardLayer(id, {toggle = false, preserve = false, individual = false} = {}) {
+    const layer = friendCardDesignState?.layers.find(item => item.id === id); if (!layer) return;
+    syncFriendCardSelection();
+    if (toggle) {
+      const ids = new Set(friendCardSelectedLayers);
+      if (ids.has(id)) ids.delete(id); else ids.add(id);
+      friendCardSetSelection(ids);
+    } else if (preserve && friendCardSelectedLayers.has(id)) {
+      friendCardSelectedLayer = id;
+    } else if (!individual && layer.groupId && friendCardDesignState.groups?.some(group => group.id === layer.groupId)) {
+      friendCardSetSelection(friendCardDesignState.layers.filter(item => item.groupId === layer.groupId).map(item => item.id),layer.groupId);
+    } else friendCardSetSelection([id]);
+    revealFriendCardSelection();
+  }
+  function selectFriendCardGroup(id, toggle = false) {
+    syncFriendCardSelection();
+    const group = friendCardDesignState?.groups?.find(item => item.id === id); if (!group) return;
+    const members = friendCardDesignState.layers.filter(layer => layer.groupId === id).map(layer => layer.id); if (!members.length) return;
+    if (toggle) {
+      const ids = new Set(friendCardSelectedLayers), remove = members.every(layerId => ids.has(layerId));
+      for (const layerId of members) { if (remove) ids.delete(layerId); else ids.add(layerId); }
+      friendCardSetSelection(ids);
+    } else friendCardSetSelection(members,id);
+    revealFriendCardSelection();
+  }
+  function friendCardCompactGroupStack(layers) {
+    const units=[],seen=new Set();
+    for(const layer of [...layers].reverse()) {
+      if(!layer.groupId){units.push([layer]);continue;}
+      if(seen.has(layer.groupId))continue;seen.add(layer.groupId);
+      units.push(layers.filter(item=>item.groupId===layer.groupId));
+    }
+    return units.reverse().flat();
+  }
+  function pruneFriendCardGroups() {
+    if (!friendCardDesignState) return;
+    const groups = Array.isArray(friendCardDesignState.groups) ? friendCardDesignState.groups : [];
+    const known = new Set(groups.map(group => group.id));
+    for (const layer of friendCardDesignState.layers) if (!known.has(layer.groupId)) layer.groupId = '';
+    const used = new Set(friendCardDesignState.layers.map(layer => layer.groupId).filter(Boolean));
+    friendCardDesignState.groups = groups.filter(group => used.has(group.id));
+    friendCardDesignState.layers = friendCardCompactGroupStack(friendCardDesignState.layers);
+    if (!used.has(friendCardSelectedGroup)) friendCardSelectedGroup = '';
+  }
+  function groupFriendCardLayers() {
+    const selected = friendCardSelection();
+    if (selected.length < 2) { toast('Select at least two layers to make a group.'); return; }
+    if (selected.some(layer => layer.locked)) { toast('Unlock the selected layers before grouping them.'); return; }
+    pruneFriendCardGroups();
+    const selectedIds = new Set(selected.map(layer => layer.id));
+    const remainingGroups = (friendCardDesignState.groups || []).filter(group => friendCardDesignState.layers.some(layer => layer.groupId === group.id && !selectedIds.has(layer.id)));
+    if (remainingGroups.length >= 40) { toast('This design has reached its 40 group limit.'); return; }
+    recordFriendCardHistory();
+    const id = 'group-' + crypto.randomUUID(), names = new Set(remainingGroups.map(group => group.name.toLowerCase()));
+    let name = 'Group', suffix = 1; while (names.has(name.toLowerCase())) name = `Group ${suffix++}`;
+    const lastIndex = Math.max(...selected.map(layer => friendCardDesignState.layers.indexOf(layer)));
+    const insertion = friendCardDesignState.layers.slice(0,lastIndex + 1).filter(layer => !selectedIds.has(layer.id)).length;
+    const remaining = friendCardDesignState.layers.filter(layer => !selectedIds.has(layer.id));
+    selected.forEach(layer => { layer.groupId = id; });
+    remaining.splice(insertion,0,...selected);
+    friendCardDesignState.layers = remaining;
+    friendCardDesignState.groups = [...remainingGroups,{id,name,collapsed:false}];
+    pruneFriendCardGroups(); friendCardSetSelection(selected.map(layer => layer.id),id);
+    repaintFriendCardEditor();
+  }
+  function ungroupFriendCardLayers() {
+    const selected = friendCardSelection(); if (!selected.some(layer => layer.groupId)) return;
+    recordFriendCardHistory(); selected.forEach(layer => { layer.groupId = ''; });
+    pruneFriendCardGroups(); friendCardSetSelection(selected.map(layer => layer.id)); repaintFriendCardEditor();
+  }
+
+  function friendCardCopyName(label, reserved) {
+    const base = String(label || 'Layer').replace(/(?: copy(?: \d+)?)+$/i,'').trim() || 'Layer';
+    const names = new Set([...reserved].map(name => String(name).toLowerCase()));
+    let next = 0;
+    for (const name of names) {
+      const match = /^(.*?) copy(?: (\d+))?$/.exec(name);
+      if (!match || match[1].replace(/(?: copy(?: \d+)?)+$/i,'').trim() !== base.toLowerCase()) continue;
+      const number = match[2] ? Number(match[2]) : 0;
+      if (Number.isSafeInteger(number)) next = Math.max(next,number + 1);
+    }
+    let result;
+    do {
+      const suffix = next ? ` copy ${next}` : ' copy';
+      result = base.slice(0,Math.max(1,80 - suffix.length)) + suffix; next++;
+    } while (names.has(result.toLowerCase()));
+    reserved.add(result.toLowerCase());
+    return result;
+  }
+  function friendCardClipboardPayload(layers) {
     const card = friendCardFromForm($('#friend-card-form'));
-    const content = ({likes:card.likes,dislikes:card.dislikes,favorite:card.favoriteThing,lookingFor:card.lookingFor})[layer.type];
-    friendCardClipboard = {ownerId:currentUser.id,source:friendCardDraftKey(),layer:structuredClone(layer),font:structuredClone(friendCardDesignState.fonts.find(item=>item.id===layer.fontId)||null),content};
-    if (cut) deleteFriendCardLayer(layer.id); else toast('Layer copied. Press Ctrl+V to paste.');
+    const linked = {likes:card?.likes,dislikes:card?.dislikes,favorite:card?.favoriteThing,lookingFor:card?.lookingFor};
+    const groupIds = new Set(layers.map(layer => layer.groupId).filter(Boolean));
+    const fontIds = new Set(layers.map(layer => layer.fontId).filter(Boolean));
+    const contents = {};
+    for (const layer of layers) if (Object.prototype.hasOwnProperty.call(linked,layer.type)) contents[layer.id] = linked[layer.type] || '';
+    return {
+      ownerId:currentUser.id,source:friendCardDraftKey(),layers:structuredClone(layers),
+      groups:structuredClone((friendCardDesignState.groups || []).filter(group => groupIds.has(group.id))),
+      fonts:structuredClone((friendCardDesignState.fonts || []).filter(font => fontIds.has(font.id))),contents
+    };
+  }
+  function copyFriendCardLayer(cut = false) {
+    const selected = friendCardSelection(); if (!selected.length) { toast('Select one or more layers first.'); return; }
+    if (cut && selected.some(layer => layer.locked)) { toast('Unlock the selected layers before cutting them.'); return; }
+    friendCardClipboard = friendCardClipboardPayload(selected);
+    if (cut) deleteFriendCardLayer(); else toast(`${selected.length === 1 ? 'Layer' : `${selected.length} layers`} copied. Press Ctrl+V to paste.`);
   }
   function pasteFriendCardLayer(duplicateId = '') {
-    const original = duplicateId ? friendCardDesignState?.layers.find(item=>item.id===duplicateId) : friendCardClipboard?.ownerId === currentUser?.id ? friendCardClipboard.layer : null;
-    if (!original) { toast('Copy a layer first.'); return; }
-    if (!canAddFriendCardLayer(original)) return;
-    recordFriendCardHistory();
-    const layer = {...structuredClone(original),id:'layer-'+crypto.randomUUID(),x:friendCardLimit(original.x+3),y:friendCardLimit(original.y+3),locked:false};
-    if (!['avatar','username'].includes(layer.type)) layer.label = String(layer.label + ' copy').slice(0,80);
-    if (!duplicateId && friendCardClipboard.source !== friendCardDraftKey() && friendCardClipboard.content !== undefined) { layer.type = 'textbox'; layer.text = friendCardClipboard.content; layer.field = ''; }
-    if (!duplicateId && friendCardClipboard.font && !friendCardDesignState.fonts.some(font=>font.id===friendCardClipboard.font.id)) {
-      if (friendCardDesignState.fonts.length < 12) friendCardDesignState.fonts.push(structuredClone(friendCardClipboard.font));
-      else { layer.fontId = ''; layer.fontFamily = 'DM Sans'; }
+    let payload;
+    if (duplicateId) {
+      const original = friendCardDesignState?.layers.find(layer => layer.id === duplicateId); if (!original) return;
+      payload = friendCardClipboardPayload(friendCardSelectedLayers.has(duplicateId) ? friendCardSelection() : [original]);
+    } else payload = friendCardClipboard?.ownerId === currentUser?.id ? friendCardClipboard : null;
+    if (!payload?.layers?.length) { toast('Copy one or more layers first.'); return; }
+    const originals = payload.layers;
+    if (friendCardDesignState.layers.length + originals.length > 80) { toast('Pasting these layers would exceed the 80 layer limit.'); return; }
+    for (const type of ['avatar','username']) {
+      const count = friendCardDesignState.layers.filter(layer => layer.type === type).length + originals.filter(layer => layer.type === type).length;
+      if (count > 3) { toast(`${type === 'avatar' ? 'Profile picture' : 'Username'} allows one original and two duplicates. No layers were pasted.`); return; }
     }
-    friendCardDesignState.layers.push(layer); friendCardSelectedLayer = layer.id; repaintFriendCardEditor();
+    pruneFriendCardGroups();
+    const sourceGroups = (payload.groups || []).filter(group => originals.some(layer => layer.groupId === group.id));
+    if (friendCardDesignState.groups.length + sourceGroups.length > 40) { toast('Pasting these groups would exceed the 40 group limit.'); return; }
+    const reserved = new Set(friendCardDesignState.layers.map(layer => layer.label.toLowerCase()));
+    const reservedGroups = new Set(friendCardDesignState.groups.map(group => group.name.toLowerCase()));
+    const groupIds = new Map(sourceGroups.map(group => [group.id,'group-' + crypto.randomUUID()]));
+    const groups = sourceGroups.map(group => ({id:groupIds.get(group.id),name:friendCardCopyName(group.name,reservedGroups),collapsed:false}));
+    const fonts = structuredClone(friendCardDesignState.fonts || []), crossCard = payload.source !== friendCardDraftKey();
+    const copies = originals.map(original => {
+      const layer = {...structuredClone(original),id:'layer-' + crypto.randomUUID(),x:friendCardLimit(original.x + 3),y:friendCardLimit(original.y + 3),locked:false,groupId:groupIds.get(original.groupId) || ''};
+      layer.label = layer.type === 'avatar' ? 'Profile picture' : layer.type === 'username' ? 'Username' : friendCardCopyName(original.label,reserved);
+      if (crossCard && Object.prototype.hasOwnProperty.call(payload.contents || {},original.id)) { layer.type = 'textbox'; layer.text = payload.contents[original.id]; layer.field = ''; }
+      const font = payload.fonts?.find(item => item.id === layer.fontId);
+      if (font && !fonts.some(item => item.id === font.id)) {
+        if (fonts.length < 12) fonts.push(structuredClone(font)); else { layer.fontId = ''; layer.fontFamily = 'DM Sans'; }
+      }
+      return layer;
+    });
+    recordFriendCardHistory(); friendCardDesignState.layers.push(...copies); friendCardDesignState.groups.push(...groups); friendCardDesignState.fonts = fonts;
+    const groupId = groups.length === 1 && copies.every(layer => layer.groupId === groups[0].id) ? groups[0].id : '';
+    friendCardSetSelection(copies.map(layer => layer.id),groupId); repaintFriendCardEditor();
   }
   function deleteFriendCardLayer(id = friendCardSelectedLayer) {
-    const layer = friendCardDesignState?.layers.find(item=>item.id===id);
-    if (!layer) return;
-    if (layer.locked) { toast('Unlock this layer before deleting it.'); return; }
-    recordFriendCardHistory(); friendCardDesignState.layers = friendCardDesignState.layers.filter(item=>item.id!==id);
-    friendCardSelectedLayer = friendCardDesignState.layers.at(-1)?.id || null; repaintFriendCardEditor();
-    if (['avatar','username'].includes(layer.type)) toast(friendCardIdentityMessage() || 'Layer removed. At least one profile picture and username are still present.');
+    const layer = friendCardDesignState?.layers.find(item => item.id === id); if (!layer) return;
+    const selected = friendCardSelectedLayers.has(id) ? friendCardSelection() : [layer];
+    if (selected.some(item => item.locked)) { toast('Unlock the selected layers before deleting them.'); return; }
+    const ids = new Set(selected.map(item => item.id)); recordFriendCardHistory();
+    friendCardDesignState.layers = friendCardDesignState.layers.filter(item => !ids.has(item.id));
+    pruneFriendCardGroups(); friendCardSetSelection([]); repaintFriendCardEditor();
+    if (selected.some(item => ['avatar','username'].includes(item.type))) toast(friendCardIdentityMessage() || 'Layers removed. Both views still have a profile picture and username.');
   }
+
+  function friendCardLayerListMarkup() {
+    if (!friendCardDesignState?.layers.length) return '<p class="empty-inline">Add an element to start building your card.</p>';
+    const layers = friendCardDesignState.layers, groups = friendCardDesignState.groups || [], seen = new Set();
+    const row = layer => `<div class="friend-layer-row${friendCardSelectedLayers.has(layer.id) ? ' is-current' : ''}" data-layer-row="${esc(layer.id)}"><button type="button" class="friend-layer-select" data-select-layer="${esc(layer.id)}" aria-pressed="${friendCardSelectedLayers.has(layer.id)}" title="${esc(layer.label)}"><span class="friend-layer-kind" aria-hidden="true">${({avatar:'◉',username:'T',likes:'♥',dislikes:'♡',favorite:'★',lookingFor:'⌕',tags:'#',button:'▱',text:'T',textbox:'T',image:'▧',sticker:'▧',shape:'◧','frame-piece':'▣',drawing:'✎',eraser:'⌫'})[layer.type] || '•'}</span><span class="friend-layer-row-text"><span>${esc(layer.label)}</span><small>${layer.visibilityMode === 'preview' ? 'Preview only' : layer.visibilityMode === 'full' ? 'Full view only' : 'Both views'}${layer.locked ? ' · Locked' : ''}</small></span></button><button type="button" class="friend-layer-toggle" data-toggle-layer="${esc(layer.id)}" aria-label="${layer.visible ? 'Hide' : 'Show'} ${esc(layer.label)}" aria-pressed="${layer.visible}">${layer.visible ? '◉' : '○'}</button></div>`;
+    return [...layers].reverse().map(layer => {
+      const group = groups.find(item => item.id === layer.groupId); if (!group) return row(layer);
+      if (seen.has(group.id)) return ''; seen.add(group.id);
+      const members = layers.filter(item => item.groupId === group.id), selected = members.every(item => friendCardSelectedLayers.has(item.id));
+      return `<section class="friend-layer-group${selected ? ' is-current' : ''}" data-layer-group="${esc(group.id)}"><div class="friend-layer-group-head"><button type="button" class="friend-group-expand" data-toggle-group="${esc(group.id)}" aria-expanded="${!group.collapsed}" aria-label="${group.collapsed ? 'Expand' : 'Collapse'} ${esc(group.name)}">${group.collapsed ? '▸' : '▾'}</button><button type="button" class="friend-group-select" data-select-group="${esc(group.id)}" aria-pressed="${selected}" title="Select ${esc(group.name)}"><span aria-hidden="true">▣</span><span>${esc(group.name)}</span><small>${members.length} ${members.length === 1 ? 'item' : 'items'}</small></button><button type="button" class="friend-group-ungroup" data-group-action="ungroup" data-group-id="${esc(group.id)}" aria-label="Ungroup ${esc(group.name)}" title="Ungroup">↗</button></div><div class="friend-layer-group-items"${group.collapsed ? ' hidden' : ''}>${[...members].reverse().map(row).join('')}</div></section>`;
+    }).join('');
+  }
+  function friendCardSelectionPropertiesMarkup() {
+    const selected = friendCardSelection(), group = friendCardDesignState?.groups?.find(item => item.id === friendCardSelectedGroup);
+    if (!group && selected.length < 2) return null;
+    const primary = friendCardSelectedLayer || selected.at(-1)?.id || '', locked = selected.filter(layer => layer.locked).length;
+    return `<div class="friend-properties-shell"><div class="friend-properties-heading"><span class="friend-layer-kind" aria-hidden="true">${group ? '▣' : '◫'}</span><div><strong>${group ? esc(group.name) : `${selected.length} layers selected`}</strong><small>${selected.length} ${selected.length === 1 ? 'item' : 'items'}${locked ? ` · ${locked} locked` : ''}</small></div></div><div class="friend-properties-panes"><div class="friend-properties-content friend-multi-properties">${group ? `<label>Group name<input type="text" data-cfc-group-name="${esc(group.id)}" maxlength="80" value="${esc(group.name)}"></label>` : ''}<p class="panel-help">G moves the selection, R rotates it, and S resizes it. Shift-click individual layers to add or remove them.</p><div class="friend-layer-controls"><button type="button" class="btn btn-ghost btn-sm" data-group-action="group"${selected.length < 2 || locked ? ' disabled' : ''}>Group selected</button>${selected.some(layer => layer.groupId) ? '<button type="button" class="btn btn-ghost btn-sm" data-group-action="ungroup">Ungroup</button>' : ''}<button type="button" class="btn btn-ghost btn-sm" data-duplicate-layer="${esc(primary)}">Duplicate</button><button type="button" class="btn btn-ghost btn-sm" data-selection-visible>${selected.every(layer => layer.visible !== false) ? 'Hide selected' : 'Show selected'}</button><button type="button" class="btn btn-ghost btn-sm" data-selection-lock>${locked === selected.length ? 'Unlock all' : 'Lock all'}</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="front" data-layer-id="${esc(primary)}">Move to front</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="back" data-layer-id="${esc(primary)}">Move to back</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="up" data-layer-id="${esc(primary)}">Move up</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="down" data-layer-id="${esc(primary)}">Move down</button><button type="button" class="btn btn-danger btn-sm" data-delete-layer="${esc(primary)}">Delete selected</button></div></div></div></div>`;
+  }
+
   function setFriendCardView(mode) {
     if (!['all','preview','full'].includes(mode)) return;
     if (friendCardActiveTransform) commitFriendCardTransform();
     friendCardViewMode = mode; updateFriendCardEditorPreview();
   }
   function friendCardShortcut(event) {
-    const form = $('#friend-card-form'); if (!form || event.isComposing) return false;
-    const typing = Boolean(event.target.closest('input,textarea,select,[contenteditable="true"]'));
-    const key = event.key.toLowerCase(), modifier = event.ctrlKey || event.metaKey;
+    const form=$('#friend-card-form');if(!form||event.isComposing||$('dialog[open]'))return false;
+    const typing=Boolean(event.target.closest('input,textarea,select,[contenteditable="true"]'));
+    const key=event.key.toLowerCase(),modifier=event.ctrlKey||event.metaKey;
     if(form.inert){if(modifier&&key==='s')event.preventDefault();return true;}
-    if (modifier && key === 's') { event.preventDefault(); if (!event.repeat) { const button = $('[data-friend-save]'); if (button && !button.disabled) saveFriendCardChanges(false,button); } return true; }
-    if (typing) return false;
-    if (modifier && ['c','x','v','d','z','y'].includes(key)) {
-      event.preventDefault(); if (event.repeat) return true;
-      if (friendCardActiveTransform) commitFriendCardTransform();
-      if (key === 'c' || key === 'x') copyFriendCardLayer(key === 'x');
-      else if (key === 'v') pasteFriendCardLayer();
-      else if (key === 'd') { if(friendCardSelectedLayer)pasteFriendCardLayer(friendCardSelectedLayer);else toast('Select a layer first.'); }
-      else undoFriendCard(key === 'y' || event.shiftKey);
+    if(modifier&&key==='s'){event.preventDefault();if(!event.repeat){const button=$('[data-friend-save]');if(button&&!button.disabled)saveFriendCardChanges(false,button);}return true;}
+    if(typing)return false;
+    if(key==='enter'&&friendCardActiveTransform){event.preventDefault();commitFriendCardTransform();return true;}
+    if(modifier&&key==='a'){event.preventDefault();friendCardSetSelection(friendCardDesignState.layers.map(layer=>layer.id));repaintFriendCardEditor({dirty:false});return true;}
+    if(modifier&&key==='g'){event.preventDefault();if(!event.repeat){if(friendCardActiveTransform)commitFriendCardTransform();if(event.shiftKey)ungroupFriendCardLayers();else groupFriendCardLayers();}return true;}
+    if(modifier&&['c','x','v','d','z','y'].includes(key)){
+      event.preventDefault();if(event.repeat)return true;if(friendCardActiveTransform)commitFriendCardTransform();
+      if(key==='c'||key==='x')copyFriendCardLayer(key==='x');
+      else if(key==='v')pasteFriendCardLayer();
+      else if(key==='d'){if(friendCardSelection().length)pasteFriendCardLayer(friendCardSelectedLayer);else toast('Select one or more layers to duplicate.');}
+      else undoFriendCard(key==='y'||event.shiftKey);
       return true;
     }
-    if (!modifier && ['delete','backspace'].includes(key)) { event.preventDefault(); if (!event.repeat) deleteFriendCardLayer(); return true; }
-    if (!modifier && ['arrowleft','arrowright','arrowup','arrowdown'].includes(key)) {
-      const layer = friendCardDesignState?.layers.find(item=>item.id===friendCardSelectedLayer);
-      if (!layer || layer.locked) return false;
-      event.preventDefault(); if (friendCardActiveTransform) commitFriendCardTransform(); recordFriendCardHistory();
-      const step = event.shiftKey ? 10 : 1;
-      layer.x = friendCardLimit(layer.x + (key === 'arrowleft' ? -1 : key === 'arrowright' ? 1 : 0)*step*100/friendCardDesignState.width);
-      layer.y = friendCardLimit(layer.y + (key === 'arrowup' ? -1 : key === 'arrowdown' ? 1 : 0)*step*100/friendCardDesignState.height);
-      repaintFriendCardEditor({properties:true}); return true;
+    if(!modifier&&['delete','backspace'].includes(key)){event.preventDefault();if(!event.repeat){if(friendCardActiveTransform)commitFriendCardTransform();deleteFriendCardLayer();}return true;}
+    if(!modifier&&['arrowleft','arrowright','arrowup','arrowdown'].includes(key)){
+      const layers=friendCardSelection();if(!layers.length||layers.some(layer=>layer.locked))return false;
+      event.preventDefault();if(friendCardActiveTransform)commitFriendCardTransform();recordFriendCardHistory();const step=event.shiftKey?10:1;
+      for(const layer of layers){layer.x=friendCardLimit(layer.x+(key==='arrowleft'?-1:key==='arrowright'?1:0)*step*100/friendCardDesignState.width);layer.y=friendCardLimit(layer.y+(key==='arrowup'?-1:key==='arrowdown'?1:0)*step*100/friendCardDesignState.height);}
+      repaintFriendCardEditor();return true;
     }
     return false;
   }
+
   function friendCardShapeMarkup(layer) {
     const shapes = {
       star:'<polygon points="50,2 61.5,35 97,35 68.5,56 79.5,91 50,70 20.5,91 31.5,56 3,35 38.5,35"/>',
@@ -365,7 +536,7 @@
     const id = type => `${type}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
     const layer = (type, label, x, y, width, height, extra = {}) => ({id:id(type),type,label,x,y,width,height,rotation:0,fontSize:3.2,color:card.textColor,align:'left',opacity:100,visible:true,locked:false,...extra});
     const ratio = (card.aspectRatio || '1:1').split(':').map(Number), scale = Math.min(1000 / ratio[0],1600 / ratio[0],1200 / ratio[1]), width = Math.round(ratio[0] * scale), height = Math.round(ratio[1] * scale);
-    return {version:1,name:'My Friend-Card',width,height,aspectRatio:card.aspectRatio || '1:1',backgroundLocked:true,showGuides:false,background:{color:card.backgroundColor,image:card.backgroundImage,tint:card.backgroundOverlayColor,tintOpacity:card.backgroundOverlayOpacity,positionX:50,positionY:50,scale:100},frame:{corners:{},sides:{},cornerSize:9,cornerSizes:{topLeft:9,topRight:9,bottomLeft:9,bottomRight:9},visiblePieces:{topLeft:true,topRight:true,bottomLeft:true,bottomRight:true,top:true,bottom:true,left:true,right:true},horizontalThickness:5,verticalThickness:5,sideMode:'stretch',placement:'background',overlap:0,visible:true,alignments:{top:'center',bottom:'center',left:'middle',right:'middle'},presets:[]},layers:[
+    return {version:1,name:'My Friend-Card',width,height,aspectRatio:card.aspectRatio || '1:1',backgroundLocked:true,showGuides:false,background:{color:card.backgroundColor,image:card.backgroundImage,tint:card.backgroundOverlayColor,tintOpacity:card.backgroundOverlayOpacity,positionX:50,positionY:50,scale:100},frame:{corners:{},sides:{},cornerSize:9,cornerSizes:{topLeft:9,topRight:9,bottomLeft:9,bottomRight:9},visiblePieces:{topLeft:true,topRight:true,bottomLeft:true,bottomRight:true,top:true,bottom:true,left:true,right:true},horizontalThickness:5,verticalThickness:5,sideMode:'stretch',placement:'background',overlap:0,visible:true,alignments:{top:'center',bottom:'center',left:'middle',right:'middle'},presets:[]},groups:[],layers:[
       layer('avatar','Profile picture',5,7,18,18,{fontSize:3.5,field:'avatar'}),
       layer('username','Username',27,9,68,12,{fontSize:5,field:'username',fontFamily:'Unbounded',color:card.titleColor,weight:700})
     ]};
@@ -393,6 +564,13 @@
     };
     const normalizedFrame = normalizeFramePreset(frame);
     normalizedFrame.presets = (Array.isArray(frame.presets) ? frame.presets : []).slice(0,8).map(normalizeFramePreset);
+    const usedGroupIds = new Set();
+    const normalizedGroups = (Array.isArray(source.groups) ? source.groups : []).slice(0,40).flatMap(group => {
+      if (!group || typeof group !== 'object') return [];
+      const id=String(group.id || '').replace(/[^A-Za-z0-9_-]/g,'').slice(0,80);
+      if(!id || usedGroupIds.has(id))return [];usedGroupIds.add(id);
+      return [{id,name:String(group.name || 'Group').trim().slice(0,80) || 'Group',collapsed:group.collapsed === true}];
+    });
     const usedLayerIds = new Set();
     const layers = source.layers.slice(0,80).filter(layer => layer && types.has(layer.type)).map((layer,index) => {
       const type = layer.type;
@@ -400,7 +578,7 @@
       if(!layerId||usedLayerIds.has(layerId))layerId='layer-'+crypto.randomUUID();usedLayerIds.add(layerId);
       const width = number(layer.width,20,1,10000);
       return {
-      id:layerId,
+      id:layerId,groupId:usedGroupIds.has(layer.groupId) ? layer.groupId : '',
       type,label:type === 'avatar' ? 'Profile picture' : type === 'username' ? 'Username' : String(layer.label || type || 'Layer').slice(0,80),field:String(layer.field || ''),
       x:number(layer.x,0,-10000,10000),y:number(layer.y,0,-10000,10000),width,height:friendCardSquareLayer(layer) ? width : number(layer.height,10,1,10000),rotation:number(layer.rotation,0,-180,180),
       fontSize:number(layer.fontSize,3.2,1,14),fontFamily:customFontIds.has(layer.fontId) ? `SolarisFont-${layer.fontId}` : builtInFonts.includes(layer.fontFamily) ? layer.fontFamily : 'DM Sans',fontId:customFontIds.has(layer.fontId) ? layer.fontId : '',lineHeight:number(layer.lineHeight,1.2,.8,2.2),letterSpacing:number(layer.letterSpacing,0,-.5,2),italic:layer.italic === true,
@@ -417,12 +595,12 @@
       width = Math.round(ratioWidth * scale); height = Math.round(ratioHeight * scale);
     }
     return {
-      version:1,name:String(source.name || 'My Friend-Card').slice(0,80),width,height,
+      version:1,name:String(source.name || 'My Friend-Card').slice(0,80),width,height,groups:normalizedGroups.filter(group => layers.some(layer => layer.groupId === group.id)),
       aspectRatio,
       backgroundLocked:source.backgroundLocked !== false,showGuides:source.showGuides === true,
       background:{color:color(source.background?.color,card.backgroundColor),image:image(source.background?.image),tint:color(source.background?.tint,card.backgroundOverlayColor),tintOpacity:number(source.background?.tintOpacity,card.backgroundOverlayOpacity,0,85),positionX:number(source.background?.positionX,50,0,100),positionY:number(source.background?.positionY,50,0,100),scale:number(source.background?.scale,100,50,300)},
       brush:{color:color(source.brush?.color,'#332244'),size:number(source.brush?.size,8,1,100),eraserSize:number(source.brush?.eraserSize,26,1,100)},
-      frame:normalizedFrame,fonts:customFonts,stickerLibrary:(Array.isArray(source.stickerLibrary) ? source.stickerLibrary : []).slice(0,20).map((sticker,index) => ({id:String(sticker.id || `sticker-${index}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,80),name:String(sticker.name || 'Sticker').slice(0,80),image:image(sticker.image)})).filter(sticker => sticker.image),layers
+      frame:normalizedFrame,fonts:customFonts,stickerLibrary:(Array.isArray(source.stickerLibrary) ? source.stickerLibrary : []).slice(0,20).map((sticker,index) => ({id:String(sticker.id || `sticker-${index}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,80),name:String(sticker.name || 'Sticker').slice(0,80),image:image(sticker.image)})).filter(sticker => sticker.image),layers:friendCardCompactGroupStack(layers)
     };
   }
   function friendCardLayerContent(layer, card, member, editor, openAction) {
@@ -449,15 +627,15 @@
   function friendCardLayersMarkup(card, member, editor = false, openAction = '', full = false) {
     const design = normalizedFriendCardDesign(card.design,card);
     const action = openAction === 'own' ? 'data-open-own-friend-card' : member.id ? `data-open-friend-card="${esc(member.id)}"` : '';
-    return design.layers.filter(layer => layer.visible !== false && layer.type !== 'eraser' && (editor && friendCardViewMode === 'all' || layer.visibilityMode === 'both' || (full ? layer.visibilityMode === 'full' : layer.visibilityMode === 'preview'))).map((layer,index) => {
+    return design.layers.map((layer,index)=>({layer,index})).filter(({layer})=>friendCardVisibleInView(layer,editor ? friendCardViewMode : full ? 'full' : 'preview')).map(({layer,index}) => {
       const safeWidth = friendCardSize(layer.width), square = friendCardSquareLayer(layer);
       const physicalHeight = square ? safeWidth * design.width / Math.max(1,design.height) : friendCardSize(layer.height);
       const safe = {...layer,x:friendCardLimit(layer.x),y:friendCardLimit(layer.y),width:safeWidth,height:square ? safeWidth : physicalHeight,rotation:Math.max(-180,Math.min(180,Number(layer.rotation)||0)),fontSize:Math.min(14,Math.max(1,Number(layer.fontSize)||3.2)),opacity:Math.min(100,Math.max(0,Number(layer.opacity)||0))};
       const imageRadius = safe.imageMask === 'circle' ? '50%' : safe.imageMask === 'rounded' ? '12%' : '0';
       const radius = safe.shapeStyle === 'circle' ? '50%' : ['rectangle','square','triangle','diamond','star','hexagon'].includes(safe.shapeStyle) ? '0' : `${Math.min(10,Math.max(0,Number(safe.radius)||0)/10)}cqw`;
       const style = `left:${safe.x}%;top:${safe.y}%;width:${safe.width}%;height:${square ? `${safe.width}cqw` : `${safe.height}%`};z-index:${index+1};transform:rotate(${safe.rotation}deg);font-size:calc(${safe.fontSize} * 1cqw);font-family:'${esc(safe.fontFamily)}';font-style:${safe.italic ? 'italic' : 'normal'};line-height:${safe.lineHeight};letter-spacing:${safe.letterSpacing}em;color:${esc(safe.color||card.textColor)};text-align:${safe.align};opacity:${safe.opacity/100};--layer-fill:${esc(safe.fill||card.backgroundColor)};--layer-radius:${radius};--layer-weight:${Number(safe.weight)===700?700:500};--layer-image-fit:${safe.imageFit};--layer-image-position:${safe.imagePositionX}% ${safe.imagePositionY}%;--layer-image-radius:${imageRadius};`;
-      return `<div class="friend-card-layer friend-layer-${['shape','avatar','username','text','image'].includes(safe.type)?esc(safe.type)+'-container':esc(safe.type)}${safe.locked&&editor?' is-locked':''}${editor&&safe.id===friendCardSelectedLayer?' is-selected':''}"${editor?` data-editor-layer="${esc(safe.id)}" tabindex="0" aria-label="Select ${esc(safe.label)}"`:''} style="${style}">${friendCardLayerContent(safe,card,member,editor,action)}${editor&&safe.id===friendCardSelectedLayer&&!safe.locked?'<button type="button" class="friend-layer-rotate" data-rotate-layer aria-label="Rotate selected layer" title="Drag to rotate">↻</button><button type="button" class="friend-layer-resize" data-resize-layer aria-label="Resize selected layer"></button>':''}</div>`;
-    }).join('');
+      return `<div class="friend-card-layer friend-layer-${['shape','avatar','username','text','image'].includes(safe.type)?esc(safe.type)+'-container':esc(safe.type)}${safe.locked&&editor?' is-locked':''}${editor&&friendCardSelectedLayers.has(safe.id)?' is-selected':''}"${editor?` data-editor-layer="${esc(safe.id)}" tabindex="0" aria-label="Select ${esc(safe.label)}"`:''} style="${style}">${friendCardLayerContent(safe,card,member,editor,action)}${editor&&safe.id===friendCardSelectedLayer&&!safe.locked?'<button type="button" class="friend-layer-rotate" data-rotate-layer aria-label="Rotate selected layer" title="Drag to rotate">↻</button><button type="button" class="friend-layer-resize" data-resize-layer aria-label="Resize selected layer"></button>':''}</div>`;
+    }).join('') + (editor ? friendCardSelectionBoundsMarkup() : '');
   }
 
   // Coordinates are percentages of the card surface; overlap slides pieces underneath the card.
@@ -595,15 +773,13 @@
   function friendRangeControl(label, name, value) {
     return `<label class="friend-range-control"><span class="friend-range-heading">${label}<output data-friend-range-output>${Number(value)}%</output></span><input type="range" name="${name}" min="0" max="85" step="1" value="${esc(value)}"></label>`;
   }
-  function friendCardLayerListMarkup() {
-    if (!friendCardDesignState?.layers.length) return '<p class="empty-inline">Add an element to start building your card.</p>';
-    return friendCardDesignState.layers.map(layer => `<div class="friend-layer-row${layer.id === friendCardSelectedLayer ? ' is-current' : ''}" data-layer-row="${esc(layer.id)}"><button type="button" class="friend-layer-select" data-select-layer="${esc(layer.id)}"><span class="friend-layer-kind" aria-hidden="true">${({avatar:'◉',username:'T',likes:'♥',dislikes:'♡',favorite:'★',lookingFor:'⌕',tags:'#',button:'▱',text:'T',image:'▧',sticker:'▧',shape:'◧','frame-piece':'▣',drawing:'✎'})[layer.type] || '•'}</span><span>${esc(layer.label)}</span></button><button type="button" class="friend-layer-toggle" data-toggle-layer="${esc(layer.id)}" aria-label="${layer.visible ? 'Hide' : 'Show'} ${esc(layer.label)}" aria-pressed="${layer.visible}">${layer.visible ? '◉' : '○'}</button></div>`).join('');
-  }
+
   function friendCardFramePresetsMarkup() {
     const presets = friendCardDesignState?.frame?.presets || [];
     return presets.length ? presets.map((preset,index) => `<div class="friend-frame-preset-row"><strong>${esc(preset.name)}</strong><button type="button" class="btn btn-ghost btn-sm" data-load-frame-preset="${index}">Apply</button><button type="button" class="btn btn-ghost btn-sm" data-remove-frame-preset="${index}" aria-label="Remove ${esc(preset.name)}">×</button></div>`).join('') : '<p class="empty-inline">Save your current eight-piece setup to reuse it later.</p>';
   }
   function friendCardLayerPropertiesMarkup() {
+    const multiple = friendCardSelectionPropertiesMarkup(); if (multiple) return multiple;
     const layer = friendCardDesignState?.layers.find(item => item.id === friendCardSelectedLayer);
     if (!layer) return '<div class="friend-properties-empty"><span aria-hidden="true">✦</span><h3>Select a layer</h3><p>Choose an item on the card or in the Layers panel to edit its position, size, and appearance.</p></div>';
     const linkedField = ({likes:'likes',dislikes:'dislikes',favorite:'favoriteThing',lookingFor:'lookingFor',tags:'personalityTags'})[layer.type];
@@ -617,7 +793,7 @@
     const linkedContent = linkedField ? (['likes','dislikes','lookingFor'].includes(layer.type) ? `<label>${layer.type === 'likes' ? 'What I like' : layer.type === 'dislikes' ? 'What I dislike' : 'What I’m looking for'}<textarea data-layer-content-field rows="3" maxlength="400">${esc(getContent())}</textarea></label>` : `<label>${layer.type === 'tags' ? 'Tags (comma separated)' : layer.type === 'favorite' ? 'Favorite thing' : 'Content'}<input data-layer-content-field value="${esc(getContent())}" maxlength="${layer.type === 'favorite' ? 160 : 400}"></label>`) : '';
     const positionControls = friendCardSquareLayer(layer) ? `<label>X position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="x" value="${esc(layer.x)}"></label><label>Y position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="y" value="${esc(layer.y)}"></label><label>Size<input type="number" min="1" max="10000" step="0.1" data-layer-property="width" value="${esc(layer.width)}"></label><label>Rotation<input type="number" min="-180" max="180" step="1" data-layer-property="rotation" value="${esc(layer.rotation)}"></label><label>Opacity<input type="range" min="0" max="100" data-layer-property="opacity" value="${esc(layer.opacity)}"></label>` : `<label>X position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="x" value="${esc(layer.x)}"></label><label>Y position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="y" value="${esc(layer.y)}"></label><label>Width<input type="number" min="1" max="10000" step="0.1" data-layer-property="width" value="${esc(layer.width)}"></label><label>Height<input type="number" min="1" max="10000" step="0.1" data-layer-property="height" value="${esc(layer.height)}"></label><label>Rotation<input type="number" min="-180" max="180" step="1" data-layer-property="rotation" value="${esc(layer.rotation)}"></label><label>Opacity<input type="range" min="0" max="100" data-layer-property="opacity" value="${esc(layer.opacity)}"></label>`;
     const tab = friendCardPropertiesTab === 'assets' ? 'assets' : 'properties';
-    return `<div class="friend-properties-shell"><div class="friend-properties-heading"><span class="friend-layer-kind" aria-hidden="true">✦</span><div><strong>${esc(layer.label)}</strong><small>${esc(layer.type)} layer</small></div></div><nav class="friend-properties-tabs" aria-label="Selected layer settings"><button type="button" data-property-pane-tab="properties" aria-pressed="${tab === 'properties'}">Properties</button><button type="button" data-property-pane-tab="assets" aria-pressed="${tab === 'assets'}">Assets</button></nav><div class="friend-properties-panes"><div class="friend-properties-content" data-property-pane-content="properties"${tab === 'properties' ? '' : ' hidden'}>${!['avatar','username'].includes(layer.type) ? `<label>Layer name<input data-layer-property="label" maxlength="80" value="${esc(layer.label)}"></label>` : ''}${linkedContent}${['text','textbox','button'].includes(layer.type) ? `<label>${layer.type === 'button' ? 'Button label' : 'Text'}<textarea data-layer-property="text" rows="3" maxlength="500">${esc(layer.text || '')}</textarea></label>` : ''}<label>Show in<select data-layer-property="visibilityMode"><option value="both"${layer.visibilityMode === 'both' ? ' selected' : ''}>Preview and full view</option><option value="preview"${layer.visibilityMode === 'preview' ? ' selected' : ''}>Preview only</option><option value="full"${layer.visibilityMode === 'full' ? ' selected' : ''}>Full view only</option></select></label>${['avatar','username'].includes(layer.type) ? '<p class="friend-identity-help">Each view needs a visible PFP and username. You can use separate Preview only and Full view only layers, or one layer in both views.</p>' : ''}<div class="friend-property-grid friend-layer-position-grid">${positionControls}</div>${typographyControls}${layer.type === 'shape' ? `<div class="friend-property-grid">${friendColorControl('Shape color','',layer.fill || '#f5a300','data-layer-property="fill"')}<label>Shape type<select data-layer-property="shapeStyle">${[['rectangle','Rectangle'],['square','Square'],['rounded','Rounded square'],['circle','Circle'],['triangle','Triangle'],['diamond','Diamond'],['star','Star'],['hexagon','Hexagon']].map(([value,label]) => `<option value="${value}"${layer.shapeStyle === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label><label>Corner roundness<input type="number" min="0" max="100" data-layer-property="radius" value="${esc(layer.radius || 8)}"></label></div>` : ''}<div class="friend-layer-controls"><button type="button" class="btn btn-ghost btn-sm" data-duplicate-layer="${esc(layer.id)}">Duplicate</button><button type="button" class="btn btn-ghost btn-sm" data-lock-layer="${esc(layer.id)}">${layer.locked ? 'Unlock' : 'Lock'}</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="up" data-layer-id="${esc(layer.id)}">Move up</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="down" data-layer-id="${esc(layer.id)}">Move down</button><button type="button" class="btn btn-danger btn-sm" data-delete-layer="${esc(layer.id)}">Delete</button></div></div><div class="friend-properties-content friend-property-assets" data-property-pane-content="assets"${tab === 'assets' ? '' : ' hidden'}>${assetContent}</div></div></div>`;
+    return `<div class="friend-properties-shell"><div class="friend-properties-heading"><span class="friend-layer-kind" aria-hidden="true">✦</span><div><strong>${esc(layer.label)}</strong><small>${esc(layer.type)} layer</small></div></div><nav class="friend-properties-tabs" aria-label="Selected layer settings"><button type="button" data-property-pane-tab="properties" aria-pressed="${tab === 'properties'}">Properties</button><button type="button" data-property-pane-tab="assets" aria-pressed="${tab === 'assets'}">Assets</button></nav><div class="friend-properties-panes"><div class="friend-properties-content" data-property-pane-content="properties"${tab === 'properties' ? '' : ' hidden'}>${!['avatar','username'].includes(layer.type) ? `<label>Layer name<input data-layer-property="label" maxlength="80" value="${esc(layer.label)}"></label>` : ''}${linkedContent}${['text','textbox','button'].includes(layer.type) ? `<label>${layer.type === 'button' ? 'Button label' : 'Text'}<textarea data-layer-property="text" rows="3" maxlength="500">${esc(layer.text || '')}</textarea></label>` : ''}<label>Show in<select data-layer-property="visibilityMode"><option value="both"${layer.visibilityMode === 'both' ? ' selected' : ''}>Preview and full view</option><option value="preview"${layer.visibilityMode === 'preview' ? ' selected' : ''}>Preview only</option><option value="full"${layer.visibilityMode === 'full' ? ' selected' : ''}>Full view only</option></select></label>${['avatar','username'].includes(layer.type) ? '<p class="friend-identity-help">Each view needs a visible PFP and username. You can use separate Preview only and Full view only layers, or one layer in both views.</p>' : ''}<div class="friend-property-grid friend-layer-position-grid">${positionControls}</div>${typographyControls}${layer.type === 'shape' ? `<div class="friend-property-grid">${friendColorControl('Shape color','',layer.fill || '#f5a300','data-layer-property="fill"')}<label>Shape type<select data-layer-property="shapeStyle">${[['rectangle','Rectangle'],['square','Square'],['rounded','Rounded square'],['circle','Circle'],['triangle','Triangle'],['diamond','Diamond'],['star','Star'],['hexagon','Hexagon']].map(([value,label]) => `<option value="${value}"${layer.shapeStyle === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label><label>Corner roundness<input type="number" min="0" max="100" data-layer-property="radius" value="${esc(layer.radius || 8)}"></label></div>` : ''}<div class="friend-layer-controls"><button type="button" class="btn btn-ghost btn-sm" data-duplicate-layer="${esc(layer.id)}">Duplicate</button><button type="button" class="btn btn-ghost btn-sm" data-lock-layer="${esc(layer.id)}">${layer.locked ? 'Unlock' : 'Lock'}</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="front" data-layer-id="${esc(layer.id)}">Move to front</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="back" data-layer-id="${esc(layer.id)}">Move to back</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="up" data-layer-id="${esc(layer.id)}">Move up</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="down" data-layer-id="${esc(layer.id)}">Move down</button><button type="button" class="btn btn-danger btn-sm" data-delete-layer="${esc(layer.id)}">Delete</button></div></div><div class="friend-properties-content friend-property-assets" data-property-pane-content="assets"${tab === 'assets' ? '' : ' hidden'}>${assetContent}</div></div></div>`;
   }
   function hiddenFriendCardFields(card) {
     const fields = {friendCardLikes:card.likes,friendCardDislikes:card.dislikes,friendCardFavoriteThing:card.favoriteThing,friendCardLookingFor:card.lookingFor,friendCardPersonalityTags:card.personalityTags.join(', '),friendCardTitleColor:card.titleColor,friendCardTextColor:card.textColor,friendCardMutedTextColor:card.mutedTextColor,friendCardTagTextColor:card.tagTextColor,friendCardButtonOverlayColor:card.buttonOverlayColor,friendCardButtonOverlayOpacity:card.buttonOverlayOpacity,friendCardButtonBorderStyle:card.buttonBorderStyle};
@@ -637,7 +813,7 @@
     let savedDraftDesign = null;
     try { const saved = JSON.parse((localStorage.getItem(friendCardDraftKey()) || (friendCardEditorContext?.id === 'current' ? localStorage.getItem(`solaris-friend-card-draft:${user.id}`) : null)) || 'null'); savedDraftDesign = recoveredDraft ? saved?.design : null; } catch (_) {}
     friendCardDesignState = normalizedFriendCardDesign(savedDraftDesign || card.design,card);
-    friendCardSelectedLayer = friendCardDesignState.layers[0]?.id || null;
+    friendCardSetSelection([friendCardDesignState.layers[0]?.id].filter(Boolean));
     friendCardPropertiesTab = 'properties';
     friendCardAssetValues = {friendCardButtonImage:card.buttonImage || '',friendCardButtonBorderImage:card.buttonBorderImage || ''};
     friendCardUndoStack = []; friendCardRedoStack = [];
@@ -652,10 +828,10 @@
         <div class="friend-editor-section"><h3>Card setup</h3><label>Aspect ratio<select name="friendCardAspectRatio" data-design-ratio><option value="custom"${friendCardDesignState.aspectRatio === 'custom' ? ' selected' : ''}>Custom dimensions</option>${options(friendCardRatios,friendCardDesignState.aspectRatio)}</select></label><div class="friend-property-grid friend-dimensions"><label>Width<input type="number" min="320" max="1600" step="10" data-design-dimension="width" value="${esc(friendCardDesignState.width)}"></label><label>Height<input type="number" min="320" max="1200" step="10" data-design-dimension="height" value="${esc(friendCardDesignState.height)}"></label></div><label>Background<input type="color" name="friendCardBackgroundColor" value="${esc(card.backgroundColor)}"></label><label>Background tint<input type="color" name="friendCardBackgroundOverlayColor" value="${esc(card.backgroundOverlayColor)}"></label>${friendRangeControl('Tint strength','friendCardBackgroundOverlayOpacity',card.backgroundOverlayOpacity)}<div class="friend-background-crop"><span>Background image position</span><div class="friend-property-grid"><label>Horizontal<input type="range" min="0" max="100" value="${esc(friendCardDesignState.background.positionX)}" data-background-property="positionX"></label><label>Vertical<input type="range" min="0" max="100" value="${esc(friendCardDesignState.background.positionY)}" data-background-property="positionY"></label><label>Scale<input type="range" min="50" max="300" value="${esc(friendCardDesignState.background.scale)}" data-background-property="scale"></label></div></div><label class="friend-check-row"><input type="checkbox" data-background-locked${friendCardDesignState.backgroundLocked ? ' checked' : ''}> Lock background from canvas selection</label><label class="friend-check-row"><input type="checkbox" data-show-guides${friendCardDesignState.showGuides ? ' checked' : ''}> Show safe-area guides</label></div>
         <div class="friend-editor-section"><h3>Add to card</h3><div class="friend-tool-grid"><button type="button" data-insert-layer="text">＋ Text</button><button type="button" data-insert-layer="button">▱ Button</button><button type="button" data-insert-image>＋ Image</button><button type="button" data-insert-sticker>▧ Sticker</button><button type="button" data-insert-sticker-url>↗ Image URL</button></div><div class="friend-sticker-library" data-friend-sticker-library>${friendCardStickerLibraryMarkup()}</div><input type="file" accept="image/png,image/jpeg,image/webp" data-cfc-image-input multiple hidden><input type="file" accept="image/png,image/jpeg,image/webp" data-sticker-input hidden></div>
         <details class="friend-editor-section friend-frame-section"><summary><strong>Custom 8-piece frame</strong><small>Frame images stay behind the card. Adjust overlap to tuck them under its edges; Connected mode joins the chosen corners.</small></summary><div class="friend-frame-assets">${frameNames}</div>${framePresets}<div class="friend-property-grid"><label>Default corner size<input type="number" min="1" max="30" data-frame-property="cornerSize" value="${esc(friendCardDesignState.frame.cornerSize || 9)}"></label><label>Horizontal width<input type="number" min="1" max="25" data-frame-property="horizontalThickness" value="${esc(friendCardDesignState.frame.horizontalThickness || 5)}"></label><label>Vertical width<input type="number" min="1" max="25" data-frame-property="verticalThickness" value="${esc(friendCardDesignState.frame.verticalThickness || 5)}"></label><label class="friend-frame-overlap">Overlap behind card <output data-frame-overlap-value>${esc(friendCardDesignState.frame.overlap || 0)}%</output><input type="range" min="0" max="100" step="1" data-frame-property="overlap" value="${esc(friendCardDesignState.frame.overlap || 0)}"></label><label>Side mode<select data-frame-property="sideMode">${options(['stretch','repeat','connected'],friendCardDesignState.frame.sideMode,['Stretch','Repeat','Connected'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Top side alignment<select data-frame-property="alignments.top">${options(['left','center','right'],friendCardDesignState.frame.alignments.top,['Left corner','Both corners','Right corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Bottom side alignment<select data-frame-property="alignments.bottom">${options(['left','center','right'],friendCardDesignState.frame.alignments.bottom,['Left corner','Both corners','Right corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Left side alignment<select data-frame-property="alignments.left">${options(['top','middle','bottom'],friendCardDesignState.frame.alignments.left,['Top corner','Both corners','Bottom corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Right side alignment<select data-frame-property="alignments.right">${options(['top','middle','bottom'],friendCardDesignState.frame.alignments.right,['Top corner','Both corners','Bottom corner'])}</select></label></div><label class="friend-check-row"><input type="checkbox" data-frame-property="visible"${friendCardDesignState.frame.visible ? ' checked' : ''}> Show frame</label></details>
-        <section class="friend-editor-section friend-layer-panel"><div class="friend-panel-title"><h3>Layers</h3><span>${friendCardDesignState.layers.length}</span></div><div data-friend-layer-list>${friendCardLayerListMarkup()}</div></section>
+        <section class="friend-editor-section friend-layer-panel"><div class="friend-panel-title"><h3>Layers</h3><span data-friend-layer-count>${friendCardDesignState.layers.length}</span></div><p class="friend-layer-summary" data-friend-layer-summary role="status"></p><p class="friend-layer-list-help">Frontmost layers are at the top. Shift-click to select several layers.</p><div class="friend-layer-list-actions"><button class="btn btn-ghost btn-sm" type="button" data-group-action="group" data-cfc-group-create>Group selected</button><button class="btn btn-ghost btn-sm" type="button" data-group-action="ungroup" data-cfc-group-ungroup>Ungroup</button></div><div data-friend-layer-list>${friendCardLayerListMarkup()}</div></section>
         <details class="friend-editor-section"><summary><strong>Image assets</strong><small>Card background and legacy frame images.</small></summary><div class="friend-card-asset-list">${imageRows}</div></details>
         <details class="friend-editor-section"><summary><strong>Font library</strong><small>Upload fonts you have permission to use.</small></summary><label class="btn btn-ghost btn-sm friend-font-upload">Upload font<input type="file" accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf" data-friend-font-input hidden></label><div class="friend-font-list" data-friend-font-list>${friendCardFontListMarkup()}</div></details>
-      </aside><section class="friend-editor-center" aria-label="Friend-Card canvas"><div class="friend-canvas-toolbar"><div class="friend-tool-mode" role="toolbar" aria-label="Canvas tools"><button type="button" data-editor-tool="select" aria-pressed="true">↖ Select</button></div><div class="friend-canvas-zoom"><button type="button" data-zoom="out" aria-label="Zoom out">−</button><output data-zoom-label>${friendCardZoom}%</output><button type="button" data-zoom="in" aria-label="Zoom in">＋</button><button type="button" data-zoom="fit">Fit</button><button type="button" data-preview-card>Open preview</button></div><div class="friend-preview-switch" role="group" aria-label="Friend-Card viewport"><span>View:</span><button type="button" data-cfc-view-mode="all" aria-pressed="true">All layers</button><button type="button" data-cfc-view-mode="preview" aria-pressed="false">Preview</button><button type="button" data-cfc-view-mode="full" aria-pressed="false">Full view</button></div></div><div class="friend-canvas-scroll"><div class="friend-canvas-size" style="--friend-editor-zoom:${friendCardZoom / 100}"><div id="friend-card-editor-stage">${friendCardMarkup({...user,friendCard:previewCard},false,true)}</div></div></div><p class="friend-canvas-hint"><span data-cfc-required-notice role="status"></span><span>G move · R rotate · S scale · Ctrl+C/V/X copy/paste/cut · Delete remove · Ctrl+D duplicate · Ctrl+S save · Arrows nudge</span></p></section>
+      </aside><section class="friend-editor-center" aria-label="Friend-Card canvas"><div class="friend-canvas-toolbar"><div class="friend-tool-mode" role="toolbar" aria-label="Canvas tools"><button type="button" data-editor-tool="select" aria-pressed="true">↖ Select</button></div><div class="friend-canvas-zoom"><button type="button" data-zoom="out" aria-label="Zoom out">−</button><output data-zoom-label>${friendCardZoom}%</output><button type="button" data-zoom="in" aria-label="Zoom in">＋</button><button type="button" data-zoom="fit">Fit</button><button type="button" data-preview-card>Open preview</button></div><div class="friend-preview-switch" role="group" aria-label="Friend-Card viewport"><span>View:</span><button type="button" data-cfc-view-mode="all" aria-pressed="true">All layers</button><button type="button" data-cfc-view-mode="preview" aria-pressed="false">Preview</button><button type="button" data-cfc-view-mode="full" aria-pressed="false">Full view</button></div></div><div class="friend-canvas-scroll"><div class="friend-canvas-size" style="--friend-editor-zoom:${friendCardZoom / 100}"><div id="friend-card-editor-stage">${friendCardMarkup({...user,friendCard:previewCard},false,true)}</div></div></div><p class="friend-canvas-hint"><span data-cfc-required-notice role="status"></span><span>Shift-click select · G move · R rotate · S scale · Ctrl+G group · Ctrl+Shift+G ungroup · Ctrl+C/V/X copy/paste/cut · Delete remove</span></p></section>
       <aside class="friend-editor-panel friend-editor-right"><div class="friend-editor-panel-head"><div><span class="section-eyebrow">PROPERTIES</span><h2>Customize</h2></div><button type="button" class="friend-panel-collapse" aria-label="Collapse properties panel" data-collapse-editor-panel="right">›</button></div><div data-friend-properties>${friendCardLayerPropertiesMarkup()}</div><div class="friend-editor-section friend-global-style"><h3>Card appearance</h3><fieldset class="friend-card-stroke-controls" data-cfc-stroke-controls>${friendColorControl('Card stroke','friendCardBorderColor',card.borderColor)}<label>Stroke style<select name="friendCardBorderStyle">${options(['solid','dashed','dotted','double'],card.borderStyle,['Solid','Dashed','Dotted','Double'])}</select></label><label>Stroke width<select name="friendCardBorderWidth">${options(['1','2','3','4','5','6','7','8'],String(card.borderWidth))}</select></label></fieldset><p class="friend-stroke-notice" data-cfc-stroke-notice hidden>Card stroke is disabled while an 8-piece frame is visible. Hide or remove the frame to restore your stroke.</p><label>Card effect<select name="friendCardEffect">${options(['none','glow','lift','shine'],card.effect,['None','Soft glow','Lift on hover','Shine'])}</select></label><h3>Button appearance</h3>${friendColorControl('Button background','friendCardButtonColor',card.buttonColor)}${friendColorControl('Button text','friendCardButtonTextColor',card.buttonTextColor)}${friendColorControl('Button stroke','friendCardButtonBorderColor',card.buttonBorderColor)}</div></aside></div>
       <div class="friend-card-publish-row"><div><strong>${card.published ? 'Your Friend-Card is posted.' : 'Your Friend-Card is private.'}</strong><p>${card.published ? 'Saving changes will update the card shown on the Members page.' : 'It will appear in Members only after you post it.'}</p></div><div class="friend-card-editor-actions"><button class="btn btn-ghost" type="button" data-friend-save-secondary>Save Friend-Card</button><button class="btn btn-primary" type="button" data-post-friend-card>${card.published ? 'Update posted Friend-Card' : 'Post custom friend card'}</button></div><p class="form-message" id="friend-card-post-message" role="status"></p><button class="btn btn-ghost" type="button" data-cancel-edit>Back to profile</button></div></section></form>`;
   }
@@ -670,6 +846,7 @@
     return card;
   }
   function updateFriendCardEditorPreview() {
+    syncFriendCardSelection();
     syncFriendCardFrameControls();
     const form = $('#friend-card-form');
     $$('[data-friend-color-hex]').forEach(input => {
@@ -685,6 +862,7 @@
     if (preview && card && currentUser) { preview.dataset.cfcViewport = friendCardViewMode; preview.innerHTML = friendCardMarkup({...currentUser,friendCard:card},friendCardViewMode === 'full',true); }
     $$('[data-cfc-view-mode]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.cfcViewMode===friendCardViewMode)));
     updateFriendCardRequirementNotice();
+    updateFriendCardLayerCounts();
     requestAnimationFrame(fitFriendCardCanvas);
     const ownPreview = $('.own-friend-card-preview');
     if (ownPreview && card && currentUser) ownPreview.innerHTML = friendCardMarkup({...currentUser,friendCard:card},false,false,'own');
@@ -712,6 +890,7 @@
     try { localStorage.setItem(friendCardDraftKey(),JSON.stringify({design:friendCardDesignState,friendCard:friendCardFromForm($('#friend-card-form')),savedAt:Date.now()})); } catch (_) {}
   }
   function repaintFriendCardEditor(options = {}) {
+    syncFriendCardSelection();
     const list = $('[data-friend-layer-list]');
     if (list && options.layers !== false) list.innerHTML = friendCardLayerListMarkup();
     const fontList = $('[data-friend-font-list]');
@@ -723,18 +902,15 @@
     const properties = $('[data-friend-properties]');
     if (properties && options.properties !== false) properties.innerHTML = friendCardLayerPropertiesMarkup();
     if (options.canvas !== false) updateFriendCardEditorPreview();
-    const status = $('[data-friend-save-status]');
-    if (status) status.textContent = 'Unsaved changes';
-    saveFriendCardDraftLocally();
+    updateFriendCardLayerCounts();
+    const undo=$('[data-friend-undo]'),redo=$('[data-friend-redo]');
+    if(undo)undo.disabled=!friendCardUndoStack.length;if(redo)redo.disabled=!friendCardRedoStack.length;
+    if(options.dirty !== false){
+      const status=$('[data-friend-save-status]');if(status)status.textContent='Unsaved changes';
+      saveFriendCardDraftLocally();
+    }
   }
-  function selectFriendCardLayer(id) {
-    if (!friendCardDesignState?.layers.some(layer => layer.id === id)) return;
-    friendCardSelectedLayer = id;
-    friendCardPropertiesTab = 'properties';
-    const selected=friendCardDesignState.layers.find(layer=>layer.id===id);
-    if(friendCardViewMode!=='all'&&selected?.visibilityMode!=='both'&&selected?.visibilityMode!==friendCardViewMode)friendCardViewMode='all';
-    repaintFriendCardEditor({canvas:true});
-  }
+
   function addFriendCardLayer(type) {
     if (!friendCardDesignState) return;
     if (!canAddFriendCardLayer({type})) return;
@@ -747,7 +923,7 @@
     recordFriendCardHistory();
     const layer = {id,type,...defaults,rotation:0,opacity:100,color:defaults.color || '#302344',align:'center',visible:true,visibilityMode:'both',locked:false,radius:8};
     friendCardDesignState.layers.push(layer);
-    friendCardSelectedLayer = id;
+    friendCardSetSelection([id]);
     repaintFriendCardEditor();
     return layer;
   }
@@ -795,22 +971,72 @@
     const edge = axis === 'x' ? 'x' : 'y', dimension = axis === 'x' ? 'width' : 'height';
     const candidates = [0,(100 - size) / 2,100 - size];
     for (const other of friendCardDesignState?.layers || []) {
-      if (other.id === id || other.visible === false || other.type === 'eraser') continue;
+      if ((id instanceof Set ? id.has(other.id) : other.id === id) || other.visible === false || other.type === 'eraser') continue;
       const start = Number(other[edge]) || 0, otherSize = axis === 'y' && friendCardSquareLayer(other) ? other.width * friendCardDesignState.width / friendCardDesignState.height : Number(other[dimension]) || 0;
       candidates.push(start,start + otherSize - size,start + (otherSize - size) / 2);
     }
     const nearest = candidates.sort((a,b) => Math.abs(a - value) - Math.abs(b - value))[0];
     return nearest != null && Math.abs(nearest - value) <= 1.25 ? nearest : value;
   }
-  function reorderFriendCardLayer(id, direction) {
-    const index = friendCardDesignState?.layers.findIndex(layer => layer.id === id);
-    const next = index + (direction === 'up' ? 1 : -1);
-    if (index == null || index < 0 || next < 0 || next >= friendCardDesignState.layers.length) return;
-    recordFriendCardHistory();
-    const [layer] = friendCardDesignState.layers.splice(index,1);
-    friendCardDesignState.layers.splice(next,0,layer);
-    repaintFriendCardEditor({properties:false});
+  function friendCardVisibleInView(layer, mode = friendCardViewMode) {
+    return layer.visible !== false && layer.type !== 'eraser' && (mode === 'all' || (layer.visibilityMode || 'both') === 'both' || layer.visibilityMode === mode);
   }
+  function updateFriendCardLayerCounts() {
+    if (!friendCardDesignState) return;
+    const layers = friendCardDesignState.layers, visible = layers.filter(layer => friendCardVisibleInView(layer)).length;
+    const count = $('[data-friend-layer-count]'); if (count) count.textContent = String(layers.length);
+    const selected=friendCardSelection(),groupButton=$('[data-cfc-group-create]'),ungroupButton=$('[data-cfc-group-ungroup]');
+    if(groupButton)groupButton.disabled=selected.length<2||selected.some(layer=>layer.locked);
+    if(ungroupButton)ungroupButton.disabled=!selected.some(layer=>layer.groupId);
+    const summary = $('[data-friend-layer-summary]');
+    if (summary) summary.textContent = `${layers.length} layers · ${visible} visible in ${friendCardViewMode === 'all' ? 'All layers' : friendCardViewMode === 'full' ? 'Full view' : 'Preview'} · ${friendCardDesignState.groups?.length || 0} groups · ${friendCardSelection().length} selected`;
+  }
+  function friendCardMoveStack(items, selected, direction) {
+    const moving = items.filter(item => selected.has(item.id)), remaining = items.filter(item => !selected.has(item.id));
+    if (direction === 'front') return [...remaining,...moving];
+    if (direction === 'back') return [...moving,...remaining];
+    const result = items.slice();
+    if (direction === 'up') {
+      for(let index=result.length-2;index>=0;index--) if(selected.has(result[index].id)&&!selected.has(result[index+1].id)) [result[index],result[index+1]]=[result[index+1],result[index]];
+    } else {
+      for(let index=1;index<result.length;index++) if(selected.has(result[index].id)&&!selected.has(result[index-1].id)) [result[index],result[index-1]]=[result[index-1],result[index]];
+    }
+    return result;
+  }
+  function reorderFriendCardLayer(id, direction) {
+    if (!friendCardDesignState || !['up','down','front','back'].includes(direction)) return;
+    const selection = friendCardSelectedLayers.has(id) || !id ? friendCardSelection() : friendCardDesignState.layers.filter(layer => layer.id === id);
+    if (!selection.length) return;
+    const selected = new Set(selection.map(layer => layer.id)), before = friendCardSnapshot();
+    const parent = selection[0].groupId, members = parent ? friendCardDesignState.layers.filter(layer => layer.groupId === parent) : [];
+    if (parent && selection.every(layer => layer.groupId === parent) && selection.length < members.length && !friendCardSelectedGroup) {
+      const ordered = friendCardMoveStack(members,selected,direction); let offset=0;
+      friendCardDesignState.layers=friendCardDesignState.layers.map(layer => layer.groupId === parent ? ordered[offset++] : layer);
+    } else {
+      const units=[],seen=new Set();
+      for(const layer of friendCardDesignState.layers){
+        const key=layer.groupId ? 'group:'+layer.groupId : 'layer:'+layer.id;
+        if(seen.has(key))continue;seen.add(key);
+        units.push({id:key,layers:layer.groupId ? friendCardDesignState.layers.filter(item => item.groupId === layer.groupId) : [layer]});
+      }
+      const selectedUnits=new Set(units.filter(unit => unit.layers.some(layer => selected.has(layer.id))).map(unit => unit.id));
+      friendCardDesignState.layers=friendCardMoveStack(units,selectedUnits,direction).flatMap(unit => unit.layers);
+    }
+    if (friendCardSnapshot() === before) return;
+    friendCardUndoStack.push(before);if(friendCardUndoStack.length>80)friendCardUndoStack.shift();friendCardRedoStack=[];
+    repaintFriendCardEditor();
+  }
+  function setFriendCardSelectionLocked() {
+    const selected=friendCardSelection();if(!selected.length)return;
+    recordFriendCardHistory();const lock=selected.some(layer=>!layer.locked);
+    selected.forEach(layer=>{layer.locked=lock;});repaintFriendCardEditor();
+  }
+  function setFriendCardSelectionVisible() {
+    const selected=friendCardSelection();if(!selected.length)return;
+    recordFriendCardHistory();const visible=selected.some(layer=>layer.visible===false);
+    selected.forEach(layer=>{layer.visible=visible;});repaintFriendCardEditor();
+  }
+
   function undoFriendCard(redo = false) {
     const from = redo ? friendCardRedoStack : friendCardUndoStack;
     const to = redo ? friendCardUndoStack : friendCardRedoStack;
@@ -1029,7 +1255,7 @@
     await hydrate(data,null,null);
     recordFriendCardHistory();
     friendCardDesignState = normalizedFriendCardDesign(data.design,normalizedFriendCard(data.friendCard));
-    friendCardSelectedLayer = friendCardDesignState.layers[0]?.id || null;
+    friendCardSetSelection([friendCardDesignState.layers[0]?.id].filter(Boolean));
     const form = $('#friend-card-form');
     const imported = data.friendCard || {};
     for (const [key,value] of Object.entries(imported)) {
@@ -1126,14 +1352,47 @@
     finally{form.inert=false;form.removeAttribute('aria-busy');controls.forEach(control=>control.disabled=false);}
   }
 
-  function openFriendCardDialog(member,initialView='full') {
-    let dialog=$('#friend-card-dialog');
-    if(!dialog){dialog=document.createElement('dialog');dialog.id='friend-card-dialog';dialog.className='friend-card-dialog';dialog.setAttribute('aria-label','Friend-Card preview');dialog.innerHTML='<button class="friend-card-dialog-close" type="button" data-close-friend-card aria-label="Close Friend-Card">×</button><div id="friend-card-dialog-content"></div>';dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});document.body.append(dialog);}
-    const content=$('#friend-card-dialog-content',dialog),editing=Boolean($('#friend-card-form'));
-    const paint=mode=>{content.innerHTML=`<div class="friend-preview-switch friend-dialog-view-switch" role="group" aria-label="Friend-Card view"><button type="button" data-dialog-cfc-view="preview" aria-pressed="${mode==='preview'}">Preview</button><button type="button" data-dialog-cfc-view="full" aria-pressed="${mode==='full'}">Full view</button></div><div${editing?' inert':''}>${friendCardMarkup(member,mode==='full')}</div>${editing?'':communityFriendAction(member)}`;};
-    content.onclick=event=>{const button=event.target.closest('[data-dialog-cfc-view]');if(button)paint(button.dataset.dialogCfcView);};
-    paint(initialView==='preview'?'preview':'full');if(!dialog.open)dialog.showModal();
+  function fitFriendCardViewer(dialog) {
+    const viewport = $('[data-cfc-view-viewport]',dialog), plane = $('[data-cfc-view-plane]',dialog), surface = $('[data-cfc-view-surface]',dialog);
+    const design = dialog.friendCardViewerDesign;
+    if (!viewport || !plane || !surface || !design || !dialog.open) return;
+    const ratio = design.width / Math.max(1,design.height);
+    // The surface fits independently of decorative frame dimensions.
+    const width = Math.max(1,Math.floor(Math.min(680,design.width,Math.max(1,viewport.clientWidth - 48),Math.max(1,viewport.clientHeight - 48) * ratio)));
+    const height = width / ratio, insets = friendCardFrameInsets(design);
+    const horizontal = Math.max(insets.left,insets.right) * width / 100 + 24;
+    const vertical = Math.max(insets.top,insets.bottom) * height / 100 + 24;
+    surface.style.width = `${width}px`;
+    plane.style.minWidth = `${Math.ceil(width + 2 * horizontal)}px`;
+    plane.style.minHeight = `${Math.ceil(height + 2 * vertical)}px`;
+    viewport.scrollLeft = Math.max(0,(viewport.scrollWidth - viewport.clientWidth) / 2);
+    viewport.scrollTop = Math.max(0,(viewport.scrollHeight - viewport.clientHeight) / 2);
   }
+  function openFriendCardDialog(member,initialView = 'full',passive = false) {
+    let dialog = $('#friend-card-dialog');
+    if (!dialog) {
+      dialog = document.createElement('dialog'); dialog.id = 'friend-card-dialog'; dialog.className = 'friend-card-dialog';
+      dialog.setAttribute('aria-label','Friend-Card viewer');
+      dialog.innerHTML = '<button class="friend-card-dialog-close" type="button" data-close-friend-card aria-label="Close Friend-Card">×</button><div id="friend-card-dialog-content"></div>';
+      dialog.addEventListener('click',event => {
+        if (event.target === dialog || event.target.matches('[data-cfc-view-viewport],[data-cfc-view-plane]')) dialog.close();
+      });
+      window.addEventListener('resize',() => { if (dialog.open) fitFriendCardViewer(dialog); });
+      document.body.append(dialog);
+    }
+    const content = $('#friend-card-dialog-content',dialog), editing = Boolean($('#friend-card-form')), readonly = editing || passive;
+    const card = normalizedFriendCard(member.friendCard);
+    dialog.friendCardViewerDesign = normalizedFriendCardDesign(card.design,card);
+    const paint = mode => {
+      content.innerHTML = `<div class="friend-preview-switch friend-dialog-view-switch" role="group" aria-label="Friend-Card view"><button type="button" data-dialog-cfc-view="preview" aria-pressed="${mode === 'preview'}">Preview</button><button type="button" data-dialog-cfc-view="full" aria-pressed="${mode === 'full'}">Full view</button></div><div class="friend-card-view-viewport" data-cfc-view-viewport><div class="friend-card-view-plane" data-cfc-view-plane><div class="friend-card-view-surface" data-cfc-view-surface${readonly ? ' inert' : ''}>${friendCardMarkup(member,mode === 'full')}</div></div></div><div class="friend-card-view-actions">${readonly ? '' : communityFriendAction(member)}</div>`;
+      requestAnimationFrame(() => fitFriendCardViewer(dialog));
+    };
+    content.onclick = event => { const button = event.target.closest('[data-dialog-cfc-view]'); if (button) paint(button.dataset.dialogCfcView); };
+    paint(initialView === 'preview' ? 'preview' : 'full');
+    if (!dialog.open) dialog.showModal();
+    requestAnimationFrame(() => fitFriendCardViewer(dialog));
+  }
+
 
   async function loadMemberProfiles() {
     const grid = $('#member-card-grid');
@@ -2243,11 +2502,28 @@
   function fitFriendCardCanvas() {
     const frame = $('.friend-canvas-scroll'), size = $('.friend-canvas-size');
     if (!frame || !size || !friendCardDesignState) return;
-    const insets = friendCardFrameInsets(friendCardDesignState);
-    const ratio = friendCardDesignState.width * (100 + insets.left + insets.right) / (Math.max(1,friendCardDesignState.height) * (100 + insets.top + insets.bottom));
-    const maxWidth = Math.max(1,frame.clientWidth - 24), maxHeight = Math.max(1,frame.clientHeight - 24);
-    size.style.width = `${Math.max(1,Math.floor(Math.min(maxWidth,maxHeight * ratio)))}px`;
+    const design = friendCardDesignState, ratio = design.width / Math.max(1,design.height);
+    // Frame changes only change available pan space, never the card's display size.
+    const width = Math.max(1,Math.floor(Math.min(design.width,Math.max(1,frame.clientWidth - 24),Math.max(1,frame.clientHeight - 24) * ratio)));
+    const height = width / ratio, insets = friendCardFrameInsets(design);
+    const horizontal = Math.max(insets.left,insets.right) * width / 100 + 16;
+    const vertical = Math.max(insets.top,insets.bottom) * height / 100 + 16;
+    const key = [width,height,horizontal,vertical,frame.clientWidth,frame.clientHeight].join(':');
+    if (size.dataset.cfcFit === key) return;
+    const beforeWidth = frame.scrollWidth, beforeHeight = frame.scrollHeight, initialized = Boolean(size.dataset.cfcFit);
+    size.style.width = `${width}px`;
+    frame.style.gridTemplateColumns = `minmax(${Math.ceil(width + 2 * horizontal)}px,1fr)`;
+    frame.style.gridTemplateRows = `minmax(${Math.ceil(height + 2 * vertical)}px,1fr)`;
+    size.dataset.cfcFit = key;
+    if (initialized) {
+      frame.scrollLeft += (frame.scrollWidth - beforeWidth) / 2;
+      frame.scrollTop += (frame.scrollHeight - beforeHeight) / 2;
+    } else {
+      frame.scrollLeft = Math.max(0,(frame.scrollWidth - frame.clientWidth) / 2);
+      frame.scrollTop = Math.max(0,(frame.scrollHeight - frame.clientHeight) / 2);
+    }
   }
+
   window.addEventListener('resize',() => { if ($('#friend-card-form')) fitFriendCardCanvas(); });
   function setFriendCardTransformMode(mode) {
     if (!['move','rotate','scale'].includes(mode)) return;
@@ -2256,61 +2532,129 @@
     $$('[data-editor-tool]').forEach(button => button.setAttribute('aria-pressed',String(button.dataset.editorTool === 'select')));
     $$('[data-transform-mode]').forEach(button => button.setAttribute('aria-pressed',String(button.dataset.transformMode === mode)));
   }
+  function friendCardSelectionBox(layers = friendCardSelection()) {
+    if (!layers.length || !friendCardDesignState) return null;
+    const design = friendCardDesignState;
+    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+    for (const layer of layers) {
+      const width = layer.width * design.width / 100;
+      const height = friendCardSquareLayer(layer) ? width : layer.height * design.height / 100;
+      const x = layer.x * design.width / 100 + width / 2, y = layer.y * design.height / 100 + height / 2;
+      const angle = layer.rotation * Math.PI / 180;
+      const halfWidth = (Math.abs(width * Math.cos(angle)) + Math.abs(height * Math.sin(angle))) / 2;
+      const halfHeight = (Math.abs(width * Math.sin(angle)) + Math.abs(height * Math.cos(angle))) / 2;
+      left = Math.min(left,x-halfWidth); right = Math.max(right,x+halfWidth);
+      top = Math.min(top,y-halfHeight); bottom = Math.max(bottom,y+halfHeight);
+    }
+    return {x:left,y:top,width:Math.max(1,right-left),height:Math.max(1,bottom-top)};
+  }
+  function friendCardSelectionBoundsMarkup() {
+    if (friendCardSelection().length < 2) return '';
+    const box = friendCardSelectionBox(); if (!box) return '';
+    return `<div class="friend-multi-selection" data-cfc-selection-bounds aria-hidden="true" style="left:${box.x/friendCardDesignState.width*100}%;top:${box.y/friendCardDesignState.height*100}%;width:${box.width/friendCardDesignState.width*100}%;height:${box.height/friendCardDesignState.height*100}%"></div>`;
+  }
+  function refreshFriendCardSelectionBounds() {
+    const box = friendCardSelectionBox(), element = $('[data-cfc-selection-bounds]');
+    if (!box || !element) return;
+    element.style.left = `${box.x/friendCardDesignState.width*100}%`; element.style.top = `${box.y/friendCardDesignState.height*100}%`;
+    element.style.width = `${box.width/friendCardDesignState.width*100}%`; element.style.height = `${box.height/friendCardDesignState.height*100}%`;
+  }
+  function captureFriendCardTransform(mode, startX, startY) {
+    const layers = friendCardSelection(), stage = $('#friend-card-editor-stage .friend-card');
+    if (!layers.length || !stage) { toast('Select one or more layers first.'); return null; }
+    if (layers.some(layer => layer.locked)) { toast('Unlock the selected layers before transforming them.'); return null; }
+    const box = friendCardSelectionBox(layers), bounds = stage.getBoundingClientRect();
+    const centerX = bounds.left + (box.x + box.width/2) / friendCardDesignState.width * bounds.width;
+    const centerY = bounds.top + (box.y + box.height/2) / friendCardDesignState.height * bounds.height;
+    return {mode,startX,startY,centerX,centerY,startAngle:Math.atan2(startY-centerY,startX-centerX),bounds,box,layers:structuredClone(layers),snapshot:friendCardSnapshot(),axis:'both'};
+  }
   function beginFriendCardTransform(mode) {
     if (friendCardActiveTransform) commitFriendCardTransform();
-    const layer = friendCardDesignState?.layers.find(item => item.id === friendCardSelectedLayer);
-    const stage = $('#friend-card-editor-stage .friend-card');
-    if (!layer || !stage) { toast('Select a layer on the card first.'); return; }
-    if (layer.locked) { toast('Unlock this layer before changing it.'); return; }
-    setFriendCardTransformMode(mode);
-    const element = $(`[data-editor-layer="${CSS.escape(layer.id)}"]`), rect = element?.getBoundingClientRect(), bounds = stage.getBoundingClientRect();
-    let startX = friendCardPointer.x, startY = friendCardPointer.y;
-    if (!Number.isFinite(startX) || !Number.isFinite(startY)) { startX = rect?.left + (rect?.width || 0) / 2 || bounds.left; startY = rect?.top + (rect?.height || 0) / 2 || bounds.top; }
-    const centerX = (rect?.left || bounds.left) + (rect?.width || 0) / 2, centerY = (rect?.top || bounds.top) + (rect?.height || 0) / 2;
-    friendCardActiveTransform = {id:layer.id,mode,startX,startY,centerX,centerY,startAngle:Math.atan2(startY-centerY,startX-centerX),bounds,layer:{...layer},snapshot:friendCardSnapshot(),axis:'both'};
+    const transform = captureFriendCardTransform(mode,friendCardPointer.x,friendCardPointer.y);
+    if (!transform) return;
+    setFriendCardTransformMode(mode); friendCardActiveTransform = transform;
     document.body.classList.add('friend-transform-active');
-    const status = $('[data-friend-save-status]'); if (status) status.textContent = `${mode[0].toUpperCase()}${mode.slice(1)} mode · move the pointer, click the card to apply, Esc to cancel`;
-  }
-  function applyFriendCardTransform(layer, original, dx, dy, axis = 'both') {
-    const aspect = friendCardDesignState.width / Math.max(1,friendCardDesignState.height);
-    if (friendCardSquareLayer(layer)) {
-      const delta = axis === 'x' ? dx : axis === 'y' ? dy*aspect : Math.abs(dx)>=Math.abs(dy*aspect)?dx:dy*aspect;
-      layer.width = friendCardSize(original.width+delta); layer.height = layer.width;
-    } else {
-      if (axis !== 'y') layer.width = friendCardSize(original.width+dx);
-      if (axis !== 'x') layer.height = friendCardSize(original.height+dy);
-    }
+    const status = $('[data-friend-save-status]');
+    if (status) status.textContent = `${mode[0].toUpperCase()+mode.slice(1)} ${transform.layers.length > 1 ? transform.layers.length+' layers' : 'layer'} · click or Enter to apply · Esc to cancel`;
   }
   function updateFriendCardTransformElement(layer) {
     const element = $(`[data-editor-layer="${CSS.escape(layer.id)}"]`);
-    if (element) { element.style.left=`${layer.x}%`;element.style.top=`${layer.y}%`;element.style.width=`${layer.width}%`;element.style.height=friendCardSquareLayer(layer)?`${layer.width}cqw`:`${layer.height}%`;element.style.transform=`rotate(${layer.rotation}deg)`; }
-    $$('[data-layer-property]').forEach(input=>{if(input.dataset.layerProperty in layer)input.value=layer[input.dataset.layerProperty];});
+    if (element) {
+      element.style.left=`${layer.x}%`; element.style.top=`${layer.y}%`; element.style.width=`${layer.width}%`;
+      element.style.height=friendCardSquareLayer(layer)?`${layer.width}cqw`:`${layer.height}%`;
+      element.style.transform=`rotate(${layer.rotation}deg)`; element.style.fontSize=`calc(${layer.fontSize} * 1cqw)`;
+    }
+    if (friendCardSelection().length === 1) $$('[data-layer-property]').forEach(input => { if(input.dataset.layerProperty in layer) input.value=layer[input.dataset.layerProperty]; });
+  }
+  function applyFriendCardSelectionTransform(transform, event) {
+    const design = friendCardDesignState, box = transform.box;
+    let dx = (event.clientX-transform.startX)/transform.bounds.width*100;
+    let dy = (event.clientY-transform.startY)/transform.bounds.height*100;
+    const selectedIds = new Set(transform.layers.map(layer => layer.id));
+    if (transform.mode === 'move') {
+      dx = snapFriendCardPosition(box.x/design.width*100+dx,box.width/design.width*100,'x',selectedIds)-box.x/design.width*100;
+      dy = snapFriendCardPosition(box.y/design.height*100+dy,box.height/design.height*100,'y',selectedIds)-box.y/design.height*100;
+    }
+    let fx = transform.axis === 'y' ? 1 : Math.max(.01,(box.width+dx*design.width/100)/box.width);
+    let fy = transform.axis === 'x' ? 1 : Math.max(.01,(box.height+dy*design.height/100)/box.height);
+    if (transform.layers.length === 1 && friendCardSquareLayer(transform.layers[0])) {
+      const factor = transform.axis === 'x' ? fx : transform.axis === 'y' ? fy : Math.abs(fx-1)>=Math.abs(fy-1)?fx:fy;
+      fx = factor; fy = factor;
+    }
+    const radians = Math.atan2(event.clientY-transform.centerY,event.clientX-transform.centerX)-transform.startAngle;
+    const cos = Math.cos(radians), sin = Math.sin(radians);
+    const groupX = box.x+box.width/2, groupY = box.y+box.height/2;
+    for (const original of transform.layers) {
+      const layer = design.layers.find(item => item.id === original.id); if (!layer) continue;
+      if (transform.mode === 'move') {
+        layer.x=friendCardLimit(original.x+dx); layer.y=friendCardLimit(original.y+dy);
+      } else {
+        const width = original.width*design.width/100;
+        const height = friendCardSquareLayer(original) ? width : original.height*design.height/100;
+        const centerX = original.x*design.width/100+width/2, centerY = original.y*design.height/100+height/2;
+        if (transform.mode === 'rotate') {
+          const offsetX = centerX-groupX, offsetY = centerY-groupY;
+          layer.x=friendCardLimit((groupX+offsetX*cos-offsetY*sin-width/2)/design.width*100);
+          layer.y=friendCardLimit((groupY+offsetX*sin+offsetY*cos-height/2)/design.height*100);
+          layer.rotation=((original.rotation+radians*180/Math.PI+180)%360+360)%360-180;
+        } else {
+          let newWidth=width*fx,newHeight=height*fy;
+          if (friendCardSquareLayer(original)) {
+            const factor=transform.axis==='x'?fx:transform.axis==='y'?fy:Math.abs(fx-1)>=Math.abs(fy-1)?fx:fy;
+            newWidth=width*factor; newHeight=newWidth;
+          }
+          layer.width=friendCardSize(newWidth/design.width*100);
+          layer.height=friendCardSquareLayer(original)?layer.width:friendCardSize(newHeight/design.height*100);
+          layer.x=friendCardLimit((box.x+(centerX-box.x)*fx-newWidth/2)/design.width*100);
+          layer.y=friendCardLimit((box.y+(centerY-box.y)*fy-newHeight/2)/design.height*100);
+          if (transform.layers.length>1) layer.fontSize=Math.max(1,Math.min(14,original.fontSize*Math.min(fx,fy)));
+        }
+      }
+      updateFriendCardTransformElement(layer);
+    }
+    refreshFriendCardSelectionBounds();
   }
   function updateFriendCardActiveTransform(event) {
-    const transform=friendCardActiveTransform,layer=friendCardDesignState?.layers.find(item=>item.id===transform?.id);
-    if(!transform||!layer)return;
-    const dx=(event.clientX-transform.startX)/transform.bounds.width*100,dy=(event.clientY-transform.startY)/transform.bounds.height*100;
-    if(transform.mode==='move') {const height=friendCardSquareLayer(layer)?layer.width*friendCardDesignState.width/friendCardDesignState.height:layer.height;layer.x=snapFriendCardPosition(friendCardLimit(transform.layer.x+dx),layer.width,'x',layer.id);layer.y=snapFriendCardPosition(friendCardLimit(transform.layer.y+dy),height,'y',layer.id);}
-    else if(transform.mode==='rotate'){const angle=Math.atan2(event.clientY-transform.centerY,event.clientX-transform.centerX);layer.rotation=Math.max(-180,Math.min(180,transform.layer.rotation+(angle-transform.startAngle)*180/Math.PI));}
-    else applyFriendCardTransform(layer,transform.layer,dx,dy,transform.axis);
-    updateFriendCardTransformElement(layer);
+    if (friendCardActiveTransform) applyFriendCardSelectionTransform(friendCardActiveTransform,event);
   }
-
+  function rememberFriendCardTransform(snapshot) {
+    if (friendCardSnapshot() === snapshot) return false;
+    friendCardUndoStack.push(snapshot); if(friendCardUndoStack.length>80) friendCardUndoStack.shift(); friendCardRedoStack=[];
+    return true;
+  }
   function commitFriendCardTransform() {
     if (!friendCardActiveTransform) return;
-    const snapshot = friendCardActiveTransform.snapshot;
-    const changed = friendCardSnapshot() !== snapshot;
-    friendCardActiveTransform = null; document.body.classList.remove('friend-transform-active');
-    if (changed) { friendCardUndoStack.push(snapshot); if (friendCardUndoStack.length > 80) friendCardUndoStack.shift(); friendCardRedoStack = []; }
-    const status = $('[data-friend-save-status]'); if (status && changed) status.textContent = 'Unsaved changes';
-    repaintFriendCardEditor({properties:false});
+    const changed = rememberFriendCardTransform(friendCardActiveTransform.snapshot);
+    friendCardActiveTransform=null; document.body.classList.remove('friend-transform-active');
+    setFriendCardTransformMode('move'); repaintFriendCardEditor({dirty:changed});
   }
   function cancelFriendCardTransform() {
     if (!friendCardActiveTransform) return false;
-    try { friendCardDesignState = normalizedFriendCardDesign(JSON.parse(friendCardActiveTransform.snapshot),friendCardFromForm($('#friend-card-form')) || currentUser.friendCard); } catch (_) {}
-    friendCardActiveTransform = null; document.body.classList.remove('friend-transform-active'); repaintFriendCardEditor();
-    return true;
+    friendCardDesignState=normalizedFriendCardDesign(JSON.parse(friendCardActiveTransform.snapshot),friendCardFromForm($('#friend-card-form'))||currentUser.friendCard);
+    friendCardActiveTransform=null; document.body.classList.remove('friend-transform-active');
+    setFriendCardTransformMode('move'); repaintFriendCardEditor({dirty:false}); return true;
   }
+
   function profileEditor(user) {
     const socials = socialRowsMarkup(user.socials);
     const favs = favoritesFor(user);
@@ -2567,75 +2911,69 @@
     if (page === 'account') app.innerHTML = isGuest && !new URLSearchParams(location.search).has('mode') ? guestDashboard() : authView('signup','Could not reach the account server. Start the site with node server.js and reload.');
   });
 
+  let friendCardCanvasPointerHandled = false;
   document.addEventListener('pointerdown',event => {
-    const stage = $('#friend-card-editor-stage .friend-card');
-    if (!stage || !friendCardDesignState || event.button !== 0) return;
-    if (friendCardActiveTransform) {
-      if (event.target.closest('#friend-card-editor-stage')) { event.preventDefault(); commitFriendCardTransform(); return; }
+    friendCardCanvasPointerHandled=false;
+    const stage=$('#friend-card-editor-stage .friend-card');
+    if(!stage||!friendCardDesignState||event.button!==0||$('#friend-card-form')?.inert||$('dialog[open]'))return;
+    if(friendCardActiveTransform){
+      if(event.target.closest('#friend-card-editor-stage')){event.preventDefault();friendCardCanvasPointerHandled=true;commitFriendCardTransform();return;}
       commitFriendCardTransform();
     }
-    const bounds = stage.getBoundingClientRect();
-    const scroller = event.target.closest('.friend-canvas-scroll');
-    if (scroller && friendCardActiveTool === 'select' && friendCardTransformMode === 'move' && !event.target.closest('[data-editor-layer],button,input,textarea,select,a')) {
-      friendCardPan = {scroller,startX:event.clientX,startY:event.clientY,scrollLeft:scroller.scrollLeft,scrollTop:scroller.scrollTop};
-      scroller.classList.add('is-panning'); event.preventDefault(); return;
+    const element=event.target.closest('[data-editor-layer]');
+    if(element&&friendCardActiveTool==='select'){
+      event.preventDefault(); friendCardCanvasPointerHandled=true;
+      const id=element.dataset.editorLayer;
+      if(event.shiftKey){selectFriendCardLayer(id,{toggle:true,individual:true});$(`[data-editor-layer="${CSS.escape(id)}"]`)?.focus({preventScroll:true});return;}
+      selectFriendCardLayer(id,{preserve:!event.altKey,individual:event.altKey});
+      $(`[data-editor-layer="${CSS.escape(id)}"]`)?.focus({preventScroll:true});
+      const mode=event.target.closest('[data-rotate-layer]')?'rotate':event.target.closest('[data-resize-layer]')?'scale':friendCardTransformMode;
+      friendCardDrag=captureFriendCardTransform(mode,event.clientX,event.clientY);
+      return;
     }
-    if (event.target.closest('[data-rotate-layer]')) {
-      const element = event.target.closest('[data-editor-layer]'), id = element?.dataset.editorLayer, layer = friendCardDesignState.layers.find(item => item.id === id);
-      if (!layer || layer.locked) return;
-      const rect = element.getBoundingClientRect(), centerX = rect.left + rect.width / 2, centerY = rect.top + rect.height / 2;
-      event.preventDefault(); friendCardDrag = {id,mode:'rotate',startX:event.clientX,startY:event.clientY,startAngle:Math.atan2(event.clientY-centerY,event.clientX-centerX),centerX,centerY,bounds,layer:{...layer}}; return;
-    }
-    if (event.target.closest('[data-resize-layer]')) {
-      const element = event.target.closest('[data-editor-layer]');
-      const id = element?.dataset.editorLayer, layer = friendCardDesignState.layers.find(item => item.id === id);
-      if (!layer || layer.locked) return;
-      event.preventDefault(); friendCardDrag = {id,mode:'resize',startX:event.clientX,startY:event.clientY,bounds,layer:{...layer}}; return;
-    }
-    const element = event.target.closest('[data-editor-layer]');
-    if (element && friendCardActiveTool === 'select') {
-      const id = element.dataset.editorLayer, layer = friendCardDesignState.layers.find(item => item.id === id);
-      if (!layer || layer.locked) { selectFriendCardLayer(id); return; }
-      selectFriendCardLayer(id);
-      if (friendCardTransformMode === 'rotate') {
-        const rect = element.getBoundingClientRect(), centerX = rect.left + rect.width / 2, centerY = rect.top + rect.height / 2;
-        friendCardDrag = {id,mode:'rotate',startX:event.clientX,startY:event.clientY,startAngle:Math.atan2(event.clientY-centerY,event.clientX-centerX),centerX,centerY,bounds,layer:{...layer}};
-      } else friendCardDrag = {id,mode:friendCardTransformMode === 'scale' ? 'resize' : 'move',startX:event.clientX,startY:event.clientY,bounds,layer:{...layer}};
+    const scroller=event.target.closest('.friend-canvas-scroll');
+    if(scroller&&friendCardTransformMode==='move'&&!event.target.closest('button,input,textarea,select,a')){
+      friendCardPan={scroller,startX:event.clientX,startY:event.clientY,scrollLeft:scroller.scrollLeft,scrollTop:scroller.scrollTop};
+      scroller.classList.add('is-panning');event.preventDefault();
     }
   });
-  document.addEventListener('pointermove',event => {
-    friendCardPointer = {x:event.clientX,y:event.clientY};
-    if (friendCardActiveTransform) { updateFriendCardActiveTransform(event); event.preventDefault(); }
-    else if (friendCardPan) {
-      friendCardPan.scroller.scrollLeft = friendCardPan.scrollLeft - (event.clientX - friendCardPan.startX);
-      friendCardPan.scroller.scrollTop = friendCardPan.scrollTop - (event.clientY - friendCardPan.startY);
-      event.preventDefault();
-    } else if (friendCardDrag) {
-      const layer = friendCardDesignState?.layers.find(item => item.id === friendCardDrag.id); if (!layer) return;
-      const dx = (event.clientX - friendCardDrag.startX) / friendCardDrag.bounds.width * 100;
-      const dy = (event.clientY - friendCardDrag.startY) / friendCardDrag.bounds.height * 100;
-      if(friendCardDrag.mode==='move'){const height=friendCardSquareLayer(layer)?layer.width*friendCardDesignState.width/friendCardDesignState.height:layer.height;layer.x=snapFriendCardPosition(friendCardLimit(friendCardDrag.layer.x+dx),layer.width,'x',layer.id);layer.y=snapFriendCardPosition(friendCardLimit(friendCardDrag.layer.y+dy),height,'y',layer.id);}
-      else if(friendCardDrag.mode==='rotate'){const angle=Math.atan2(event.clientY-friendCardDrag.centerY,event.clientX-friendCardDrag.centerX);layer.rotation=Math.max(-180,Math.min(180,friendCardDrag.layer.rotation+(angle-friendCardDrag.startAngle)*180/Math.PI));}
-      else applyFriendCardTransform(layer,friendCardDrag.layer,dx,dy);
-      updateFriendCardTransformElement(layer);
-      event.preventDefault();
+  document.addEventListener('pointermove',event=>{
+    friendCardPointer={x:event.clientX,y:event.clientY};
+    if(friendCardActiveTransform){updateFriendCardActiveTransform(event);event.preventDefault();}
+    else if(friendCardPan){friendCardPan.scroller.scrollLeft=friendCardPan.scrollLeft-(event.clientX-friendCardPan.startX);friendCardPan.scroller.scrollTop=friendCardPan.scrollTop-(event.clientY-friendCardPan.startY);event.preventDefault();}
+    else if(friendCardDrag){
+      if(!friendCardDrag.moved&&Math.hypot(event.clientX-friendCardDrag.startX,event.clientY-friendCardDrag.startY)<3)return;
+      friendCardDrag.moved=true;applyFriendCardSelectionTransform(friendCardDrag,event);event.preventDefault();
     }
   });
-  document.addEventListener('pointerup',() => {
-    if (friendCardPan) { friendCardPan.scroller.classList.remove('is-panning'); friendCardPan = null; }
-    if (friendCardDrag) {
-      friendCardUndoStack.push(friendCardDrag.snapshot || JSON.stringify({...friendCardDesignState,layers:friendCardDesignState.layers.map(layer => layer.id === friendCardDrag.id ? {...layer,...friendCardDrag.layer} : layer)}));
-      if (friendCardUndoStack.length > 80) friendCardUndoStack.shift(); friendCardRedoStack = [];
-      friendCardDrag = null; repaintFriendCardEditor({properties:false});
+  document.addEventListener('pointerup',()=>{
+    if(friendCardPan){friendCardPan.scroller.classList.remove('is-panning');friendCardPan=null;}
+    if(friendCardDrag){
+      const changed=friendCardDrag.moved&&rememberFriendCardTransform(friendCardDrag.snapshot);
+      friendCardDrag=null;setFriendCardTransformMode('move');repaintFriendCardEditor({dirty:Boolean(changed)});
     }
   });
-  document.addEventListener('pointercancel',() => {
-    if (friendCardPan) { friendCardPan.scroller.classList.remove('is-panning'); friendCardPan = null; }
-    friendCardDrag = null;
+  function cancelFriendCardPointerGesture(){
+    if(friendCardPan){friendCardPan.scroller.classList.remove('is-panning');friendCardPan=null;}
+    if(friendCardDrag){
+      friendCardDesignState=normalizedFriendCardDesign(JSON.parse(friendCardDrag.snapshot),friendCardFromForm($('#friend-card-form'))||currentUser.friendCard);
+      friendCardDrag=null;setFriendCardTransformMode('move');repaintFriendCardEditor({dirty:false});
+    }
     cancelFriendCardTransform();
-  });
+  }
+  document.addEventListener('pointercancel',cancelFriendCardPointerGesture);
+  window.addEventListener('blur',cancelFriendCardPointerGesture);
 
   document.addEventListener('click', async event => {
+    const selectGroup=event.target.closest('[data-select-group]');
+    if(selectGroup){selectFriendCardGroup(selectGroup.dataset.selectGroup,event.shiftKey);return;}
+    const toggleGroup=event.target.closest('[data-toggle-group]');
+    if(toggleGroup){const group=friendCardDesignState?.groups?.find(item=>item.id===toggleGroup.dataset.toggleGroup);if(group){recordFriendCardHistory();group.collapsed=!group.collapsed;repaintFriendCardEditor();}return;}
+    const groupAction=event.target.closest('[data-group-action]');
+    if(groupAction){if(friendCardActiveTransform)commitFriendCardTransform();if(groupAction.dataset.groupId)selectFriendCardGroup(groupAction.dataset.groupId);if(groupAction.dataset.groupAction==='group')groupFriendCardLayers();else ungroupFriendCardLayers();return;}
+    if(event.target.closest('[data-selection-lock]')){setFriendCardSelectionLocked();return;}
+    if(event.target.closest('[data-selection-visible]')){setFriendCardSelectionVisible();return;}
+
     if(event.target.closest('[data-cfc-choose-existing]')){openFriendCardChooser('existing');return;}
     if(event.target.closest('[data-cfc-choose-back]')){openFriendCardChooser();return;}
     if(event.target.closest('[data-cfc-close]')){closeFriendCardChooser();return;}
@@ -2795,7 +3133,8 @@
     if (canvasLayer) {
       event.preventDefault();
       const layerId = canvasLayer.dataset.editorLayer;
-      selectFriendCardLayer(layerId);
+      if(friendCardCanvasPointerHandled){friendCardCanvasPointerHandled=false;return;}
+      selectFriendCardLayer(layerId,{toggle:event.shiftKey,individual:event.shiftKey||event.altKey});
       return;
     }
     const insertLayer = event.target.closest('[data-insert-layer]');
@@ -2820,7 +3159,7 @@
     if (importInput) { return; }
     if (event.target.closest('[data-preview-card]')) { openFriendCardDialog({...currentUser,friendCard:friendCardFromForm($('#friend-card-form'))},friendCardViewMode==='preview'?'preview':'full'); return; }
     const selectLayer = event.target.closest('[data-select-layer]');
-    if (selectLayer) { selectFriendCardLayer(selectLayer.dataset.selectLayer); return; }
+    if (selectLayer) { selectFriendCardLayer(selectLayer.dataset.selectLayer,{toggle:event.shiftKey,individual:true}); return; }
     const toggleLayer = event.target.closest('[data-toggle-layer]');
     if (toggleLayer) { const layer = friendCardDesignState?.layers.find(item => item.id === toggleLayer.dataset.toggleLayer); if (layer) { recordFriendCardHistory(); layer.visible = !layer.visible; repaintFriendCardEditor(); } return; }
     const duplicateLayer = event.target.closest('[data-duplicate-layer]');
@@ -2834,7 +3173,7 @@
     const zoomButton = event.target.closest('[data-zoom]');
     if (zoomButton) { setFriendCardZoom(zoomButton.dataset.zoom); return; }
     const collapsePanel = event.target.closest('[data-collapse-editor-panel]');
-    if (collapsePanel) { $('.friend-card-workspace')?.classList.toggle(`friend-panel-${collapsePanel.dataset.collapseEditorPanel}-collapsed`); return; }
+    if (collapsePanel) { $('.friend-card-workspace')?.classList.toggle(`friend-panel-${collapsePanel.dataset.collapseEditorPanel}-collapsed`); requestAnimationFrame(fitFriendCardCanvas); return; }
     if (globalSearchToggle) {
       const panel = $('[data-global-search-panel]');
       const open = panel.hidden;
@@ -3129,6 +3468,9 @@
     }
   });
   document.addEventListener('change', async event => {
+    const groupName=event.target.closest('[data-cfc-group-name]');
+    if(groupName){const group=friendCardDesignState?.groups?.find(item=>item.id===groupName.dataset.cfcGroupName);if(group){recordFriendCardHistory();group.name=groupName.value.trim().slice(0,80)||'Group';repaintFriendCardEditor();}return;}
+
     const screenshots=event.target.closest('[data-owner-screenshot-import]');
     if(screenshots){const form=screenshots.closest('form'),list=$('[data-owner-screenshots]',form);try{for(const file of screenshots.files){if(list.children.length>=12)throw new Error('A game can have up to 12 screenshots.');list.insertAdjacentHTML('beforeend',ownerScreenshotMarkup(await compressOwnerImage(file)));}}catch(error){toast(error.message);}screenshots.value='';return;}
     const gameBuildControl = event.target.closest('[data-game-build-platform],[data-game-build-supported],[data-game-build-file],[data-game-build-field="downloadUrl"]');
@@ -3362,6 +3704,7 @@
     else if (event.target.id === 'crop-rotation') { cropSession.rotation = Number(event.target.value); paintCrop(); }
   });
   document.addEventListener('keydown', event => {
+    if($('dialog[open]'))return;
     if (friendCardShortcut(event)) return;
     const typing = event.target.matches('input,textarea,select,[contenteditable="true"]');
     if ($('#friend-card-form') && !typing && !event.ctrlKey && !event.metaKey && !event.altKey) {

@@ -1813,3 +1813,56 @@ body.friend-card-edit-mode #friend-card-editor-stage:not([data-cfc-viewport="all
 .friend-card-asset-row.is-stroke-disabled{opacity:.45}
 body.friend-card-edit-mode .friend-frame-overlap{grid-column:1/-1}
 .friend-frame-overlap output{justify-self:end;color:var(--muted);font-size:.7rem}
+
+.friend-multi-selection{position:absolute;z-index:1000;pointer-events:none;border:1px dashed #4d7cff;box-shadow:0 0 0 1px #ffffff80}
+.friend-layer-summary{margin:.45rem 0;color:var(--muted);font-size:.68rem;line-height:1.5;overflow-wrap:anywhere}
+.friend-layer-list-help{color:var(--muted);font-size:.68rem;line-height:1.5}
+.friend-layer-list-actions{display:flex;flex-wrap:wrap;gap:.3rem;margin:.45rem 0}
+.friend-layer-list-actions .btn{height:auto;min-height:1.9rem;padding:.3rem .45rem;font-size:.66rem}
+
+/* Layer groups follow the same front-to-back order as the card surface. */
+.friend-layer-group{min-width:0;margin:.35rem 0;border:1px solid var(--line);border-radius:9px;background:color-mix(in srgb,var(--surface) 65%,var(--bg));overflow:hidden}
+.friend-layer-group.is-current{border-color:color-mix(in srgb,var(--ember) 55%,var(--line))}
+.friend-layer-group-head{display:grid;grid-template-columns:24px minmax(0,1fr) 24px;align-items:center;gap:.2rem;min-height:36px;padding:.2rem;min-width:0}
+.friend-group-expand,.friend-group-ungroup{display:grid;place-items:center;width:24px;height:28px;min-height:0;padding:0;border:0;border-radius:5px;background:transparent;color:var(--muted);font:700 .8rem var(--font-body);cursor:pointer}
+.friend-group-select{display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:.25rem;min-width:0;padding:.3rem .1rem;border:0;background:transparent;text-align:left;color:var(--ink);font:700 .72rem var(--font-body);cursor:pointer}
+.friend-group-select>span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.friend-group-select>small{font-size:.6rem;color:var(--muted);white-space:nowrap}
+.friend-layer-group-items{padding:.2rem .15rem .2rem .65rem;border-top:1px solid var(--line)}
+.friend-layer-row-text{display:grid;gap:.1rem;min-width:0;overflow:hidden}
+.friend-layer-row-text>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.friend-layer-row-text>small{color:var(--muted);font-size:.56rem;font-weight:500;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.friend-multi-properties{align-content:start}
+.friend-multi-properties>.panel-help{margin:.35rem 0;font-size:.72rem;line-height:1.55}
+
+/* The viewer has no surrounding panel. Its entire viewport is available to the frame. */
+.friend-card-dialog{inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:hidden}
+.friend-card-dialog[open]{display:flex;flex-direction:column}
+.friend-card-dialog::backdrop{background:#0009;backdrop-filter:blur(4px)}
+.friend-card-dialog-close{position:absolute;z-index:10;top:.75rem;right:.75rem}
+#friend-card-dialog-content{display:grid;grid-template-rows:auto minmax(0,1fr) auto;flex:1;min-width:0;min-height:0;width:100%;height:100%}
+.friend-card-dialog .friend-dialog-view-switch{justify-self:center;justify-content:center;gap:.4rem;margin:.75rem 3.5rem .5rem}
+.friend-card-view-viewport{min-width:0;min-height:0;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y}
+.friend-card-view-plane{display:grid;place-items:center;width:100%;height:100%;box-sizing:border-box}
+.friend-card-view-surface{display:block;min-width:0;max-width:none}
+.friend-card-view-surface>.friend-card,.friend-card-view-surface .friend-card{width:100%;max-width:none;margin:0}
+.friend-card-view-surface>.friend-card-frame-space{width:100%;padding:0!important}
+.friend-card-view-actions{display:flex;justify-content:center;padding:.5rem 1rem .75rem}
+.friend-card-view-actions:empty{padding:0}
+.friend-card-view-actions>.community-add-friend{width:min(360px,100%);margin:0}
+
+/* Card fitting and frame pan space are independent in the editor. */
+body.friend-card-edit-mode .friend-canvas-scroll{display:grid;place-items:center;overflow:auto;overscroll-behavior:contain}
+body.friend-card-edit-mode .friend-canvas-size{justify-self:center;align-self:center;margin:0}
+body.friend-card-edit-mode #friend-card-editor-stage>.friend-card-frame-space{width:100%;padding:0!important}
+
+/* Read-only raster collection previews receive the same panel-free screen. */
+.social-dialog.social-cfc-viewer{inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:hidden}
+.social-cfc-viewer[open]{display:flex;flex-direction:column}
+.social-cfc-viewer>.social-dialog-head{flex:none;border:0;background:transparent;justify-content:flex-end}
+.social-cfc-viewer>.social-dialog-head>h2{margin-right:auto;padding:.4rem .65rem;border-radius:8px;background:var(--surface)}
+.social-cfc-viewer>.social-dialog-body{display:grid;grid-template-rows:auto minmax(0,1fr) auto;flex:1;gap:.75rem;min-height:0;max-height:none;overflow:auto;background:transparent}
+.social-cfc-viewer .preview-mode-label{justify-self:center}
+.social-cfc-viewer .cfc-expanded-preview{display:grid;place-items:center;align-self:center;width:min(680px,100%);min-width:0;margin:0 auto}
+.social-cfc-viewer .cfc-expanded-preview>img{display:block;max-width:100%;max-height:calc(100dvh - 150px);width:auto;height:auto;object-fit:contain}
+.social-cfc-viewer .cfc-expanded-preview .friend-card-frame-space{padding:0!important}

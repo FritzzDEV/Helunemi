@@ -592,6 +592,14 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
   }).filter(font => font?.url);
   const uploadedFontIds = new Set(fonts.map(font => font.id));
   const stickerLibrary = (Array.isArray(value.stickerLibrary) ? value.stickerLibrary : []).slice(0, 20).map((sticker, index) => ({ id: idSafe(sticker?.id) || `sticker${index + 1}`, name: text(sticker?.name || 'Sticker', 80), image: friendCardAsset(sticker?.image, 800_000, ownerId) })).filter(sticker => sticker.image);
+  const usedGroupIds = new Set();
+  const groupCandidates = (Array.isArray(value.groups) ? value.groups : []).slice(0, 40).flatMap(group => {
+    if (!group || typeof group !== 'object') return [];
+    const id = idSafe(group.id);
+    if (!id || usedGroupIds.has(id)) return [];
+    usedGroupIds.add(id);
+    return [{ id, name: text(group.name || 'Group', 80) || 'Group', collapsed: group.collapsed === true }];
+  });
   const usedLayerIds = new Set();
   const layers = value.layers.slice(0, 80).map((layer, index) => {
     if (!layer || typeof layer !== 'object' || !types.has(layer.type)) return null;
@@ -603,6 +611,7 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
     return {
       id: layerId, type, label: type === 'avatar' ? 'Profile picture' : type === 'username' ? 'Username' : text(layer.label || type, 80),
       field: ['avatar','username','likes','dislikes','favoriteThing','lookingFor','personalityTags','button'].includes(layer.field) ? layer.field : '',
+      groupId: usedGroupIds.has(idSafe(layer.groupId)) ? idSafe(layer.groupId) : '',
       x: numeric(layer.x, 0, -10000, 10000), y: numeric(layer.y, 0, -10000, 10000), width: layerWidth, height: type === 'avatar' || type === 'shape' && ['circle','square','rounded'].includes(layer.shapeStyle) ? layerWidth : numeric(layer.height, 10, 1, 10000),
       rotation: numeric(layer.rotation, 0, -180, 180), fontSize: numeric(layer.fontSize, 3.2, 1, 14), lineHeight: numeric(layer.lineHeight, 1.2, .8, 2.2), letterSpacing: numeric(layer.letterSpacing, 0, -.5, 2), italic: layer.italic === true, opacity: numeric(layer.opacity, 100, 0, 100),
       color: safeColor(layer.color, cardDefaults.textColor), fill: safeColor(layer.fill, cardDefaults.backgroundColor),
@@ -611,6 +620,8 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
       strokeWidth: numeric(layer.strokeWidth, 8, 1, 100), visible: layer.visible !== false, visibilityMode: ['preview','full','both'].includes(layer.visibilityMode) ? layer.visibilityMode : 'both', locked: layer.locked === true
     };
   }).filter(Boolean);
+  const referencedGroupIds = new Set(layers.map(layer => layer.groupId).filter(Boolean));
+  const groups = groupCandidates.filter(group => referencedGroupIds.has(group.id));
   const frameSource = value.frame && typeof value.frame === 'object' ? value.frame : {};
   const cornerNames = ['topLeft','topRight','bottomLeft','bottomRight'], sideNames = ['top','bottom','left','right'], pieceNames = [...cornerNames,...sideNames];
   const frameImages = (source, names) => Object.fromEntries(names.map(name => [name, friendCardAsset(source?.[name], 800_000, ownerId)]));
@@ -633,7 +644,7 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
     width = Math.round(ratioWidth * scale); height = Math.round(ratioHeight * scale);
   }
   return {
-    version: 1, name: text(value.name || 'My Friend-Card', 80) || 'My Friend-Card', fonts, stickerLibrary,
+    version: 1, name: text(value.name || 'My Friend-Card', 80) || 'My Friend-Card', fonts, stickerLibrary, groups,
     width, height, aspectRatio,
     backgroundLocked: value.backgroundLocked !== false, showGuides: value.showGuides === true,
     background: { color: safeColor(value.background?.color, cardDefaults.backgroundColor), image: friendCardAsset(value.background?.image, 800_000, ownerId), tint: safeColor(value.background?.tint, '#ffffff'), tintOpacity: numeric(value.background?.tintOpacity, 0, 0, 85), positionX: numeric(value.background?.positionX, 50, 0, 100), positionY: numeric(value.background?.positionY, 50, 0, 100), scale: numeric(value.background?.scale, 100, 50, 300) },
