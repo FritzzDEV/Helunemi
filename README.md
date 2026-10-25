@@ -233,3 +233,23 @@ Each of the eight frame pieces has a collapsible image/transform panel with its 
 Community and Explore AIs share a full-height messaging layout with sidebar navigation and no global top header. Appearance controls are grouped into Colors, Typography & layout, and Wallpaper; manual HEX values, bubble radius, dimming, and reset apply only to the selected friend chat in the current browser. Existing messages are retained between refreshes, so audio playback and scroll position are preserved. On-site chat media URLs and storage keys survive account normalization.
 
 The studio report inbox supports replies and Open/Resolved status changes. Reporters can follow and reply through My reports. Authentication and server-side ownership/staff checks protect every report thread; messages and status changes are saved with account storage. Older reports retain their history and gain an empty reply list. No email server is required.
+
+
+## Security, content permissions, and Terms
+
+The bottom-right quick menu links to `terms.html`, a public Terms of Service page with content permissions, community rules, privacy information, and reporting contacts. Its header contains only Helunemi, Home, and the account picture. Community and Explore AIs also link to it. New signups explicitly accept the current terms, including Firebase signups resumed after email verification; the server records the version and timestamp. Existing accounts are not silently opted in. Keep the terms version in `security-policy.js`, `app.js`, and `terms.html` synchronized when updating the policy.
+
+`security-policy.js` applies a Content Security Policy, anti-framing headers, same-origin resource restrictions, a referrer policy, restricted browser permissions, and HSTS in production. Microphone and camera use remain available on this origin. The card editor still supports inline styles and HTTPS image imports; the policy deliberately allows those existing features. Uploaded files keep their stricter sandboxed response policy. Private workspace pages use no-store and noindex responses.
+
+State-changing API calls require the same-origin `X-Helunemi-Request` header. Origin/referer and Fetch Metadata checks reject cross-origin browser mutations; no permissive CORS is granted. The shared API helper and both upload paths set the header. Outdated open tabs may need a refresh. JSON handlers reject non-JSON bodies. Session cookies remain HTTP-only, SameSite=Strict, and Secure in production. Sign-in, owner setup, and sensitive account actions have bounded temporary rate limits; slow connections have explicit timeouts. These are local to each Node process and reset on restart, so use an upstream limiter for a multi-instance service.
+
+Optional deployment settings:
+
+| Setting | Purpose |
+| --- | --- |
+| `SITE_ORIGIN` | Exact public origin, such as `https://your-site.onrender.com`, without a path. Recommended to pin browser origin checks. |
+| `SECURITY_TRUST_PROXY_HOPS` | Optional number of trusted reverse-proxy hops for rate-limit IP extraction. Default `0` trusts only the socket address. Configure only after verifying the deployed proxy chain; never blindly trust user-provided forwarding headers. Without this setting, visitors sharing a proxy share the coarse rate limit. |
+
+Production is detected by `NODE_ENV=production` or Render's `RENDER=true`. These settings do not replace HTTPS at the hosting layer. Preserve secrets outside the repository, use the existing static-file allowlist, and review `SECURITY.md` before deployment. `LICENSE` reserves rights only in protected original Helunemi material and preserves third-party licenses and user ownership.
+
+Public HTML, CSS, JavaScript, images, and screenshots can be copied. These measures reduce security risks, restrict casual cross-site embedding, and clarify reuse rights; they do not provide DRM, automatic takedowns, a malware scanner, or legal registration. To protect unpublished source, keep the repository private. Review and maintain the policy and public support contacts as the service changes.

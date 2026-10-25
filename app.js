@@ -34,7 +34,8 @@
   const paragraphs = value => String(value || '').split(/\n\s*\n/).map(part => part.trim()).filter(Boolean).map(part => `<p>${esc(part)}</p>`).join('');
   const app = $('#app');
   const page = document.body.dataset.page || 'home';
-  const titles = {home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat',publish:'Publish','create-post':'Create Post','shop-product':'Manage Product','explore-ais':'Explore AIs'};
+  const TERMS_VERSION = '2026-10-25';
+  const titles = {terms:'Terms & Privacy',home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat',publish:'Publish','create-post':'Create Post','shop-product':'Manage Product','explore-ais':'Explore AIs'};
   let currentUser = null;
   let ownerPosts = {games:[],arts:[],updates:[],downloads:[],gameBuilds:[],deletedBuiltins:[]};
   let contentPermissions={games:[],arts:[],updates:[]};
@@ -1565,7 +1566,7 @@
     if ($('#site-quick-menu')) return;
     const menu = document.createElement('div');
     menu.id = 'site-quick-menu'; menu.className = 'quick-menu';
-    menu.innerHTML = `<button class="quick-menu-toggle" id="quick-menu-toggle" type="button" data-quick-menu-toggle aria-label="Open quick menu" aria-expanded="false" aria-controls="quick-menu-panel" title="Menu"><span class="quick-menu-icon" aria-hidden="true"></span></button><nav class="quick-menu-panel" id="quick-menu-panel" aria-label="Quick links" hidden><a href="chat.html" data-quick-menu-link><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 2v-10a9 9 0 0 1 18 0Z"></path><path d="M7 11h8M7 15h5"></path></svg><span>Community</span></a><a href="explore-ais.html" data-quick-menu-link${page === 'explore-ais' ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8Z"></path></svg><span>Explore AIs</span></a></nav>`;
+    menu.innerHTML = `<button class="quick-menu-toggle" id="quick-menu-toggle" type="button" data-quick-menu-toggle aria-label="Open quick menu" aria-expanded="false" aria-controls="quick-menu-panel" title="Menu"><span class="quick-menu-icon" aria-hidden="true"></span></button><nav class="quick-menu-panel" id="quick-menu-panel" aria-label="Quick links" hidden><a href="chat.html" data-quick-menu-link><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 2v-10a9 9 0 0 1 18 0Z"></path><path d="M7 11h8M7 15h5"></path></svg><span>Community</span></a><a href="explore-ais.html" data-quick-menu-link${page === 'explore-ais' ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8Z"></path></svg><span>Explore AIs</span></a><a href="terms.html" data-quick-menu-link${page === 'terms' ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6Z"></path><path d="M14 3v5h5M9 12h7M9 16h7"></path></svg><span>Terms of Service</span></a></nav>`;
     document.body.append(menu);
     $('#quick-menu-toggle', menu).addEventListener('keydown', event => {
       if (!['ArrowDown','ArrowUp'].includes(event.key)) return;
@@ -1577,7 +1578,7 @@
   }
 
   function messengerNavigation(active){
-    return `<div class="messenger-brand"><a href="index.html" aria-label="Helunemi home"><img src="assets/golden-spiral-sun-icon.png" alt=""><span>Helunemi</span></a></div><nav class="messenger-navigation" aria-label="Spaces"><a href="chat.html"${active==='community'?' aria-current="page"':''}><span aria-hidden="true">◈</span>Community</a><a href="explore-ais.html"${active==='ais'?' aria-current="page"':''}><span aria-hidden="true">✦</span>Explore AIs</a><a href="members.html"><span aria-hidden="true">♧</span>Members</a><a href="account.html"><span aria-hidden="true">◉</span>Profile</a></nav>`;
+    return `<div class="messenger-brand"><a href="index.html" aria-label="Helunemi home"><img src="assets/golden-spiral-sun-icon.png" alt=""><span>Helunemi</span></a></div><nav class="messenger-navigation" aria-label="Spaces"><a href="chat.html"${active==='community'?' aria-current="page"':''}><span aria-hidden="true">◈</span>Community</a><a href="explore-ais.html"${active==='ais'?' aria-current="page"':''}><span aria-hidden="true">✦</span>Explore AIs</a><a href="members.html"><span aria-hidden="true">♧</span>Members</a><a href="account.html"><span aria-hidden="true">◉</span>Profile</a><a href="terms.html"><span aria-hidden="true">▤</span>Terms of Service</a></nav>`;
   }
   function renderCommunitySidebar(){
     const sidebar=$('[data-community-sidebar]');if(!sidebar)return;
@@ -1747,7 +1748,9 @@
       const result = await api('/api/community');
       communityData = result.community || communityData;
       const initialFriend = communityData.friends?.some(person => person.id === requestedFriend) ? requestedFriend : communityData.friends?.[0]?.id;
-      if (initialFriend) { communityPane = 'chat'; communityConversationId = initialFriend; }
+      const requestedPane = new URLSearchParams(location.search).get('pane');
+      if (requestedPane === 'report') communityPane = 'report';
+      else if (initialFriend) { communityPane = 'chat'; communityConversationId = initialFriend; }
       renderCommunitySidebar();
       if (communityPane === 'chat') await loadCommunityConversation(communityConversationId);
       else await renderCommunityPane();
@@ -2078,6 +2081,7 @@
       const request = new XMLHttpRequest();
       request.open('POST','/api/owner/game-build-upload'); request.withCredentials = true;
       request.setRequestHeader('Content-Type','application/octet-stream');
+      request.setRequestHeader('X-Helunemi-Request','same-origin');
       request.setRequestHeader('X-Game-Id',gameId); request.setRequestHeader('X-Build-Id',buildId);
       request.setRequestHeader('X-Game-Platform',platform); request.setRequestHeader('X-File-Name',encodeURIComponent(file.name)); request.setRequestHeader('X-Upload-Size',String(file.size));
       request.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); };
@@ -2239,7 +2243,7 @@
     account() { return '<div class="wrap"><div class="page-head"><h1>Profile</h1><p>Loading your Helunemi account…</p></div></div>'; }
   };
   function renderPage() {
-    app.innerHTML = (views[page] || views.home)();
+    if (page !== 'terms') app.innerHTML = (views[page] || views.home)();
     const selectedProject = page === 'project' ? gameById(new URLSearchParams(location.search).get('id')) || DATA.games[0] : null;
     const selectedArtwork = page === 'artwork' ? artById(new URLSearchParams(location.search).get('id')) || DATA.arts[0] : null;
     document.title = selectedProject ? `${selectedProject.name} | Helunemi` : selectedArtwork ? `${selectedArtwork.title} | Helunemi` : `${titles[page] ? `${titles[page]} | ` : ''}Helunemi`;
@@ -2249,6 +2253,7 @@
     if (page === 'shop') window.SolarisShop?.mount(app);
   }
   function ensureGlobalSearch() {
+    if (page === 'terms') return;
     const slot = $('.top-in');
     const profile = slot?.querySelector('.profile-wrap');
     if (!slot || !profile || $('#global-search')) return;
@@ -2283,7 +2288,7 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => node.classList.remove('show'), 3400);
   }
   async function api(path, method = 'GET', body) {
-    const response = await fetch(path, { method, credentials: 'same-origin', headers: body ? {'Content-Type':'application/json'} : undefined, body: body ? JSON.stringify(body) : undefined });
+    const response = await fetch(path, { method, credentials: 'same-origin', headers: { ...(body ? {'Content-Type':'application/json'} : {}), ...(!['GET','HEAD'].includes(method.toUpperCase()) ? {'X-Helunemi-Request':'same-origin'} : {}) }, body: body ? JSON.stringify(body) : undefined });
     let result = {};
     try { result = await response.json(); } catch (_) {}
     if (!response.ok) throw new Error(result.error || 'The account request could not be completed.');
@@ -2335,7 +2340,10 @@
     const client = await getFirebaseClient();
     const user = client.auth.currentUser;
     if (!user || !user.emailVerified) throw new Error('Verify your email before finishing account setup.');
+    if (metadata.termsVersion !== TERMS_VERSION) throw new Error('Please return to Sign up and accept the current Terms of Service to finish creating your account.');
     const result = await api('/api/signup','POST',{
+      acceptTerms:true,
+      termsVersion:metadata.termsVersion,
       username:metadata.username,
       password,
       idToken:await user.getIdToken(true),
@@ -2825,7 +2833,7 @@
       <section class="auth-card"><div class="auth-tabs" role="tablist" aria-label="Account access"><button type="button" role="tab" data-auth-mode="signup" aria-selected="${signupSelected}">Sign up</button><button type="button" role="tab" data-auth-mode="login" aria-selected="${!signupSelected}">Log in</button></div>
       <p class="form-message" id="auth-message" role="status">${esc(error)}</p>
       <form id="signup-form" class="form auth-form"${signupSelected ? '' : ' hidden'}><h2>Create your account</h2>${firebaseReady ? emailField : ''}<label>Username<input name="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_.-]+( [A-Za-z0-9_.-]+)*" autocomplete="username" placeholder="3–24 characters; spaces allowed"></label>
-      <label>Password<input name="password" type="password" required minlength="10" maxlength="200" autocomplete="new-password" placeholder="At least 10 characters"></label><label>Confirm password<input name="confirmPassword" type="password" required minlength="10" maxlength="200" autocomplete="new-password"></label><button class="btn btn-primary" type="submit">Create account</button></form>
+      <label>Password<input name="password" type="password" required minlength="10" maxlength="200" autocomplete="new-password" placeholder="At least 10 characters"></label><label>Confirm password<input name="confirmPassword" type="password" required minlength="10" maxlength="200" autocomplete="new-password"></label><label class="terms-accept"><input name="acceptTerms" type="checkbox" required><span>I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a> and have read the <a href="terms.html#privacy" target="_blank" rel="noopener">Privacy Notice</a> (version ${TERMS_VERSION}).</span></label><button class="btn btn-primary" type="submit">Create account</button></form>
       <form id="login-form" class="form auth-form"${!signupSelected ? '' : ' hidden'}><h2>Welcome back</h2>${firebaseReady ? emailField : '<label>Username<input name="username" required maxlength="24" autocomplete="username"></label>'}<label>Password<input name="password" type="password" required maxlength="200" autocomplete="current-password"></label>${firebaseReady ? '<button class="text-link auth-reset-link" type="button" data-reset-auth>Password forgotten? Send a reset email</button>' : ''}<button class="btn btn-primary" type="submit">Log in</button>${firebaseReady ? '<button class="btn btn-ghost guest-entry" type="button" data-legacy-login-toggle>Use an older Helunemi username account</button>' : ''}</form>
       ${firebaseReady ? '<div id="legacy-login-panel" hidden><form id="legacy-login-form" class="form auth-form"><h2>Older Helunemi account</h2><label>Username<input name="username" required maxlength="24" autocomplete="username"></label><label>Password<input name="password" type="password" required maxlength="200" autocomplete="current-password"></label><button class="btn btn-primary" type="submit">Log in to existing account</button><button class="btn btn-ghost guest-entry" type="button" data-legacy-login-toggle>Back to email sign-in</button></form></div>' : ''}
       ${signupSelected ? '<button class="btn btn-ghost guest-entry" type="button" data-view-guest>View site as guest</button>' : ''}
@@ -3504,6 +3512,7 @@
     if (event.target.id === 'signup-form') {
       event.preventDefault();
       const form = event.target, data = new FormData(form), password = data.get('password');
+      if (!data.get('acceptTerms')) { setMessage('#auth-message','Read and accept the Terms of Service before signing up.'); return; }
       if (password !== data.get('confirmPassword')) { setMessage('#auth-message','The passwords do not match.'); return; }
       const submit = $('button[type="submit"]',form); submit.disabled = true;
       try {
@@ -3518,7 +3527,7 @@
               user = (await client.sdk.signInWithEmailAndPassword(client.auth,email,password)).user;
             }
           }
-          const pending = {username:data.get('username'),email};
+          const pending = {username:data.get('username'),email,termsVersion:TERMS_VERSION};
           try { localStorage.setItem('solaris-pending-signup',JSON.stringify(pending)); } catch (_) {}
           await user.reload();
           if (!user.emailVerified) {
@@ -3529,7 +3538,7 @@
           await finishFirebaseSignup(pending,password);
           return;
         }
-        const result = await api('/api/signup','POST',{username:data.get('username'),password,profile:{}});
+        const result = await api('/api/signup','POST',{username:data.get('username'),password,profile:{},acceptTerms:true,termsVersion:TERMS_VERSION});
         currentUser = result.user; leaveGuestMode(); editingProfile = false; profilePreview(); showAccount(); toast(result.message);
       } catch (error) { setMessage('#auth-message',error.message); }
       finally { submit.disabled = false; }

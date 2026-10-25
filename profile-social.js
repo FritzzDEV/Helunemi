@@ -55,7 +55,7 @@
     if(!file)throw new Error('Choose a file first.');
     const limit=kind==='video'?100:20;if(file.size>limit*1024*1024)throw new Error(`Choose a file smaller than ${limit} MB.`);
     return new Promise((resolve,reject)=>{
-      const request=new XMLHttpRequest();request.open('POST','/api/social/uploads?kind='+encodeURIComponent(kind)+'&name='+encodeURIComponent(file.name||'preview.png'));request.setRequestHeader('Content-Type',file.type||'application/octet-stream');
+      const request=new XMLHttpRequest();request.open('POST','/api/social/uploads?kind='+encodeURIComponent(kind)+'&name='+encodeURIComponent(file.name||'preview.png'));request.setRequestHeader('X-Helunemi-Request','same-origin');request.setRequestHeader('Content-Type',file.type||'application/octet-stream');
       request.upload.onprogress=event=>{if(event.lengthComputable&&status)status.textContent='Uploading · '+Math.round(event.loaded/event.total*100)+'%';};
       request.onerror=()=>reject(new Error('The upload connection stopped. Please try again.'));
       request.onload=()=>{let result={};try{result=JSON.parse(request.responseText);}catch{}if(request.status>=200&&request.status<300)resolve(result);else reject(new Error(result.error||'The file could not be uploaded.'));};request.send(file);

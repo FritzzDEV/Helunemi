@@ -15,6 +15,8 @@ const { createShopSystem, countryCode } = require('./shop-system');
 const {createFriendCardLibrary,validateFriendCardIdentity} = require('./friend-card-library');
 const CFC_RULES = require('./friend-card-rules');
 const {cleanCommunityReport,createCommunityReports} = require('./community-reports');
+const { createSecurityPolicy, TERMS_VERSION } = require('./security-policy');
+const security = createSecurityPolicy();
 
 const scrypt = promisify(crypto.scrypt);
 const ROOT = __dirname;
@@ -28,7 +30,7 @@ const USERNAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY = 16 * 1024 * 1024;
 const MAX_GAME_BUILD_BYTES = Math.min(4 * 1024 ** 3, Math.max(50 * 1024 ** 2, Number(process.env.SOLARIS_MAX_GAME_BUILD_BYTES) || 2 * 1024 ** 3));
 const BUILT_IN_GAME_IDS = new Set(['gamma-frost', 'omiwo']);
-const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'publish.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js', 'friend-card-rules.js', 'profile-social.js', 'profile-social.css', 'storefront.js', 'create-post.html', 'shop-product.html', 'explore-ais.html', 'assets/menu-icon.png']);
+const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'publish.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js', 'friend-card-rules.js', 'profile-social.js', 'profile-social.css', 'storefront.js', 'create-post.html', 'shop-product.html', 'explore-ais.html', 'assets/menu-icon.png', 'terms.html', 'legal.css']);
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.png': 'image/png' };
 const PRIMARY_ROLES = {
   assistant: { label: 'Assistant', explanation: 'Supports studio coordination and helps keep Helunemi projects moving.' },
@@ -47,7 +49,7 @@ let siteContent = { ...EMPTY_SITE_CONTENT };
 let pool = null;
 let firebaseAuth = null;
 const sessions = new Map();
-const attempts = new Map();
+let sessionsPrunedAt = 0;
 const communityPresence = new Map();
 let writeQueue = Promise.resolve();
 const fileStore = createFileStorage({ getPool: () => pool, dataDir: DATA_DIR });
@@ -63,26 +65,27 @@ function send(res, status, value, headers = {}) {
 }
 function readBody(req) {
   return new Promise((resolve, reject) => {
+    if (String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase() !== 'application/json') {
+      req.resume();
+      return reject(Object.assign(new Error('Send JSON form data and refresh the page if needed.'), { status: 415 }));
+    }
     let data = '';
     req.on('data', chunk => {
       data += chunk;
       if (Buffer.byteLength(data) > MAX_BODY) { reject(Object.assign(new Error('Request is too large.'), { status: 413 })); req.destroy(); }
     });
     req.on('end', () => {
-      try { resolve(JSON.parse(data || '{}')); }
+      try {
+        const value = JSON.parse(data || '{}');
+        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Expected an object.');
+        resolve(value);
+      }
       catch { reject(Object.assign(new Error('Please send valid form data.'), { status: 400 })); }
     });
     req.on('error', reject);
   });
 }
-function checkOrigin(req) {
-  const origin = req.headers.origin;
-  if (!origin) return true;
-  try {
-    const parsed = new URL(origin);
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.host === req.headers.host;
-  } catch { return false; }
-}
+function checkOrigin(req) { return security.checkOrigin(req); }
 function parseCookies(header = '') {
   return Object.fromEntries(header.split(';').map(part => part.trim().split(/=(.*)/s).slice(0, 2)).filter(pair => pair.length === 2));
 }
@@ -211,7 +214,12 @@ async function confirmAccountActionPassword(account, input) {
 }
 async function getAccount(req) {
   const token = parseCookies(req.headers.cookie).solaris_session;
-  if (!token) return null;
+  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  const now = Date.now();
+  if (now - sessionsPrunedAt > 60000) {
+    for (const [key, session] of sessions) if (session.expires < now) sessions.delete(key);
+    sessionsPrunedAt = now;
+  }
   let session = sessions.get(token);
   if ((!session || session.expires < Date.now()) && pool) {
     const result = await pool.query('SELECT account_id, expires_at FROM solaris_sessions WHERE token_hash = $1 AND expires_at > $2', [sessionHash(token), Date.now()]);
@@ -388,25 +396,17 @@ async function setSession(res, accountId) {
   const expires = Date.now() + SESSION_MS;
   sessions.set(token, { accountId, expires });
   if (pool) await pool.query('INSERT INTO solaris_sessions (token_hash, account_id, expires_at) VALUES ($1, $2, $3)', [sessionHash(token), accountId, expires]);
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const secure = security.secureCookies ? '; Secure' : '';
   res.setHeader('Set-Cookie', `solaris_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(SESSION_MS / 1000)}${secure}`);
 }
 async function clearSession(req, res) {
   const token = parseCookies(req.headers.cookie).solaris_session;
   if (token) sessions.delete(token);
   if (token && pool) await pool.query('DELETE FROM solaris_sessions WHERE token_hash = $1', [sessionHash(token)]);
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const secure = security.secureCookies ? '; Secure' : '';
   res.setHeader('Set-Cookie', `solaris_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure}`);
 }
-function allowAttempt(req) {
-  const key = `${req.socket.remoteAddress || 'unknown'}:${req.url.split('?')[0]}`;
-  const now = Date.now();
-  const entry = attempts.get(key) || { start: now, count: 0 };
-  if (now - entry.start > 15 * 60 * 1000) { entry.start = now; entry.count = 0; }
-  entry.count++;
-  attempts.set(key, entry);
-  return entry.count <= 10;
-}
+function allowAttempt(req, identity = '') { return security.allowAttempt(req, identity); }
 function text(value, max = 500) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
@@ -773,7 +773,8 @@ async function removeAccountSessions(accountId, req, res) {
   await clearSession(req, res);
 }
 async function handleApi(req, res, pathname) {
-  if (!checkOrigin(req)) return send(res, 403, { error: 'This request was not accepted.' });
+  if (!checkOrigin(req)) return send(res, 403, { error: 'This request was not accepted. Refresh Helunemi and try again.' });
+  if (req.method === 'POST' && ['/api/account/delete', '/api/account/pause', '/api/auth/link'].includes(pathname) && !allowAttempt(req, 'sensitive-action')) return send(res, 429, { error: 'Too many account security attempts. Try again in 15 minutes.' }, { 'Retry-After': '900' });
   await restoreExpiredAccounts();
   if (await friendCardLibrary.handle(req,res,pathname)) return;
   if (await shopSystem.handle(req,res,pathname)) return;
@@ -1150,8 +1151,9 @@ async function handleApi(req, res, pathname) {
     return send(res, 200, { user: privateProfile(account), message: 'Your verified email is connected to this Helunemi account.' });
   }
   if (req.method === 'POST' && pathname === '/api/signup') {
-    if (!allowAttempt(req)) return send(res, 429, { error: 'Too many sign-up attempts. Please try again later.' });
+    if (!allowAttempt(req)) return send(res, 429, { error: 'Too many sign-up attempts. Please try again later.' }, { 'Retry-After': '900' });
     const input = await readBody(req);
+    if (input.acceptTerms !== true || input.termsVersion !== TERMS_VERSION) return send(res, 400, { error: 'Read and accept the current Terms of Service before creating an account.' });
     const firebaseEnabled = firebaseWebConfig().enabled;
     let claims = null;
     if (firebaseEnabled) {
@@ -1168,7 +1170,7 @@ async function handleApi(req, res, pathname) {
     const passwordHash = Buffer.from(await scrypt(password, salt, 64)).toString('hex');
     const id = crypto.randomUUID();
     if (claims && (accounts.some(item => item.firebaseUid === claims.uid) || pausedAccounts.some(item => item.account.firebaseUid === claims.uid || item.account.email?.toLowerCase() === String(claims.email).toLowerCase()))) return send(res, 409, { error: 'This verified email already has a Helunemi account. Log in instead.' });
-    const account = { id, salt, passwordHash, ...(claims ? { firebaseUid: claims.uid, email: String(claims.email).toLowerCase(), emailVerified: true } : {}), role: 'member', tickets: { namecard: 0, who: 0 }, community: emptyCommunity(),
+    const account = { id, salt, passwordHash, termsAcceptance: { version: TERMS_VERSION, acceptedAt: new Date().toISOString() }, ...(claims ? { firebaseUid: claims.uid, email: String(claims.email).toLowerCase(), emailVerified: true } : {}), role: 'member', tickets: { namecard: 0, who: 0 }, community: emptyCommunity(),
       profile: cleanProfile({ ...input.profile, username }, {}, true, id) };
     accounts.push(account);
     try { await saveAccounts(); }
@@ -1177,10 +1179,11 @@ async function handleApi(req, res, pathname) {
     return send(res, 201, { user: privateProfile(account), message: 'Your account is ready.' });
   }
   if (req.method === 'POST' && pathname === '/api/login') {
-    if (!allowAttempt(req)) return send(res, 429, { error: 'Too many login attempts. Please try again later.' });
+    if (!allowAttempt(req)) return send(res, 429, { error: 'Too many login attempts. Please try again later.' }, { 'Retry-After': '900' });
     const input = await readBody(req);
     if (input.idToken) {
       const claims = await verifyFirebaseToken(input.idToken);
+      if (!allowAttempt(req, 'firebase:' + claims.uid)) return send(res, 429, { error: 'Too many sign-in attempts for this account. Try again in 15 minutes.' }, { 'Retry-After': '900' });
       const account = accounts.find(item => item.firebaseUid === claims.uid);
       if (!account) {
         const paused = pausedAccounts.find(item => item.account.firebaseUid === claims.uid || item.account.email?.toLowerCase() === String(claims.email).toLowerCase());
@@ -1201,6 +1204,7 @@ async function handleApi(req, res, pathname) {
       return send(res, 200, { user: privateProfile(account) });
     }
     const username = text(input.username, 24).toLowerCase();
+    if (!allowAttempt(req, 'username:' + username)) return send(res, 429, { error: 'Too many sign-in attempts for this account. Try again in 15 minutes.' }, { 'Retry-After': '900' });
     const account = accounts.find(item => item.profile.username.toLowerCase() === username);
     const salt = account ? account.salt : '00000000000000000000000000000000';
     const expected = account ? Buffer.from(account.passwordHash, 'hex') : Buffer.alloc(64);
@@ -1346,6 +1350,7 @@ async function loadStore() {
 const server = http.createServer(async (req, res) => {
   const requestLabel = `${req.method} ${(req.url || '/').split('?')[0]}`;
   try {
+    security.applyHeaders(req, res);
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url.pathname);
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Method not allowed.' });
@@ -1353,7 +1358,7 @@ const server = http.createServer(async (req, res) => {
     if (!STATIC_FILES.has(requested)) return send(res, 404, { error: 'Not found.' });
     const filePath = path.join(ROOT, requested);
     const data = await fs.readFile(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': requested.endsWith('.html') ? 'no-cache' : 'public, max-age=3600' });
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Cache-Control': res.getHeader('Cache-Control') || (requested.endsWith('.html') ? 'no-cache' : 'public, max-age=3600') });
     res.end(req.method === 'HEAD' ? undefined : data);
   } catch (error) {
     console.error(`[REQUEST ERROR] ${requestLabel}`, error);
@@ -1361,6 +1366,12 @@ const server = http.createServer(async (req, res) => {
     else res.destroy();
   }
 });
+
+// Keep slow headers/connections bounded while allowing large game-build uploads.
+server.headersTimeout = 30000;
+server.requestTimeout = 15 * 60 * 1000;
+server.keepAliveTimeout = 5000;
+server.maxRequestsPerSocket = 1000;
 
 function retainedUploadKeys() {
   const retained=new Set([...siteContent.gameBuilds.map(build=>build.fileKey),...socialSystem.snapshot().assets.map(asset=>asset.id)].filter(key=>/^[a-f0-9-]{36}$/i.test(String(key||''))));
