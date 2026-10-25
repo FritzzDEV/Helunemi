@@ -111,6 +111,95 @@
       <div class="game-body"><div class="game-top"><div class="game-card-title">${projectIcon(game)}<h3>${esc(game.name)}</h3></div>${badge(game.status)}</div><p class="meta">${esc(game.genre)}${game.version ? ` · ${esc(game.version)}` : ''}</p>
       <p>${esc(game.blurb)}</p><a class="btn btn-ghost btn-sm" href="project.html?id=${encodeURIComponent(game.id)}">Project details</a></div></article>`;
   }
+  let developmentCarouselCleanup = null;
+
+  function developmentCarouselMarkup(games) {
+    if (!games.length) return '<div class="development-empty"><p>No games are currently marked In Development.</p><a class="btn btn-ghost btn-sm" href="games.html">Explore our games</a></div>';
+    const slides = games.map((game, index) => `<div class="development-slide" role="group" aria-roledescription="slide" aria-label="${index + 1} of ${games.length}: ${esc(game.name)}" aria-hidden="${index !== 0}"${index ? ' inert' : ''}>
+      <article class="feature"><div class="cover cover-${esc(game.cover || 'frost')}" aria-hidden="true">${game.banner ? `<img class="game-cover-image" src="${esc(game.banner)}" alt="" loading="${index ? 'lazy' : 'eager'}" decoding="async">` : ''}<span class="cover-kicker">${esc(game.subtitle)}</span><strong>${esc(game.name)}</strong></div>
+      <div class="feature-body"><div>${badge(game.status)}</div><h3>${esc(game.name)}${game.subtitle ? `: ${esc(game.subtitle)}` : ''}</h3><p>${esc(game.blurb)}</p><p class="meta">${[game.genre, game.version].filter(Boolean).map(esc).join(' · ')}</p><a class="btn btn-primary" href="project.html?id=${encodeURIComponent(game.id)}">Project details</a></div></article></div>`).join('');
+    const controls = games.length > 1 ? `<div class="development-controls"><span class="development-count" data-development-count>1 / ${games.length}</span><div class="development-dots" role="group" aria-label="Choose an in-development game">${games.map((game, index) => `<button class="development-dot" type="button" data-development-go="${index}" aria-label="Show ${esc(game.name)}" aria-pressed="${index === 0}" aria-controls="home-development-track"></button>`).join('')}</div><div class="development-navigation"><button class="btn btn-ghost btn-sm development-control" type="button" data-development-previous aria-label="Previous game" aria-controls="home-development-track">←</button><button class="btn btn-ghost btn-sm development-control" type="button" data-development-pause aria-pressed="false" aria-label="Pause automatic game scrolling">Pause</button><button class="btn btn-ghost btn-sm development-control" type="button" data-development-next aria-label="Next game" aria-controls="home-development-track">→</button></div></div>` : '';
+    return `<div class="development-carousel" data-development-carousel role="region" aria-roledescription="carousel" aria-label="Games in development"><div class="development-viewport" id="home-development-track" tabindex="0" aria-label="In-development games; use left and right arrow keys">${slides}</div>${controls}</div>`;
+  }
+
+  function mountDevelopmentCarousel() {
+    const root = $('[data-development-carousel]');
+    if (!root) return;
+    const track = $('.development-viewport', root), slides = $$('.development-slide', root);
+    if (slides.length < 2) return;
+    const listeners = new AbortController(), signal = listeners.signal;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const pauseButton = $('[data-development-pause]', root);
+    let index = 0, timer = 0, scrollTimer = 0, paused = reducedMotion.matches;
+    let hovering = false, dragging = false, leavingPage = false, explicitPlayback = false;
+    let inView = !('IntersectionObserver' in window);
+    const stop = () => { clearTimeout(timer); timer = 0; };
+    const schedule = () => {
+      stop();
+      if (signal.aborted || !root.isConnected || paused || dragging || leavingPage || !inView || document.hidden || (!explicitPlayback && (hovering || root.contains(document.activeElement)))) return;
+      timer = setTimeout(() => { show(index + 1); schedule(); }, 3000);
+    };
+    const activate = next => {
+      index = Math.max(0, Math.min(slides.length - 1, next));
+      slides.forEach((slide, number) => { slide.inert = number !== index; slide.setAttribute('aria-hidden', String(number !== index)); });
+      $$('[data-development-go]', root).forEach((button, number) => button.setAttribute('aria-pressed', String(number === index)));
+      $('[data-development-count]', root).textContent = `${index + 1} / ${slides.length}`;
+    };
+    const show = next => {
+      const selected = (next + slides.length) % slides.length;
+      const behavior = reducedMotion.matches || Math.abs(selected - index) > 1 ? 'auto' : 'smooth';
+      activate(selected);
+      track.scrollTo({ left: track.clientWidth * index, behavior });
+    };
+    const syncPause = () => {
+      pauseButton.textContent = paused ? 'Play' : 'Pause';
+      pauseButton.setAttribute('aria-pressed', String(paused));
+      pauseButton.setAttribute('aria-label', paused ? 'Start automatic game scrolling every 3 seconds' : 'Pause automatic game scrolling');
+    };
+    root.addEventListener('click', event => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      if (button.matches('[data-development-pause]')) { paused = !paused; explicitPlayback = !paused; syncPause(); }
+      else if (button.matches('[data-development-previous]')) show(index - 1);
+      else if (button.matches('[data-development-next]')) show(index + 1);
+      else if (button.matches('[data-development-go]')) show(Number(button.dataset.developmentGo));
+      schedule();
+    }, { signal });
+    track.addEventListener('keydown', event => {
+      if (event.target !== track || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      show(event.key === 'Home' ? 0 : event.key === 'End' ? slides.length - 1 : index + (event.key === 'ArrowRight' ? 1 : -1));
+      schedule();
+    }, { signal });
+    track.addEventListener('scroll', () => {
+      stop(); clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        if (signal.aborted) return;
+        activate(Math.round(track.scrollLeft / Math.max(1, track.clientWidth)));
+        schedule();
+      }, 150);
+    }, { signal, passive: true });
+    root.addEventListener('pointerenter', event => { if (event.pointerType === 'mouse') { hovering = true; explicitPlayback = false; stop(); } }, { signal });
+    root.addEventListener('pointerleave', () => { hovering = false; schedule(); }, { signal });
+    track.addEventListener('pointerdown', () => { dragging = true; stop(); }, { signal });
+    const releasePointer = () => { dragging = false; schedule(); };
+    window.addEventListener('pointerup', releasePointer, { signal });
+    window.addEventListener('pointercancel', releasePointer, { signal });
+    root.addEventListener('focusin', () => { explicitPlayback = false; stop(); }, { signal });
+    root.addEventListener('focusout', () => queueMicrotask(() => { explicitPlayback = false; schedule(); }), { signal });
+    document.addEventListener('visibilitychange', schedule, { signal });
+    window.addEventListener('resize', () => { track.scrollTo({ left: track.clientWidth * index, behavior: 'auto' }); schedule(); }, { signal });
+    window.addEventListener('pagehide', () => { leavingPage = true; stop(); }, { signal });
+    window.addEventListener('pageshow', () => { leavingPage = false; schedule(); }, { signal });
+    let observer = null;
+    if ('IntersectionObserver' in window) {
+      observer = new IntersectionObserver(entries => { inView = entries[0].isIntersecting && entries[0].intersectionRatio >= .15; schedule(); }, { threshold: .15 });
+      observer.observe(root);
+    }
+    developmentCarouselCleanup = () => { stop(); clearTimeout(scrollTimer); listeners.abort(); observer?.disconnect(); };
+    syncPause(); schedule();
+  }
+
   const memberFilterOptions = ['Assistant','AI Assistant','Developer','Member',...SECONDARY_ROLE_TAGS,...DATA.games.map(game => game.name)];
   function tagsForMember(member) {
     return [...new Set([...(member.roles || []),...(member.projects || [])])];
@@ -2159,19 +2248,18 @@
       return `<div class="community-shell community-page-shell messenger-shell"><div class="community-layout"><aside class="community-sidebar" data-community-sidebar></aside><main class="community-main" data-community-main></main></div></div>`;
     },
     home() {
-      const game = DATA.games[0];
+      const inDevelopment = DATA.games.filter(game => String(game.status || '').trim().toLowerCase() === 'in development');
       return `<section class="hero" aria-labelledby="hero-title"><div class="hero-in"><h1 id="hero-title">Helunemi</h1>
-        <p class="lede">A new independent studio making worlds to explore. Our first game is in development.</p>
+        <p class="lede">A small independent studio making worlds to explore. Our first game is out—discover what we’ve released and follow what we’re building next.</p>
         <div class="actions"><a class="btn btn-primary" href="games.html">Explore our games</a><a class="btn btn-ghost" href="list.html">Meet the team</a></div></div><div class="sun-wrap" aria-hidden="true"><div class="rays"></div><div class="sun"></div></div></section>
-        <div class="wrap"><section class="studio-story block" aria-labelledby="studio-story-title"><div class="studio-story-head"><span class="studio-story-eyebrow">Our community</span><h2 id="studio-story-title">A small studio built around a big dream</h2><p>Helunemi grew from a Minecraft server into a place to learn, create games, and share the worlds we hope to make.</p></div>
+        <div class="wrap"><section class="studio-story block" aria-labelledby="studio-story-title"><div class="studio-story-head"><span class="studio-story-eyebrow">Our community</span><h2 id="studio-story-title">A small studio built around a big dream</h2><p>From a Minecraft server to our first game release, Helunemi is a place to learn, create, and share new worlds with players.</p></div>
         <div class="studio-story-grid"><article class="studio-story-card"><span class="studio-story-number">01</span><h3>From SolarisSMP to Helunemi</h3><p>Our community began on Discord around SolarisSMP, my Minecraft server. Even as I played on and posted about it, its players stayed within the same circle of classmates and people I already knew. Since I love games, I started learning to code so I could make one for others to enjoy. After a year and several months, I turned the Discord server into a game development community, disconnected the Minecraft server, and shut it down.</p></article>
-        <article class="studio-story-card"><span class="studio-story-number">02</span><h3>What the sun means</h3><p>The sun is a light for gamers beginning to grow and achieve what they want. For Helunemi, it also means a new beginning: this is our first major project beyond school projects.</p></article>
+        <article class="studio-story-card"><span class="studio-story-number">02</span><h3>What the sun means</h3><p>The sun is a light for gamers beginning to grow and achieve what they want. For Helunemi, it also means a new beginning: growing beyond school projects to release games and bring our own worlds to life.</p></article>
         <article class="studio-story-card"><span class="studio-story-number">03</span><h3>Why we make games</h3><p>Making games is something we want and dream to achieve. We hope to give gamers more challenges and new worlds to enjoy, and make experiences that help people have fun, feel happy, and feel better.</p></article>
         <article class="studio-story-card"><span class="studio-story-number">04</span><h3>Mods and add-ons belong</h3><p>We support add-ons, game modifications, plugins, and tools for our games. Use them on a local server on your computer; public-server use is welcome when the changes are appropriate and safe.</p></article>
-        <article class="studio-story-card"><span class="studio-story-number">05</span><h3>A team of two active members</h3><p>For the past three months, two of us—me and a friend—have been the ones actively working. Other developers are mostly inactive; some check in briefly before going offline again.</p></article></div></section>
+        <article class="studio-story-card"><span class="studio-story-number">05</span><h3>A team of two active members</h3><p>Two of us—me and a friend—keep Helunemi moving, from our first release to the projects we’re building next. Other developers are mostly inactive; some check in briefly before going offline again.</p></article></div></section>
         <section class="block" aria-labelledby="h-feat"><div class="sec-head"><h2 id="h-feat">Now in development</h2><a class="more" href="games.html">All projects</a></div>
-        <article class="feature"><div class="cover cover-${game.cover}" aria-hidden="true">${gameBannerImage(game)}<span class="cover-kicker">${esc(game.subtitle)}</span><strong>${esc(game.name)}</strong></div>
-        <div class="feature-body"><div>${badge(game.status)}</div><h3>${esc(game.name)}: ${esc(game.subtitle)}</h3><p>${esc(game.blurb)}</p><p class="meta">${esc(game.genre)} · ${esc(game.version)}</p><a class="btn btn-primary" href="project.html?id=${encodeURIComponent(game.id)}">Project details</a></div></article></section>
+        ${developmentCarouselMarkup(inDevelopment)}</section>
         <section class="block" aria-labelledby="h-projects"><div class="sec-head"><h2 id="h-projects">Studio projects</h2><a class="more" href="games.html">Browse games</a></div><div class="grid">${DATA.games.map(projectCard).join('')}</div></section>
         <section class="band" aria-labelledby="h-team"><div><h2 id="h-team">Meet the Helunemi team</h2><p>Helunemi is currently built by two active members.</p></div><a class="btn" href="list.html">View the team</a></section></div>`;
     },
@@ -2184,7 +2272,7 @@
     members() {
       return `<div class="wrap"><div class="page-head"><span class="section-eyebrow">MEET THE COMMUNITY</span><h1>Members</h1><p>Member accounts make a Friend-Card in their own style. Cards appear here only after the member chooses to post them. Studio roles have their own profiles on the List page.</p></div><section class="member-directory friend-directory" aria-label="Search member Friend-Cards"><label class="member-search-wrap"><span class="visually-hidden">Search member Friend-Cards</span><span class="member-search-icon" aria-hidden="true">⌕</span><input type="search" data-friend-search placeholder="Search posted cards…" autocomplete="off"></label></section><div class="friend-card-grid" id="member-card-grid"></div><p class="empty member-empty" id="member-card-empty">No custom Friend-Cards have been posted yet.</p><p class="form-message" id="member-card-message" role="status"></p><div class="page-end"></div></div>`;
     },
-    games() { return `<div class="wrap">${ownerPageHeading('games','Games','Helunemi is new, with one game in development and one planned for the future.')}<div class="grid">${DATA.games.map(projectCard).join('')}</div><div class="page-end"></div></div>`; },
+    games() { return `<div class="wrap">${ownerPageHeading('games','Games','Explore our releases, games in development, and plans for the future.')}<div class="grid">${DATA.games.map(projectCard).join('')}</div><div class="page-end"></div></div>`; },
     updates() {
       const updates = [...ownerPosts.updates].sort((a,b)=>Number(b.publishedAt||0)-Number(a.publishedAt||0));
       return `<div class="wrap">${ownerPageHeading('updates','Updates','News and development updates from Helunemi.')}<ol class="updates-timeline">${updates.map(update => { const date = update.publishedAt ? new Date(Number(update.publishedAt)).toLocaleString([], {year:'numeric',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : ''; const game = gameById(update.gameId); return `<li class="update-timeline-item"><span class="update-timeline-node" aria-hidden="true"></span><article class="update-timeline-card" id="update-${esc(update.id)}">${contentMenu('updates',update.id)}<div class="update-timeline-meta"><span class="section-eyebrow">${esc(update.category || 'Studio')}</span>${date ? `<time>${esc(date)}</time>` : ''}</div><h2>${esc(update.title)}</h2>${paragraphs(update.content)}${game ? `<a class="text-link" href="project.html?id=${encodeURIComponent(game.id)}">${esc(game.name)} project details <span aria-hidden="true">↗</span></a>` : ''}</article></li>`; }).join('')}</ol><div class="page-end"></div></div>`;
@@ -2243,6 +2331,7 @@
     account() { return '<div class="wrap"><div class="page-head"><h1>Profile</h1><p>Loading your Helunemi account…</p></div></div>'; }
   };
   function renderPage() {
+    developmentCarouselCleanup?.(); developmentCarouselCleanup = null;
     if (page !== 'terms') app.innerHTML = (views[page] || views.home)();
     const selectedProject = page === 'project' ? gameById(new URLSearchParams(location.search).get('id')) || DATA.games[0] : null;
     const selectedArtwork = page === 'artwork' ? artById(new URLSearchParams(location.search).get('id')) || DATA.arts[0] : null;
@@ -2251,6 +2340,7 @@
     ensureGlobalSearch();
     ensureCommunityMessenger();
     if (page === 'shop') window.SolarisShop?.mount(app);
+    if (page === 'home') mountDevelopmentCarousel();
   }
   function ensureGlobalSearch() {
     if (page === 'terms') return;
