@@ -47,7 +47,7 @@
   let communityRefreshTimer = null;
   let communityRecorder = null;
   let communityRecorderChunks = [];
-  const defaultCommunityChatSettings = {background:'#111017',ownBubble:'#342442',friendBubble:'#24212a',text:'#f7f2ff',fontSize:15,fontFamily:'DM Sans',animation:'pop',compact:false,wallpaper:''};
+  const defaultCommunityChatSettings = {background:'#111017',ownBubble:'#342442',friendBubble:'#24212a',text:'#f7f2ff',fontSize:15,fontFamily:'DM Sans',animation:'pop',compact:false,wallpaper:'',bubbleRadius:18,wallpaperDim:35};
   let communityChatSettings = {...defaultCommunityChatSettings};
   let firebaseSetupKnown = false;
   let firebaseEnabled = false;
@@ -537,7 +537,7 @@
     const id = type => `${type}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
     const layer = (type, label, x, y, width, height, extra = {}) => ({id:id(type),type,label,x,y,width,height,rotation:0,fontSize:3.2,color:card.textColor,align:'left',opacity:100,visible:true,locked:false,...extra});
     const ratio = (card.aspectRatio || '1:1').split(':').map(Number), scale = Math.min(1000 / ratio[0],1600 / ratio[0],1200 / ratio[1]), width = Math.round(ratio[0] * scale), height = Math.round(ratio[1] * scale);
-    return {version:1,name:'My Friend-Card',width,height,aspectRatio:card.aspectRatio || '1:1',backgroundLocked:true,showGuides:false,background:{color:card.backgroundColor,image:card.backgroundImage,tint:card.backgroundOverlayColor,tintOpacity:card.backgroundOverlayOpacity,positionX:50,positionY:50,scale:100},frame:{corners:{},sides:{},cornerSize:9,cornerSizes:{topLeft:9,topRight:9,bottomLeft:9,bottomRight:9},visiblePieces:{topLeft:true,topRight:true,bottomLeft:true,bottomRight:true,top:true,bottom:true,left:true,right:true},horizontalThickness:5,verticalThickness:5,sideMode:'stretch',placement:'background',offsetX:0,offsetY:0,rotation:0,overlap:0,visible:true,alignments:{top:'center',bottom:'center',left:'middle',right:'middle'},presets:[]},groups:[],layers:[
+    return {version:1,name:'My Friend-Card',width,height,aspectRatio:card.aspectRatio || '1:1',backgroundLocked:true,showGuides:false,background:{color:card.backgroundColor,image:card.backgroundImage,tint:card.backgroundOverlayColor,tintOpacity:card.backgroundOverlayOpacity,positionX:50,positionY:50,scale:100},frame:{corners:{},sides:{},cornerSize:9,cornerSizes:{topLeft:9,topRight:9,bottomLeft:9,bottomRight:9},visiblePieces:{topLeft:true,topRight:true,bottomLeft:true,bottomRight:true,top:true,bottom:true,left:true,right:true},horizontalThickness:5,verticalThickness:5,sideMode:'stretch',placement:'background',offsetX:0,offsetY:0,rotation:0,overlap:0,pieces:{},visible:true,alignments:{top:'center',bottom:'center',left:'middle',right:'middle'},presets:[]},groups:[],layers:[
       layer('avatar','Profile picture',5,7,18,18,{fontSize:3.5,field:'avatar'}),
       layer('username','Username',27,9,68,12,{fontSize:5,field:'username',fontFamily:'Unbounded',color:card.titleColor,weight:700})
     ]};
@@ -561,7 +561,7 @@
     const customFontIds = new Set(customFonts.map(font => font.id));
     const normalizeFramePreset = input => {
       const sourceFrame = input && typeof input === 'object' ? input : {}, sourceAlignments = sourceFrame.alignments && typeof sourceFrame.alignments === 'object' ? sourceFrame.alignments : {};
-      return {name:String(sourceFrame.name || 'Frame preset').slice(0,60),corners:cleanFrameImages(sourceFrame.corners,cornerNames),sides:cleanFrameImages(sourceFrame.sides,sideNames),cornerSize:number(sourceFrame.cornerSize,9,1,30),cornerSizes:Object.fromEntries(cornerNames.map(key => [key,number(sourceFrame.cornerSizes?.[key],sourceFrame.cornerSize || 9,1,30)])),visiblePieces:Object.fromEntries(pieceNames.map(key => [key,sourceFrame.visiblePieces?.[key] !== false])),horizontalThickness:number(sourceFrame.horizontalThickness,5,1,25),verticalThickness:number(sourceFrame.verticalThickness,5,1,25),sideMode:['stretch','repeat','connected'].includes(sourceFrame.sideMode) ? sourceFrame.sideMode : 'stretch',placement:sourceFrame.placement === 'foreground' ? 'foreground' : 'background',offsetX:number(sourceFrame.offsetX,0,-100,100),offsetY:number(sourceFrame.offsetY,0,-100,100),rotation:number(sourceFrame.rotation,0,-180,180),overlap:number(sourceFrame.overlap,0,0,100),visible:sourceFrame.visible !== false,alignments:{top:['left','center','right'].includes(sourceAlignments.top) ? sourceAlignments.top : 'center',bottom:['left','center','right'].includes(sourceAlignments.bottom) ? sourceAlignments.bottom : 'center',left:['top','middle','bottom'].includes(sourceAlignments.left) ? sourceAlignments.left : 'middle',right:['top','middle','bottom'].includes(sourceAlignments.right) ? sourceAlignments.right : 'middle'}};
+      return {name:String(sourceFrame.name || 'Frame preset').slice(0,60),corners:cleanFrameImages(sourceFrame.corners,cornerNames),sides:cleanFrameImages(sourceFrame.sides,sideNames),cornerSize:number(sourceFrame.cornerSize,9,1,30),cornerSizes:Object.fromEntries(cornerNames.map(key => [key,number(sourceFrame.cornerSizes?.[key],sourceFrame.cornerSize || 9,1,30)])),visiblePieces:Object.fromEntries(pieceNames.map(key => [key,sourceFrame.visiblePieces?.[key] !== false])),horizontalThickness:number(sourceFrame.horizontalThickness,5,1,25),verticalThickness:number(sourceFrame.verticalThickness,5,1,25),sideMode:['stretch','repeat','connected'].includes(sourceFrame.sideMode) ? sourceFrame.sideMode : 'stretch',placement:sourceFrame.placement === 'foreground' ? 'foreground' : 'background',offsetX:number(sourceFrame.offsetX,0,-100,100),offsetY:number(sourceFrame.offsetY,0,-100,100),rotation:number(sourceFrame.rotation,0,-180,180),pieces:Object.fromEntries(pieceNames.map(key=>[key,{offsetX:number(sourceFrame.pieces?.[key]?.offsetX,0,-100,100),offsetY:number(sourceFrame.pieces?.[key]?.offsetY,0,-100,100),rotation:number(sourceFrame.pieces?.[key]?.rotation,0,-180,180)}])),overlap:number(sourceFrame.overlap,0,0,100),visible:sourceFrame.visible !== false,alignments:{top:['left','center','right'].includes(sourceAlignments.top) ? sourceAlignments.top : 'center',bottom:['left','center','right'].includes(sourceAlignments.bottom) ? sourceAlignments.bottom : 'center',left:['top','middle','bottom'].includes(sourceAlignments.left) ? sourceAlignments.left : 'middle',right:['top','middle','bottom'].includes(sourceAlignments.right) ? sourceAlignments.right : 'middle'}};
     };
     const normalizedFrame = normalizeFramePreset(frame);
     normalizedFrame.presets = (Array.isArray(frame.presets) ? frame.presets : []).slice(0,8).map(normalizeFramePreset);
@@ -684,7 +684,8 @@
     }
     return Object.entries(geometry).flatMap(([key,bounds]) => {
       const corner = corners.includes(key), image = (corner ? frame.corners : frame.sides)?.[key];
-      return frame.visiblePieces?.[key] === false || !image ? [] : [{key,image,corner,...bounds}];
+      const adjustment=frame.pieces?.[key]||{};
+      return frame.visiblePieces?.[key] === false || !image ? [] : [{key,image,corner,...bounds,x:bounds.x+(Number(adjustment.offsetX)||0),y:bounds.y+(Number(adjustment.offsetY)||0),rotation:Number(adjustment.rotation)||0}];
     });
   }
   function friendCardFrameInsets(design) {
@@ -693,7 +694,10 @@
     const offsetX=(Number(frame.offsetX)||0)*width/100,offsetY=(Number(frame.offsetY)||0)*height/100;
     const insets={top:0,right:0,bottom:0,left:0};
     for(const piece of friendCardFramePieces(design)) for(const [px,py] of [[piece.x,piece.y],[piece.x+piece.width,piece.y],[piece.x+piece.width,piece.y+piece.height],[piece.x,piece.y+piece.height]]) {
-      const x=px*width/100-width/2,y=py*height/100-height/2;
+      const centerX=(piece.x+piece.width/2)*width/100,centerY=(piece.y+piece.height/2)*height/100;
+      const radians=(piece.rotation||0)*Math.PI/180,pc=Math.cos(radians),ps=Math.sin(radians);
+      const localX=px*width/100-centerX,localY=py*height/100-centerY;
+      const x=centerX+localX*pc-localY*ps-width/2,y=centerY+localX*ps+localY*pc-height/2;
       const tx=width/2+x*cos-y*sin+offsetX,ty=height/2+x*sin+y*cos+offsetY;
       insets.left=Math.max(insets.left,-tx/width*100);insets.right=Math.max(insets.right,(tx-width)/width*100);
       insets.top=Math.max(insets.top,-ty/height*100);insets.bottom=Math.max(insets.bottom,(ty-height)/height*100);
@@ -705,7 +709,7 @@
     if (!pieces.length) return '';
     return `<div class="friend-card-exterior-frame${design.frame.placement === 'foreground' ? ' is-foreground' : ''}" style="transform:translate(${Number(design.frame.offsetX)||0}%,${Number(design.frame.offsetY)||0}%) rotate(${Number(design.frame.rotation)||0}deg)" aria-hidden="true">${pieces.map(piece => {
       const horizontal = ['top','bottom'].includes(piece.key), repeat = design.frame.sideMode === 'repeat' && !piece.corner;
-      const style = `left:${piece.x}%;top:${piece.y}%;width:${piece.width}%;height:${piece.height}%;z-index:${piece.corner ? 1 : 0};background-image:url(&quot;${esc(piece.image)}&quot;);background-size:${repeat ? horizontal ? 'auto 100%' : '100% auto' : '100% 100%'};background-repeat:${repeat ? horizontal ? 'repeat-x' : 'repeat-y' : 'no-repeat'}`;
+      const style = `left:${piece.x}%;top:${piece.y}%;width:${piece.width}%;height:${piece.height}%;z-index:${piece.corner ? 1 : 0};transform:rotate(${piece.rotation||0}deg);transform-origin:center;background-image:url(&quot;${esc(piece.image)}&quot;);background-size:${repeat ? horizontal ? 'auto 100%' : '100% auto' : '100% 100%'};background-repeat:${repeat ? horizontal ? 'repeat-x' : 'repeat-y' : 'no-repeat'}`;
       return `<div class="friend-custom-frame-piece frame-${piece.key}" style="${style}"></div>`;
     }).join('')}</div>`;
   }
@@ -730,8 +734,10 @@
         const icon=$('span',upload);if(icon)icon.textContent=image?'↺':'+';
       }
       if(remove)remove.disabled=!image;if(visible)visible.checked=frame.visiblePieces?.[key]!==false;
+      const status=$('[data-frame-piece-status]',row.closest('.frame-piece-panel'));
+      if(status){status.textContent=image?'Image loaded':'No image';status.classList.toggle('has-image',Boolean(image));}
     });
-    $$('[data-frame-output]').forEach(output=>{const key=output.dataset.frameOutput;output.textContent=`${Number(frame[key])||0}${key==='rotation'?'°':'%'}`;});
+    $$('[data-frame-output]').forEach(output=>{const key=output.dataset.frameOutput;output.textContent=`${Number(key.split('.').reduce((value,part)=>value?.[part],frame))||0}${key.endsWith('rotation')?'°':'%'}`;});
     $$('[data-frame-alignment]').forEach(label => { label.hidden = frame.sideMode !== 'connected'; });
     $$('[data-frame-property]').forEach(input => {
       const value = input.dataset.frameProperty.split('.').reduce((source,key) => source?.[key],frame);
@@ -777,15 +783,23 @@
     const thumb = value ? `<span class="friend-card-image-thumb" data-friend-card-thumb="${field}" style="background-image:url(&quot;${esc(value)}&quot;)"></span>` : `<span class="friend-card-image-thumb friend-card-image-empty" data-friend-card-thumb="${field}">No image selected</span>`;
     return `<div class="friend-card-asset-row" data-friend-card-asset-row="${field}"><div><strong>${title}</strong><small>${supportsStk ? 'Upload JPG, PNG, WebP, or a Helunemi .stk stroke file.' : 'Upload a JPG, PNG, or WebP image.'} Images are resized before saving.</small></div>${thumb}<input type="file" accept="image/png,image/jpeg,image/webp${supportsStk ? ',.stk,application/json' : ''}" data-friend-card-image="${field}" hidden><input type="hidden" name="${field}" value="${esc(value)}"><div class="friend-card-asset-actions"><button class="btn btn-ghost btn-sm" type="button" data-choose-friend-card-image="${field}">Choose image</button><button class="btn btn-ghost btn-sm" type="button" data-remove-friend-card-image="${field}"${value ? '' : ' hidden'}>Remove</button>${supportsStk ? `<button class="btn btn-ghost btn-sm" type="button" data-export-stk="${field}"${value ? '' : ' disabled'}>Export .stk</button>` : ''}</div></div>`;
   }
+  function setFriendCardFrameProperty(key,value){
+    const frame=friendCardDesignState.frame;
+    if(key.startsWith('pieces.')){const [,piece,property]=key.split('.');frame.pieces||={};frame.pieces[piece]||={offsetX:0,offsetY:0,rotation:0};frame.pieces[piece][property]=Number(value);}
+    else if(key.startsWith('alignments.'))frame.alignments[key.split('.')[1]]=value;
+    else if(key.startsWith('cornerSizes.'))frame.cornerSizes[key.split('.')[1]]=Number(value);
+    else if(key==='cornerSize'){frame.cornerSize=Number(value);for(const corner of ['topLeft','topRight','bottomLeft','bottomRight'])frame.cornerSizes[corner]=Number(value);}
+    else frame[key]=['sideMode','placement'].includes(key)?value:key==='visible'?Boolean(value):Number(value);
+  }
   function friendFrameRangeControl(label,key,min,max,suffix='%') {
-    const value=Number(friendCardDesignState?.frame?.[key])||0;
-    return `<label class="friend-frame-range"><span>${label}<output data-frame-output="${key}">${value}${suffix}</output></span><input type="range" min="${min}" max="${max}" step="1" value="${value}" data-frame-property="${key}"></label>`;
+    const value=Number(key.split('.').reduce((value,part)=>value?.[part],friendCardDesignState?.frame))||0;
+    return `<label class="friend-frame-range"><span>${label}<output data-frame-output="${key}">${value}${suffix}</output></span><input type="range" min="${min}" max="${max}" step="${key.endsWith('rotation')?1:.1}" value="${value}" data-frame-property="${key}"></label>`;
   }
   function friendFrameAssetRow(group,key,label) {
     const image=friendCardDesignState?.frame?.[group]?.[key]||'',visible=friendCardDesignState?.frame?.visiblePieces?.[key]!==false;
     const short=label.replace(' corner','').replace(' side','');
     const size=group==='corners'?`<input class="frame-piece-size-value" type="number" min="1" max="30" data-frame-property="cornerSizes.${key}" value="${esc(friendCardDesignState.frame.cornerSizes?.[key]||friendCardDesignState.frame.cornerSize||9)}" aria-label="${esc(label)} size in percent" title="Corner size (%)">`:'<span class="frame-piece-size-empty" aria-hidden="true">—</span>';
-    return `<div class="frame-piece-row" data-frame-asset-row="${group}.${key}"><span title="${esc(label)}">${esc(short)}</span><label class="frame-piece-upload${image?' has-image':''}" title="${image?'Replace':'Choose'} ${esc(label)} image"${image?` style="--frame-preview:url(&quot;${esc(image)}&quot;)"`:''}><input type="file" accept="image/png,image/jpeg,image/webp" data-frame-piece="${group}.${key}" aria-label="Choose ${esc(label)} image"><span aria-hidden="true">${image?'↺':'+'}</span></label>${size}<button type="button" class="frame-piece-remove" data-remove-frame-piece="${group}.${key}" aria-label="Remove ${esc(label)} image"${image?'':' disabled'}>×</button><label class="frame-piece-visibility" title="Show ${esc(label)}"><input type="checkbox" data-frame-piece-visible="${key}"${visible?' checked':''} aria-label="Show ${esc(label)}"></label></div>`;
+    return `<details class="frame-piece-panel"><summary><strong>${esc(label)}</strong><small data-frame-piece-status class="${image?'has-image':''}">${image?'Image loaded':'No image'}</small></summary><div class="frame-piece-row" data-frame-asset-row="${group}.${key}"><span title="${esc(label)}">${esc(short)}</span><label class="frame-piece-upload${image?' has-image':''}" title="${image?'Replace':'Choose'} ${esc(label)} image"${image?` style="--frame-preview:url(&quot;${esc(image)}&quot;)"`:''}><input type="file" accept="image/png,image/jpeg,image/webp" data-frame-piece="${group}.${key}" aria-label="Choose ${esc(label)} image"><span aria-hidden="true">${image?'↺':'+'}</span></label>${size}<button type="button" class="frame-piece-remove" data-remove-frame-piece="${group}.${key}" aria-label="Remove ${esc(label)} image"${image?'':' disabled'}>×</button><label class="frame-piece-visibility" title="Show ${esc(label)}"><input type="checkbox" data-frame-piece-visible="${key}"${visible?' checked':''} aria-label="Show ${esc(label)}"></label></div><div class="frame-piece-transform-controls">${friendFrameRangeControl('Horizontal position','pieces.'+key+'.offsetX',-100,100)}${friendFrameRangeControl('Vertical position','pieces.'+key+'.offsetY',-100,100)}${friendFrameRangeControl('Rotation','pieces.'+key+'.rotation',-180,180,'°')}<button type="button" class="btn btn-ghost btn-sm" data-frame-piece-reset="${key}">Reset this piece</button></div></details>`;
   }
 
   function friendColorControl(label, name, value, binding = '') {
@@ -1543,7 +1557,7 @@
     return true;
   }
   function ensureCommunityMessenger() {
-    if (page === 'chat') {
+    if (page === 'chat' || page === 'explore-ais') {
       document.body.classList.add('community-page-body');
       $('#site-quick-menu')?.remove();
       return;
@@ -1562,29 +1576,79 @@
     });
   }
 
-  function renderCommunitySidebar() {
-    const sidebar = $('[data-community-sidebar]');
-    if (!sidebar) return;
-    if (!currentUser) {
-      sidebar.innerHTML = '<p class="community-sidebar-kicker">COMMUNITY</p><p class="community-signin-hint">Sign in to chat with friends and send requests.</p><a class="btn btn-primary" href="account.html?mode=login">Log in</a><a class="btn btn-ghost" href="account.html?mode=signup">Create account</a>';
-      return;
-    }
-    const requests = communityData.friendRequestsReceived || [];
-    const friends = communityData.friends || [];
-    sidebar.innerHTML = `<p class="community-sidebar-kicker">YOUR SPACE</p><button class="community-nav-item${communityPane === 'home' ? ' is-active' : ''}" type="button" data-community-pane="home"><span>✦</span> Overview</button><button class="community-nav-item${communityPane === 'requests' ? ' is-active' : ''}" type="button" data-community-pane="requests"><span>♧</span> Friend requests${requests.length ? `<b>${requests.length}</b>` : ''}</button>${isCurrentUserStaff() ? `<button class="community-nav-item${communityPane === 'reports' ? ' is-active' : ''}" type="button" data-community-pane="reports"><span>⚑</span> Studio reports${communityData.bugReports?.length ? `<b>${communityData.bugReports.filter(report => report.status === 'open').length}</b>` : ''}</button>` : ''}<div class="community-friends-heading"><span>FRIENDS</span><b>${friends.length}</b></div><div class="community-friend-list">${friends.length ? friends.map(person => `<button class="community-friend-item${communityPane === 'chat' && communityConversationId === person.id ? ' is-active' : ''}" type="button" data-community-chat="${esc(person.id)}">${avatar(person.username,'community-avatar',person.avatarImage)}<span><strong>${esc(person.username)}</strong><small>${esc(person.primaryRole)}</small></span><i class="${person.online ? 'is-online' : 'is-offline'}" title="${person.online ? 'Online' : 'Offline'}"></i></button>`).join('') : '<p class="community-no-friends">Accepted friends appear here. Visit the Members page to send a request.</p>'}</div><button class="community-report-launch" type="button" data-community-pane="report"><span>⚑</span><span><strong>Report a bug</strong><small>Send a note to the studio team</small></span><b>↗</b></button>`;
+  function messengerNavigation(active){
+    return `<div class="messenger-brand"><a href="index.html" aria-label="Helunemi home"><img src="assets/golden-spiral-sun-icon.png" alt=""><span>Helunemi</span></a></div><nav class="messenger-navigation" aria-label="Spaces"><a href="chat.html"${active==='community'?' aria-current="page"':''}><span aria-hidden="true">◈</span>Community</a><a href="explore-ais.html"${active==='ais'?' aria-current="page"':''}><span aria-hidden="true">✦</span>Explore AIs</a><a href="members.html"><span aria-hidden="true">♧</span>Members</a><a href="account.html"><span aria-hidden="true">◉</span>Profile</a></nav>`;
   }
-  function renderCommunityMessages(messages) {
-    const list = $('.community-message-list');
-    if (!list) return;
-    const existing = new Set($$('.community-message[data-message-id]',list).map(item => item.dataset.messageId));
-    list.innerHTML = messages.length ? messages.map(message => {
-      const type = message.type || 'text', isMine = message.senderId === currentUser?.id;
-      let body = type === 'image' || type === 'gif' ? `<img class="chat-media-image${type === 'gif' ? ' is-gif' : ''}" src="${esc(message.mediaUrl)}" alt="${type === 'gif' ? 'Animated GIF' : 'Image shared in chat'}" loading="lazy">` : type === 'voice' ? `<audio class="chat-voice-player" controls preload="metadata" src="${esc(message.mediaUrl)}">Your browser cannot play this voice message.</audio>` : type === 'sticker' ? (message.mediaUrl ? `<img class="chat-sticker-image" src="${esc(message.mediaUrl)}" alt="Sticker" loading="lazy">` : `<div class="chat-sticker-message" aria-label="Sticker">${esc(message.text)}</div>`) : `<p>${esc(message.text).replace(/\n/g,'<br>')}</p>`;
-      const animate = !existing.has(message.id) && Date.now() - Number(message.createdAt) < 5000;
-      return `<article class="community-message${isMine ? ' is-mine' : ''}${animate ? ' is-new' : ''}" data-message-id="${esc(message.id)}"><span class="community-message-author">${isMine ? 'You' : esc(communityData.friends.find(person => person.id === message.senderId)?.username || 'Friend')}</span>${body}${message.caption ? `<p class="chat-media-caption">${esc(message.caption)}</p>` : ''}<time>${new Date(message.createdAt).toLocaleString([], {dateStyle:'medium',timeStyle:'short'})}</time></article>`;
-    }).join('') : '<p class="community-empty-chat">This is the start of your conversation. Say hello!</p>';
-    list.scrollTop = list.scrollHeight;
+  function renderCommunitySidebar(){
+    const sidebar=$('[data-community-sidebar]');if(!sidebar)return;
+    const navigation=messengerNavigation('community');
+    if(!currentUser){sidebar.innerHTML=navigation+'<p class="community-signin-hint">Sign in to chat with friends and follow your reports.</p><a class="btn btn-primary" href="account.html?mode=login">Log in</a><a class="btn btn-ghost" href="account.html?mode=signup">Create account</a>';return;}
+    const requests=communityData.friendRequestsReceived||[],friends=communityData.friends||[];
+    sidebar.innerHTML=`${navigation}<div class="community-space-links"><button class="community-nav-item${communityPane==='home'?' is-active':''}" type="button" data-community-pane="home"><span>✧</span>Overview</button><button class="community-nav-item${communityPane==='requests'?' is-active':''}" type="button" data-community-pane="requests"><span>♧</span>Requests${requests.length?`<b>${requests.length}</b>`:''}</button><button class="community-nav-item${communityPane==='my-reports'?' is-active':''}" type="button" data-community-pane="my-reports"><span>☷</span>My reports</button>${isCurrentUserStaff()?`<button class="community-nav-item${communityPane==='reports'?' is-active':''}" type="button" data-community-pane="reports"><span>⚑</span>Studio inbox</button>`:''}</div><div class="community-friends-heading"><span>FRIENDS</span><b>${friends.length}</b></div><div class="community-friend-list">${friends.length?friends.map(person=>`<button class="community-friend-item${communityPane==='chat'&&communityConversationId===person.id?' is-active':''}" type="button" data-community-chat="${esc(person.id)}" aria-label="Chat with ${esc(person.username)} — ${person.online?'online':'offline'}">${avatar(person.username,'community-avatar',person.avatarImage)}<span class="community-friend-copy"><strong>${esc(person.username)}</strong><small>${person.online?'Online':'Offline'} · ${esc(PRIMARY_ROLE_LABELS?.[person.primaryRole]||person.primaryRole)}</small></span><i class="${person.online?'is-online':'is-offline'}" aria-hidden="true"></i></button>`).join(''):'<p class="community-no-friends">Your accepted friends will appear here.<br><a href="members.html">Find someone to meet ↗</a></p>'}</div><button class="community-report-launch" type="button" data-community-pane="report"><span>⚑</span><span><strong>Report a bug</strong><small>Get help from the studio</small></span><b>↗</b></button>`;
   }
+  async function renderCommunityReports(keepOpen=''){
+    const main=$('[data-community-main]'),pane=communityPane;if(!main)return;
+    const request=(renderCommunityReports.request||0)+1;renderCommunityReports.request=request;
+    try{
+      const result=await api('/api/community/bug-reports'+(pane==='my-reports'?'?scope=mine':''));
+      if(communityPane!==pane||!['reports','my-reports'].includes(pane)||!main.isConnected||request!==renderCommunityReports.request)return;
+      const signature=JSON.stringify(result.reports.map(report=>[report.id,report.updatedAt,report.status,report.replies?.length||0]));
+      if(!keepOpen&&main.dataset.reportSignature===signature&&main.dataset.reportPane===pane&&$('.community-reports-panel',main))return;
+      const opened=new Set($$('details[data-report-thread][open]',main).map(item=>item.dataset.reportThread));if(keepOpen)opened.add(keepOpen);
+      const drafts=new Map($$('[data-report-reply]',main).map(form=>[form.dataset.reportReply,form.elements.text.value]));
+      const scroll=main.scrollTop;
+      communityData.bugReports=result.reports||[];
+      main.innerHTML=`<section class="community-form-panel community-reports-panel"><p class="section-eyebrow">${pane==='my-reports'?'YOUR SUPPORT THREADS':'STUDIO INBOX'}</p><h1>${pane==='my-reports'?'My reports':'Bug reports'}</h1><p>${pane==='my-reports'?'Follow replies from the team and add more details here.':'Reply to community reports, ask for details, and mark fixed issues as resolved.'}</p><div class="community-report-list">${result.reports.length?[...result.reports].reverse().map(report=>`<details class="community-report-thread" data-report-thread="${esc(report.id)}"${opened.has(report.id)?' open':''}><summary><span class="community-report-status${report.status==='resolved'?' is-resolved':''}">${esc(report.status)}</span><strong>${esc(report.title)}</strong><small>${report.replies?.length||0} replies</small></summary><div class="community-report-body"><div class="community-report-meta"><a href="account.html?user=${encodeURIComponent(report.reporterId)}">${esc(report.reporterName)}</a><time>${new Date(report.createdAt).toLocaleString()}</time></div><p>${esc(report.details).replace(/\n/g,'<br>')}</p>${report.page?`<small class="community-report-page">Page: ${esc(report.page)}</small>`:''}<div class="community-report-replies">${(report.replies||[]).map(reply=>`<article class="community-report-reply${reply.authorId===currentUser.id?' is-mine':''}"><header><strong>${esc(reply.authorName)}</strong><span>${esc(reply.authorRole)}</span><time>${new Date(reply.createdAt).toLocaleString()}</time></header><p>${esc(reply.text).replace(/\n/g,'<br>')}</p></article>`).join('')||'<p class="panel-help">No replies yet.</p>'}</div><form class="community-report-reply-form" data-report-reply="${esc(report.id)}"><label>Reply<textarea name="text" rows="3" maxlength="4000" required placeholder="${isCurrentUserStaff()?'Reply to the reporter…':'Add details or reply to the team…'}"></textarea></label><p class="form-message" data-report-feedback role="status"></p><div><button class="btn btn-primary btn-sm" type="submit">Send reply</button>${isCurrentUserStaff()?`<button class="btn btn-ghost btn-sm" type="button" data-report-status="${report.status==='resolved'?'open':'resolved'}" data-report-id="${esc(report.id)}">${report.status==='resolved'?'Reopen report':'Mark resolved'}</button>`:''}</div></form></div></details>`).join(''):'<div class="community-empty-state"><span>⚑</span><h2>No reports yet</h2><p>Report an issue to start a support thread.</p><button class="btn btn-ghost" type="button" data-community-pane="report">Write a report</button></div>'}</div></section>`;
+      $$('[data-report-reply]',main).forEach(form=>{form.elements.text.value=drafts.get(form.dataset.reportReply)||'';});
+      main.dataset.reportSignature=signature;main.dataset.reportPane=pane;main.scrollTop=scroll;
+    }catch(error){if(communityPane===pane&&request===renderCommunityReports.request)main.innerHTML=`<p class="community-inline-error">${esc(error.message)}</p>`;}
+  }
+
+  function renderCommunityMessages(messages){
+    const list=$('.community-message-list');if(!list)return;
+    const ids=messages.map(message=>message.id),existing=$$('.community-message[data-message-id]',list),oldIds=existing.map(item=>item.dataset.messageId);
+    if(ids.length===oldIds.length&&ids.every((id,index)=>id===oldIds[index])&&(ids.length||$('.community-empty-chat',list)))return;
+    const nearBottom=list.scrollHeight-list.scrollTop-list.clientHeight<90,previousHeight=list.scrollHeight,scroll=list.scrollTop;
+    const append=oldIds.length>0&&oldIds.every((id,index)=>id===ids[index]);
+    const start=append?oldIds.length:0;
+    const markup=messages.slice(start).map((message,index)=>{
+      const type=message.type||'text',mine=message.senderId===currentUser?.id,previous=messages[start+index-1];
+      const day=new Date(message.createdAt).toLocaleDateString(),previousDay=previous?new Date(previous.createdAt).toLocaleDateString():'';
+      const date=day!==previousDay?`<div class="community-day-separator"><time>${esc(day)}</time></div>`:'';
+      const author=mine?'You':communityData.friends.find(person=>person.id===message.senderId)?.username||'Friend';
+      const body=type==='image'||type==='gif'?`<img class="chat-media-image${type==='gif'?' is-gif':''}" src="${esc(message.mediaUrl)}" alt="${type==='gif'?'Animated GIF':'Shared image'}" loading="lazy" decoding="async">`:type==='voice'?`<audio class="chat-voice-player" controls preload="metadata" src="${esc(message.mediaUrl)}">Your browser cannot play this voice message.</audio>`:type==='sticker'?(message.mediaUrl?`<img class="chat-sticker-image" src="${esc(message.mediaUrl)}" alt="Sticker" loading="lazy" decoding="async">`:`<div class="chat-sticker-message" aria-label="Sticker">${esc(message.text)}</div>`):`<p>${esc(message.text).replace(/\n/g,'<br>')}</p>`;
+      return `${date}<article class="community-message${mine?' is-mine':''}${Date.now()-Number(message.createdAt)<5000?' is-new':''}" data-message-id="${esc(message.id)}"><span class="community-message-author">${esc(author)}</span>${body}${message.caption?`<p class="chat-media-caption">${esc(message.caption)}</p>`:''}<time datetime="${new Date(message.createdAt).toISOString()}">${new Date(message.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</time></article>`;
+    }).join('');
+    if(append)list.insertAdjacentHTML('beforeend',markup);else list.innerHTML=markup||'<div class="community-empty-chat"><span>✧</span><p>Your conversation starts here. Say hello!</p></div>';
+    const latest=messages.at(-1),ownNew=latest?.senderId===currentUser?.id&&!oldIds.includes(latest.id);
+    if(nearBottom||!oldIds.length||ownNew)list.scrollTop=list.scrollHeight;
+    else list.scrollTop=append?scroll:Math.max(0,scroll+list.scrollHeight-previousHeight);
+  }
+  async function refreshCommunityConversationMessages(id=communityConversationId){
+    const result=await api('/api/community/messages?with='+encodeURIComponent(id));
+    if(communityPane==='chat'&&communityConversationId===id)renderCommunityMessages(result.messages||[]);
+  }
+  function communityColorSetting(label,key){
+    const value=communityChatSettings[key];
+    return `<label class="chat-color-setting"><span>${label}</span><span class="chat-color-picker"><input type="color" data-chat-setting="${key}" value="${esc(value)}" aria-label="${label} color"><input type="text" data-chat-color-hex="${key}" maxlength="7" spellcheck="false" value="${esc(value.toUpperCase())}" aria-label="${label} HEX code"></span></label>`;
+  }
+  function renderCommunityChatSettings(){
+    const panel=$('[data-chat-settings-panel]');if(!panel)return;
+    const settings=communityChatSettings;
+    panel.innerHTML=`<div class="chat-settings-heading"><div><span class="section-eyebrow">THIS CONVERSATION</span><h2>Chat appearance</h2></div><button type="button" data-chat-settings-close aria-label="Close chat settings">×</button></div><p class="chat-settings-scope">Saved in this browser for this friend chat only.</p><details class="chat-setting-section" open><summary>Colors</summary><div class="chat-settings-fields">${communityColorSetting('Background','background')}${communityColorSetting('Your messages','ownBubble')}${communityColorSetting('Friend messages','friendBubble')}${communityColorSetting('Text','text')}</div></details><details class="chat-setting-section" open><summary>Typography &amp; layout</summary><div class="chat-settings-fields"><label class="chat-range-setting">Text size <output data-chat-setting-output="fontSize">${settings.fontSize}px</output><input type="range" min="13" max="20" step="1" data-chat-setting="fontSize" value="${settings.fontSize}"></label><label>Font<select data-chat-setting="fontFamily">${['DM Sans','Georgia','monospace'].map(font=>`<option${settings.fontFamily===font?' selected':''}>${font}</option>`).join('')}</select></label><label>Message animation<select data-chat-setting="animation">${[['pop','Soft pop'],['fade','Fade in'],['slide','Slide in'],['none','None']].map(([id,label])=>`<option value="${id}"${settings.animation===id?' selected':''}>${label}</option>`).join('')}</select></label><label class="chat-range-setting">Bubble roundness <output data-chat-setting-output="bubbleRadius">${settings.bubbleRadius}px</output><input type="range" min="0" max="28" step="1" data-chat-setting="bubbleRadius" value="${settings.bubbleRadius}"></label><label class="chat-compact-setting"><input type="checkbox" data-chat-setting="compact"${settings.compact?' checked':''}> Compact spacing</label></div></details><details class="chat-setting-section"><summary>Wallpaper</summary><div class="chat-settings-fields"><label class="chat-wallpaper-setting">Upload a background<input type="file" data-chat-wallpaper accept="image/png,image/jpeg,image/webp"></label><label class="chat-range-setting">Wallpaper dimming <output data-chat-setting-output="wallpaperDim">${settings.wallpaperDim}%</output><input type="range" min="0" max="85" step="1" data-chat-setting="wallpaperDim" value="${settings.wallpaperDim}"></label><button type="button" class="btn btn-ghost btn-sm" data-chat-wallpaper-clear${settings.wallpaper?'':' hidden'}>Remove wallpaper</button></div></details><div class="chat-coming-soon"><span>Custom chat bubbles</span><strong>Coming soon~</strong></div><button class="btn btn-ghost btn-sm chat-reset-settings" type="button" data-chat-settings-reset>Reset this chat’s appearance</button>`;
+  }
+  function updateCommunityChatSetting(control){
+    const key=control.dataset.chatSetting,colors=['background','ownBubble','friendBubble','text'];
+    if(colors.includes(key)){
+      if(!/^#[0-9a-f]{6}$/i.test(control.value))return;
+      communityChatSettings[key]=control.value;
+      const hex=$(`[data-chat-color-hex="${key}"]`);if(hex)hex.value=control.value.toUpperCase();
+    }else if(['fontSize','bubbleRadius','wallpaperDim'].includes(key))communityChatSettings[key]=Number(control.value);
+    else communityChatSettings[key]=control.type==='checkbox'?control.checked:control.value;
+    const output=$(`[data-chat-setting-output="${key}"]`);if(output)output.textContent=`${communityChatSettings[key]}${key==='wallpaperDim'?'%':'px'}`;
+    saveCommunityChatSettings();
+  }
+
   async function loadCommunityConversation(id) {
     const main = $('[data-community-main]'), person = communityData.friends.find(friend => friend.id === id);
     if (!main || !person) return;
@@ -1595,8 +1659,8 @@
     main.classList.add('is-chat-view');
     applyCommunityChatSettings();
     main.innerHTML = `<header class="community-pane-heading">${avatar(person.username,'community-avatar',person.avatarImage)}<div><h2>${esc(person.username)}</h2><p><i class="chat-online-dot${person.online ? ' is-online' : ''}"></i><span data-friend-presence>${person.online ? 'Online' : 'Offline'}</span> · ${esc(person.primaryRole)}</p></div><a href="account.html?user=${encodeURIComponent(person.id)}">View profile ↗</a><button class="chat-settings-button" type="button" data-chat-settings aria-label="Chat appearance settings">⚙</button></header><div class="community-message-list" aria-live="polite"></div><div class="chat-composer-wrap"><div class="chat-sticker-panel" data-chat-sticker-panel hidden><span>Send a sticker</span><div>${['✨','🌞','💖','🥺','🌙','🎮','🎉','🐈','❄️','⭐','💬','🫶'].map(sticker => `<button type="button" data-chat-sticker="${sticker}" aria-label="Send sticker ${sticker}">${sticker}</button>`).join('')}<button type="button" data-chat-file-open="sticker" aria-label="Upload a sticker image" title="Upload your own sticker">＋</button></div></div><form class="community-composer" id="community-message-form"><div class="chat-composer-tools"><button type="button" data-chat-file-open="image" aria-label="Send image" title="Send image">▧</button><button type="button" data-chat-file-open="gif" aria-label="Send GIF" title="Send GIF">GIF</button><button type="button" data-chat-sticker-toggle aria-label="Choose sticker" title="Choose sticker">✦</button><button type="button" data-chat-voice aria-label="Record voice message" title="Record voice message">🎙</button><input type="file" data-chat-file="image" accept="image/png,image/jpeg,image/webp" hidden><input type="file" data-chat-file="gif" accept="image/gif" hidden><input type="file" data-chat-file="sticker" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div><label class="visually-hidden" for="community-message-input">Message ${esc(person.username)}</label><textarea id="community-message-input" name="text" rows="1" maxlength="2000" placeholder="Message ${esc(person.username)}…"></textarea><button class="btn btn-primary" type="submit" aria-label="Send message">Send <span aria-hidden="true">↑</span></button><span class="chat-voice-status" data-chat-voice-status aria-live="polite"></span></form></div><aside class="chat-settings-panel" data-chat-settings-panel hidden></aside>`;
-    try { const result = await api(`/api/community/messages?with=${encodeURIComponent(id)}`); renderCommunityMessages(result.messages || []); }
-    catch (error) { main.querySelector('.community-message-list').innerHTML = `<p class="community-inline-error">${esc(error.message)}</p>`; }
+    try { await refreshCommunityConversationMessages(id); }
+    catch(error){if(communityConversationId===id&&communityPane==='chat')main.querySelector('.community-message-list').innerHTML=`<p class="community-inline-error">${esc(error.message)}</p>`;}
   }
   async function renderCommunityPane() {
     const main = $('[data-community-main]');
@@ -1617,13 +1681,7 @@
       main.innerHTML = `<section class="community-form-panel community-requests-panel"><p class="section-eyebrow">PEOPLE YOU MAY KNOW</p><h1>Friend requests</h1><p>Accept a request to start chatting. You can also meet members on the Members page.</p>${requests.length ? `<div class="community-request-list">${requests.map(person => `<article class="community-request-card">${avatar(person.username,'community-avatar',person.avatarImage)}<div><strong>${esc(person.username)}</strong><small>${esc(person.primaryRole)}</small></div><button class="btn btn-primary btn-sm" type="button" data-community-respond="${esc(person.id)}" data-community-accept="true">Accept</button><button class="btn btn-ghost btn-sm" type="button" data-community-respond="${esc(person.id)}" data-community-accept="false">Decline</button></article>`).join('')}</div>` : '<div class="community-empty-state"><span>♧</span><h2>No requests yet</h2><p>When someone sends you a friend request, it will appear here.</p><a class="btn btn-ghost" href="members.html">Explore members</a></div>'}</section>`;
       return;
     }
-    if (communityPane === 'reports' && isCurrentUserStaff()) {
-      let reports = communityData.bugReports || [];
-      try { reports = (await api('/api/community/bug-reports')).reports || reports; communityData.bugReports = reports; }
-      catch (error) { main.innerHTML = `<p class="community-inline-error">${esc(error.message)}</p>`; return; }
-      main.innerHTML = `<section class="community-form-panel community-reports-panel"><p class="section-eyebrow">STUDIO INBOX</p><h1>Bug reports</h1><p>Reports sent by Helunemi accounts are visible to the active studio team.</p>${reports.length ? `<div class="community-report-list">${[...reports].reverse().map(report => `<article class="community-report-card"><div><span class="community-report-status${report.status === 'resolved' ? ' is-resolved' : ''}">${esc(report.status)}</span><time>${new Date(report.createdAt).toLocaleString([], {dateStyle:'medium',timeStyle:'short'})}</time></div><h2>${esc(report.title)}</h2><p>${esc(report.details).replace(/\n/g,'<br>')}</p><small>From <a href="account.html?user=${encodeURIComponent(report.reporterId)}">${esc(report.reporterName)}</a> · ${esc(report.page || 'Site')}</small></article>`).join('')}</div>` : '<div class="community-empty-state"><span>⚑</span><h2>Nothing to review</h2><p>New community reports will show up here.</p></div>'}</section>`;
-      return;
-    }
+    if(communityPane==='my-reports'||communityPane==='reports'&&isCurrentUserStaff()){await renderCommunityReports();return;}
     main.innerHTML = `<section class="community-welcome"><span class="community-welcome-mark">✦</span><p class="section-eyebrow">HELUNEMI COMMUNITY</p><h1>Good things grow when we build together.</h1><p>Chat with accepted friends, make new connections from Member Friend-Cards, or send a bug report directly to the Helunemi team.</p><div class="community-home-actions"><button class="btn btn-primary" type="button" data-community-pane="report">Report a bug</button><a class="btn btn-ghost" href="members.html">Find members</a></div></section><section class="community-home-stats"><article><span>♧</span><strong>${communityData.friends?.length || 0}</strong><small>friends</small></article><article><span>↗</span><strong>${communityData.friendRequestsReceived?.length || 0}</strong><small>requests</small></article><article><span>✦</span><strong>${communityData.bugReports?.filter(report => report.status === 'open').length || 0}</strong><small>open studio reports</small></article></section>`;
   }
   function renderCommunityUI() {
@@ -1636,7 +1694,7 @@
     communitySettingsConversationId = '';
     communityChatSettings = {...defaultCommunityChatSettings};
     if (!main) return;
-    ['--chat-bg','--chat-own-bubble','--chat-friend-bubble','--chat-message-text','--chat-font-size','--chat-font-family','--chat-wallpaper-image'].forEach(property => main.style.removeProperty(property));
+    ['--chat-bg','--chat-own-bubble','--chat-friend-bubble','--chat-message-text','--chat-font-size','--chat-font-family','--chat-wallpaper-image','--chat-bubble-radius','--chat-wallpaper-dim'].forEach(property => main.style.removeProperty(property));
     main.classList.remove('chat-compact');
     delete main.dataset.chatAnimation;
   }
@@ -1650,6 +1708,7 @@
     panel.style.setProperty('--chat-font-size',`${settings.fontSize}px`);
     panel.style.setProperty('--chat-font-family',settings.fontFamily);
     panel.style.setProperty('--chat-wallpaper-image',settings.wallpaper ? `url("${settings.wallpaper}")` : 'none');
+    panel.style.setProperty('--chat-bubble-radius',settings.bubbleRadius+'px');panel.style.setProperty('--chat-wallpaper-dim',settings.wallpaperDim/100);
     panel.classList.toggle('chat-compact',settings.compact);
     panel.dataset.chatAnimation = settings.animation;
   }
@@ -1665,6 +1724,8 @@
       communityChatSettings.fontSize = Math.min(20,Math.max(13,Number(communityChatSettings.fontSize) || 15));
       if (!['DM Sans','Georgia','monospace'].includes(communityChatSettings.fontFamily)) communityChatSettings.fontFamily = 'DM Sans';
       if (!['pop','fade','slide','none'].includes(communityChatSettings.animation)) communityChatSettings.animation = 'pop';
+      communityChatSettings.bubbleRadius=Math.min(28,Math.max(0,Number.isFinite(Number(communityChatSettings.bubbleRadius))?Number(communityChatSettings.bubbleRadius):18));
+      communityChatSettings.wallpaperDim=Math.min(85,Math.max(0,Number.isFinite(Number(communityChatSettings.wallpaperDim))?Number(communityChatSettings.wallpaperDim):35));
       if (typeof communityChatSettings.wallpaper !== 'string' || !communityChatSettings.wallpaper.startsWith('data:image/')) communityChatSettings.wallpaper = '';
     } catch (_) {}
     applyCommunityChatSettings();
@@ -1673,11 +1734,6 @@
     try { localStorage.setItem(communityChatSettingsKey(),JSON.stringify(communityChatSettings)); }
     catch (_) { toast('These appearance settings could not be saved in this browser.'); }
     applyCommunityChatSettings();
-  }
-  function renderCommunityChatSettings() {
-    const panel = $('[data-chat-settings-panel]');
-    if (!panel) return;
-    panel.innerHTML = `<div class="chat-settings-heading"><div><span class="section-eyebrow">YOUR CHAT SPACE</span><h2>Appearance</h2></div><button type="button" data-chat-settings-close aria-label="Close settings">×</button></div><div class="chat-settings-fields"><label>Chat background<input type="color" data-chat-setting="background" value="${esc(communityChatSettings.background)}"></label><label>Your bubble<input type="color" data-chat-setting="ownBubble" value="${esc(communityChatSettings.ownBubble)}"></label><label>Friend bubble<input type="color" data-chat-setting="friendBubble" value="${esc(communityChatSettings.friendBubble)}"></label><label>Message text<input type="color" data-chat-setting="text" value="${esc(communityChatSettings.text)}"></label><label class="chat-range-setting">Text size <output data-chat-font-output>${communityChatSettings.fontSize}px</output><input type="range" min="13" max="20" step="1" data-chat-setting="fontSize" value="${communityChatSettings.fontSize}"></label><label>Message font<select data-chat-setting="fontFamily"><option${communityChatSettings.fontFamily === 'DM Sans' ? ' selected' : ''}>DM Sans</option><option${communityChatSettings.fontFamily === 'Georgia' ? ' selected' : ''}>Georgia</option><option${communityChatSettings.fontFamily === 'monospace' ? ' selected' : ''}>monospace</option></select></label><label>New message animation<select data-chat-setting="animation"><option value="pop"${communityChatSettings.animation === 'pop' ? ' selected' : ''}>Soft pop</option><option value="fade"${communityChatSettings.animation === 'fade' ? ' selected' : ''}>Fade in</option><option value="slide"${communityChatSettings.animation === 'slide' ? ' selected' : ''}>Slide in</option><option value="none"${communityChatSettings.animation === 'none' ? ' selected' : ''}>None</option></select></label><label class="chat-wallpaper-setting">Chat wallpaper <input type="file" data-chat-wallpaper accept="image/png,image/jpeg,image/webp"></label><label class="chat-compact-setting"><input type="checkbox" data-chat-setting="compact"${communityChatSettings.compact ? ' checked' : ''}> Compact message spacing</label><button type="button" class="btn btn-ghost btn-sm" data-chat-wallpaper-clear${communityChatSettings.wallpaper ? '' : ' hidden'}>Remove wallpaper</button></div><div class="chat-coming-soon"><span>Custom chat bubbles</span><strong>Coming soon~</strong><p>Build a bubble style that feels like yours. This option is planned for a future update.</p></div>`;
   }
   async function initializeCommunityPage() {
     communityPane = 'home';
@@ -1705,6 +1761,7 @@
         const result = await api('/api/community');
         communityData = result.community || communityData;
         renderCommunitySidebar();
+        if(['reports','my-reports'].includes(communityPane))await renderCommunityReports();
         if (communityPane === 'chat' && communityConversationId) {
           const person = communityData.friends.find(friend => friend.id === communityConversationId);
           const label = $('[data-friend-presence]');
@@ -1712,8 +1769,7 @@
           else {
             if (label) label.textContent = person.online ? 'Online' : 'Offline';
             $('.chat-online-dot')?.classList.toggle('is-online',person.online === true);
-            const messages = await api(`/api/community/messages?with=${encodeURIComponent(communityConversationId)}`);
-            renderCommunityMessages(messages.messages || []);
+            await refreshCommunityConversationMessages(communityConversationId);
           }
         }
       } catch (_) {}
@@ -1731,8 +1787,7 @@
       if (kind === 'voice') data = data.replace(/^data:audio\/webm;codecs=[^;]+;base64,/,'data:audio/webm;base64,').replace(/^data:audio\/ogg;codecs=[^;]+;base64,/,'data:audio/ogg;base64,');
       const upload = await api('/api/community/asset','POST',{recipientId:communityConversationId,kind,data});
       await api('/api/community/message','POST',{recipientId:communityConversationId,type:kind === 'gif' ? 'gif' : kind,mediaUrl:upload.url,mediaPath:upload.path,text:'',caption:caption.slice(0,240)});
-      const result = await api(`/api/community/messages?with=${encodeURIComponent(communityConversationId)}`);
-      renderCommunityMessages(result.messages || []);
+      await refreshCommunityConversationMessages(communityConversationId);
       if (status) status.textContent = '';
       const textInput = $('#community-message-input'); if (textInput) textInput.value = '';
     } catch (error) { if (status) status.textContent = ''; toast(error.message); }
@@ -1754,8 +1809,7 @@
     if (!communityConversationId) return;
     try {
       await api('/api/community/message','POST',{recipientId:communityConversationId,type:'sticker',text:sticker});
-      const result = await api(`/api/community/messages?with=${encodeURIComponent(communityConversationId)}`);
-      renderCommunityMessages(result.messages || []);
+      await refreshCommunityConversationMessages(communityConversationId);
       $('[data-chat-sticker-panel]')?.setAttribute('hidden','');
     } catch (error) { toast(error.message); }
   }
@@ -1795,7 +1849,7 @@
   }
   function profilePreview() {
     ensureCommunityMessenger();
-    if (page === 'chat') return;
+    if (page === 'chat' || page === 'explore-ais') return;
     if (currentUser) refreshCommunity();
     const button = $('#profile-button');
     const popover = $('#profile-popover');
@@ -2098,7 +2152,7 @@
 
   const views = {
     chat() {
-      return `<div class="community-shell community-page-shell"><header class="community-header"><a href="index.html" class="community-brand"><img src="assets/golden-spiral-sun-icon.png" alt=""><span>Helunemi Community</span></a><div class="community-header-actions"><span class="community-presence"><i></i><span data-studio-presence>Studio community</span></span><a class="community-close" href="index.html" data-close-community aria-label="Close community">×</a></div></header><div class="community-layout"><aside class="community-sidebar" data-community-sidebar></aside><main class="community-main" data-community-main></main></div></div>`;
+      return `<div class="community-shell community-page-shell messenger-shell"><div class="community-layout"><aside class="community-sidebar" data-community-sidebar></aside><main class="community-main" data-community-main></main></div></div>`;
     },
     home() {
       const game = DATA.games[0];
@@ -2151,7 +2205,7 @@
       return `<div class="wrap publish-page"><div class="page-head"><a class="publish-back" href="${target === 'downloads' ? 'download.html' : `${target === 'arts' ? 'arts' : target}.html`}">← Back to ${esc(ownerPostSectionLabels[target])}</a><span class="section-eyebrow">OWNER PUBLISHING</span><h1>${esc(ownerPostActionLabels[target])}</h1><p>Create and manage content for the ${esc(ownerPostSectionLabels[target].toLowerCase())} page.</p></div>${ownerContentManager(target)}</div>`;
     },
     'explore-ais'() {
-      return `<div class="wrap ai-explore-page"><div class="page-head"><h1>Explore AIs</h1></div><section class="ai-explore-grid" aria-label="Upcoming AIs"><article class="ai-explore-card"><h2>Hene</h2><p class="ai-development-note">Soon to be developed</p></article><article class="ai-explore-card"><h2>Lumi</h2><p class="ai-development-note">Soon to be developed</p></article></section><section class="ai-name-origin" aria-labelledby="ai-name-origin-title"><span class="section-eyebrow">From the name Helunemi</span><h2 id="ai-name-origin-title">Where Hene and Lumi come from</h2><p>Hene and Lumi come from the website title itself. Split <strong>Helunemi</strong> into syllables:</p><p class="ai-syllable-sequence">He · lu · ne · mi</p><p>Swap <strong>lu</strong> and <strong>ne</strong> to get:</p><p class="ai-syllable-sequence">He · ne · lu · mi</p><p>Pair the syllables as <strong>He + ne</strong> and <strong>Lu + mi</strong> to create <strong>Hene</strong> and <strong>Lumi</strong>.</p></section></div>`;
+      return `<div class="community-shell community-page-shell messenger-shell"><div class="community-layout"><aside class="community-sidebar">${messengerNavigation('ais')}<p class="ai-sidebar-note">Hene &amp; Lumi<br>Soon to be developed.</p></aside><main class="community-main ai-messenger-main"><div class="wrap ai-explore-page"><div class="page-head"><h1>Explore AIs</h1></div><section class="ai-explore-grid" aria-label="Upcoming AIs"><article class="ai-explore-card"><span class="ai-identity-mark" aria-hidden="true">H</span><h2>Hene</h2><p class="ai-development-note">Soon to be developed</p></article><article class="ai-explore-card"><span class="ai-identity-mark" aria-hidden="true">L</span><h2>Lumi</h2><p class="ai-development-note">Soon to be developed</p></article></section><section class="ai-name-origin" aria-labelledby="ai-name-origin-title"><span class="section-eyebrow">From the name Helunemi</span><h2 id="ai-name-origin-title">Where Hene and Lumi come from</h2><p>Hene and Lumi come from the website title itself. Split <strong>Helunemi</strong> into syllables:</p><p class="ai-syllable-sequence">He · lu · ne · mi</p><p>Swap <strong>lu</strong> and <strong>ne</strong> to get:</p><p class="ai-syllable-sequence">He · ne · lu · mi</p><p>Pair the syllables as <strong>He + ne</strong> and <strong>Lu + mi</strong> to create <strong>Hene</strong> and <strong>Lumi</strong>.</p></section></div></main></div></div>`;
     },
     'create-post'() { return '<div class="wrap"><p class="social-loading">Opening post editor…</p></div>'; },
     'shop-product'() { return '<div class="wrap"><p class="social-loading">Opening product editor…</p></div>'; },
@@ -3050,6 +3104,12 @@
   window.addEventListener('blur',cancelFriendCardPointerGesture);
 
   document.addEventListener('click', async event => {
+    const frameReset=event.target.closest('[data-frame-piece-reset]');
+    if(frameReset&&friendCardDesignState){recordFriendCardHistory();friendCardDesignState.frame.pieces||={};friendCardDesignState.frame.pieces[frameReset.dataset.framePieceReset]={offsetX:0,offsetY:0,rotation:0};repaintFriendCardEditor();return;}
+    const reportStatus=event.target.closest('[data-report-status]');
+    if(reportStatus){reportStatus.disabled=true;try{await api('/api/community/bug-reports/'+encodeURIComponent(reportStatus.dataset.reportId)+'/status','POST',{status:reportStatus.dataset.reportStatus});await renderCommunityReports(reportStatus.dataset.reportId);}catch(error){toast(error.message);reportStatus.disabled=false;}return;}
+    if(event.target.closest('[data-chat-settings-reset]')){communityChatSettings={...defaultCommunityChatSettings};saveCommunityChatSettings();renderCommunityChatSettings();return;}
+
     const cfcAction=event.target.closest('[data-cfc-action]');
     if(cfcAction){
       if($('#friend-card-form'))return;
@@ -3142,6 +3202,7 @@
       } catch (error) { toast(error.name === 'NotAllowedError' ? 'Allow microphone access to record a voice message.' : 'The microphone could not be opened.'); }
       return;
     }
+    if((communityPaneButton||communityChatButton)&&communityRecorder?.state==='recording'){toast('Finish your voice message before changing conversations.');return;}
     if (communityPaneButton) { communityPane = communityPaneButton.dataset.communityPane; communityConversationId = ''; renderCommunitySidebar(); await renderCommunityPane(); return; }
     if (communityChatButton) { communityPane = 'chat'; communityConversationId = communityChatButton.dataset.communityChat; renderCommunitySidebar(); await loadCommunityConversation(communityConversationId); return; }
     if (communityAddFriend) { await updateCommunityFriendRequest(communityAddFriend); return; }
@@ -3399,6 +3460,13 @@
     if (!event.target.closest('.top')) { const nav = $('#nav'), menu = $('[data-menu]'); nav?.classList.remove('open'); menu?.setAttribute('aria-expanded','false'); }
   });
   document.addEventListener('submit', async event => {
+    if(event.target.matches('[data-report-reply]')){
+      event.preventDefault();const form=event.target,button=$('button[type="submit"]',form),feedback=$('[data-report-feedback]',form);button.disabled=true;
+      try{await api('/api/community/bug-reports/'+encodeURIComponent(form.dataset.reportReply)+'/reply','POST',{text:form.elements.text.value});form.elements.text.value='';await renderCommunityReports(form.dataset.reportReply);}
+      catch(error){feedback.textContent=error.message;feedback.classList.add('is-error');button.disabled=false;}
+      return;
+    }
+
     if (event.target.matches('[data-owner-game-build-form]')) {
       event.preventDefault();
       await saveOwnerGameBuilds(event.target);
@@ -3417,8 +3485,7 @@
       try {
         await api('/api/community/message','POST',{recipientId:communityConversationId,text:input.value});
         input.value = '';
-        const result = await api(`/api/community/messages?with=${encodeURIComponent(communityConversationId)}`);
-        renderCommunityMessages(result.messages || []); input.focus();
+        await refreshCommunityConversationMessages(communityConversationId); input.focus();
       } catch (error) { toast(error.message); }
       finally { button.disabled = false; }
       return;
@@ -3598,13 +3665,7 @@
       return;
     }
     const chatSetting = event.target.closest('[data-chat-setting]');
-    if (chatSetting) {
-      const key = chatSetting.dataset.chatSetting;
-      communityChatSettings[key] = chatSetting.type === 'checkbox' ? chatSetting.checked : key === 'fontSize' ? Number(chatSetting.value) : chatSetting.value;
-      const output = $('[data-chat-font-output]'); if (output) output.textContent = `${communityChatSettings.fontSize}px`;
-      saveCommunityChatSettings();
-      return;
-    }
+    if(chatSetting){updateCommunityChatSetting(chatSetting);return;}
     const changedLayerProperty = event.target.closest('[data-layer-property]');
     if (changedLayerProperty && friendCardLayerBefore) {
       friendCardUndoStack.push(friendCardLayerBefore); friendCardLayerBefore = null;
@@ -3657,7 +3718,7 @@
     const dimension = event.target.closest('[data-design-dimension]');
     if (dimension) { updateFriendEditorDimension(dimension.dataset.designDimension,dimension.value); return; }
     const frameProperty = event.target.closest('[data-frame-property]');
-    if (frameProperty && friendCardDesignState) { if (!frameProperty.dataset.frameRangeHistory) recordFriendCardHistory(); delete frameProperty.dataset.frameRangeHistory; const key = frameProperty.dataset.frameProperty; if (key.startsWith('alignments.')) friendCardDesignState.frame.alignments[key.split('.')[1]] = frameProperty.value; else if (key.startsWith('cornerSizes.')) friendCardDesignState.frame.cornerSizes[key.split('.')[1]] = Number(frameProperty.value); else if (key === 'cornerSize') { friendCardDesignState.frame.cornerSize = Number(frameProperty.value); for (const corner of ['topLeft','topRight','bottomLeft','bottomRight']) friendCardDesignState.frame.cornerSizes[corner] = Number(frameProperty.value); } else friendCardDesignState.frame[key] = key === 'visible' ? frameProperty.checked : ['sideMode','placement'].includes(key) ? frameProperty.value : Number(frameProperty.value); repaintFriendCardEditor(); return; }
+    if(frameProperty&&friendCardDesignState){if(!frameProperty.dataset.frameRangeHistory)recordFriendCardHistory();delete frameProperty.dataset.frameRangeHistory;setFriendCardFrameProperty(frameProperty.dataset.frameProperty,frameProperty.type==='checkbox'?frameProperty.checked:frameProperty.value);repaintFriendCardEditor();return;}
     const framePieceVisible = event.target.closest('[data-frame-piece-visible]');
     if (framePieceVisible && friendCardDesignState) { recordFriendCardHistory(); friendCardDesignState.frame.visiblePieces[framePieceVisible.dataset.framePieceVisible] = framePieceVisible.checked; repaintFriendCardEditor(); return; }
     const showGuides = event.target.closest('[data-show-guides]');
@@ -3735,10 +3796,15 @@
     }
   });
   document.addEventListener('input',event => {
+    if(event.target.id==='community-message-input'){event.target.style.height='auto';event.target.style.height=Math.min(130,event.target.scrollHeight)+'px';}
+    const chatHex=event.target.closest('[data-chat-color-hex]');
+    if(chatHex){const match=/^#?([0-9a-f]{6})$/i.exec(chatHex.value.trim());if(match){const color=$(`[data-chat-setting="${chatHex.dataset.chatColorHex}"]`);if(color){color.value='#'+match[1];updateCommunityChatSetting(color);}}return;}
+    const liveChatSetting=event.target.closest('[data-chat-setting]');if(liveChatSetting){updateCommunityChatSetting(liveChatSetting);return;}
+
     const frameRange = event.target.closest('input[type="range"][data-frame-property]');
     if (frameRange && friendCardDesignState) {
       if (!frameRange.dataset.frameRangeHistory) { recordFriendCardHistory(); frameRange.dataset.frameRangeHistory = 'true'; }
-      friendCardDesignState.frame[frameRange.dataset.frameProperty] = Math.max(Number(frameRange.min),Math.min(Number(frameRange.max),Number(frameRange.value) || 0));
+      setFriendCardFrameProperty(frameRange.dataset.frameProperty,Math.max(Number(frameRange.min),Math.min(Number(frameRange.max),Number(frameRange.value)||0)));
       updateFriendCardEditorPreview(); saveFriendCardDraftLocally(); return;
     }
     if (event.target.matches('[data-member-search]')) { updateMemberResults(); return; }
@@ -3800,6 +3866,8 @@
     else if (event.target.id === 'crop-rotation') { cropSession.rotation = Number(event.target.value); paintCrop(); }
   });
   document.addEventListener('keydown', event => {
+    if(event.target.id==='community-message-input'&&event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();const form=$('#community-message-form');if(form&&!$('button[type="submit"]',form).disabled)form.requestSubmit();return;}
+
     if($('dialog[open]'))return;
     if (friendCardShortcut(event)) return;
     const typing = event.target.matches('input,textarea,select,[contenteditable="true"]');

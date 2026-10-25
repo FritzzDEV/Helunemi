@@ -223,4 +223,13 @@ Collection snapshots saved before editable sources were stored contain only rend
 
 Button layers choose Open CFC, Add friend, Invite to party, Invite to group, View profile, or Message. Open CFC is always Preview-only; every other button action is Full-view-only. Saving/updating/posting requires at least one visible, non-transparent Open CFC button intersecting the Preview card. The browser and server share this rule in `friend-card-rules.js`. Existing button layers migrate to Open CFC / Preview-only. Party/group invitations use the viewer’s owned circles and require an accepted friendship; existing server ownership and membership checks still apply.
 
-Opening a live CFC outside the editor shows Full view only. The editor preview retains a Preview/Full view switch for inspection. Expanded cards normalize their design once per open, coalesce fitting work, avoid a full-screen backdrop blur, pause/hide the underlying directory while open, defer directory rebuilds, and release the expanded card DOM on close. Frame image rows synchronize thumbnails and Remove buttons after uploads, preset changes, Undo/Redo, and save.
+Opening a live CFC outside the editor shows Full view only. The editor preview retains a Preview/Full view switch for inspection. Expanded cards normalize their design once per open, coalesce fitting work, avoid a full-screen backdrop blur, pause background animations while the underlying directory stays visible, defer directory rebuilds, and release the expanded card DOM on close. Frame image rows synchronize thumbnails and Remove buttons after uploads, preset changes, Undo/Redo, and save.
+
+
+### Community workspace and frame piece controls
+
+Each of the eight frame pieces has a collapsible image/transform panel with its own X/Y offset and rotation sliders. Individual transforms combine with the whole-frame position, rotation, overlap, and placement controls, and are preserved by presets, account storage, recovery drafts, and exports. Expanded CFCs keep the underlying Members/Groups page visible; background animations pause while the card is open.
+
+Community and Explore AIs share a full-height messaging layout with sidebar navigation and no global top header. Appearance controls are grouped into Colors, Typography & layout, and Wallpaper; manual HEX values, bubble radius, dimming, and reset apply only to the selected friend chat in the current browser. Existing messages are retained between refreshes, so audio playback and scroll position are preserved. On-site chat media URLs and storage keys survive account normalization.
+
+The studio report inbox supports replies and Open/Resolved status changes. Reporters can follow and reply through My reports. Authentication and server-side ownership/staff checks protect every report thread; messages and status changes are saved with account storage. Older reports retain their history and gain an empty reply list. No email server is required.

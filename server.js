@@ -14,6 +14,7 @@ const DEFAULT_CONTENT = require('./site-defaults.json');
 const { createShopSystem, countryCode } = require('./shop-system');
 const {createFriendCardLibrary,validateFriendCardIdentity} = require('./friend-card-library');
 const CFC_RULES = require('./friend-card-rules');
+const {cleanCommunityReport,createCommunityReports} = require('./community-reports');
 
 const scrypt = promisify(crypto.scrypt);
 const ROOT = __dirname;
@@ -53,6 +54,7 @@ const fileStore = createFileStorage({ getPool: () => pool, dataDir: DATA_DIR });
 const socialSystem = createSocialSystem({ getAccounts: () => accounts, getAccount, send, readBody, save: saveAccounts, files: fileStore, cleanFriendCard });
 const shopSystem = createShopSystem({ getAccount, send, readBody, save: saveAccounts, privateProfile, cleanImage: siteContentImage });
 const friendCardLibrary = createFriendCardLibrary({getAccount,send,readBody,save:saveAccounts,clean:cleanFriendCard,publishAssets:setFriendCardAssetsPublished,privateProfile});
+const communityReports = createCommunityReports({getAccounts:()=>accounts,getAccount,readBody,send,save:saveAccounts,isStaff:isStudioStaff,normalize:normalizeAccount});
 
 function send(res, status, value, headers = {}) {
   const body = JSON.stringify(value);
@@ -317,15 +319,12 @@ function cleanCommunity(value, accountId) {
     if (!item || typeof item !== 'object' || typeof item.id !== 'string' || typeof item.senderId !== 'string' || typeof item.recipientId !== 'string') return null;
     const messageText = typeof item.text === 'string' ? item.text.trim().slice(0, 2000) : '';
     const type = ['text','image','gif','voice','sticker'].includes(item.type) ? item.type : 'text';
-    const mediaUrl = typeof item.mediaUrl === 'string' && item.mediaUrl.startsWith('https://firebasestorage.googleapis.com/') ? item.mediaUrl.slice(0,1400) : '';
+    const mediaUrl = typeof item.mediaUrl === 'string' && (item.mediaUrl.startsWith('https://firebasestorage.googleapis.com/') || /^\/api\/community\/assets\/[a-f0-9-]{36}$/i.test(item.mediaUrl)) ? item.mediaUrl.slice(0,1400) : '';
     const mediaPath = typeof item.mediaPath === 'string' ? item.mediaPath.slice(0,400) : '';
     if (type === 'text' && !messageText || type === 'sticker' && !messageText && !mediaUrl || ['image','gif','voice'].includes(type) && !mediaUrl) return null;
-    return { id: item.id.slice(0, 100), senderId: item.senderId.slice(0, 100), recipientId: item.recipientId.slice(0, 100), type, text: messageText, ...(mediaUrl ? {mediaUrl,mediaPath} : {}), caption: typeof item.caption === 'string' ? item.caption.trim().slice(0,240) : '', createdAt: Math.max(0, Number(item.createdAt) || Date.now()) };
+    return { id: item.id.slice(0, 100), senderId: item.senderId.slice(0, 100), recipientId: item.recipientId.slice(0, 100), type, text: messageText, ...(mediaUrl ? {mediaUrl,mediaPath,...(/^\/api\/community\/assets\/([a-f0-9-]{36})$/i.test(mediaUrl)?{mediaKey:mediaUrl.split('/').at(-1)}:{})} : {}), caption: typeof item.caption === 'string' ? item.caption.trim().slice(0,240) : '', createdAt: Math.max(0, Number(item.createdAt) || Date.now()) };
   }).filter(Boolean);
-  const bugReports = (Array.isArray(source.bugReports) ? source.bugReports : []).slice(-100).map(item => {
-    if (!item || typeof item !== 'object' || typeof item.id !== 'string') return null;
-    return { id: item.id.slice(0, 100), reporterId: String(item.reporterId || '').slice(0, 100), reporterName: text(item.reporterName, 40), title: text(item.title, 120), details: text(item.details, 4000), page: text(item.page, 300), createdAt: Math.max(0, Number(item.createdAt) || Date.now()), status: item.status === 'resolved' ? 'resolved' : 'open' };
-  }).filter(Boolean);
+  const bugReports=(Array.isArray(source.bugReports)?source.bugReports:[]).slice(-100).map(cleanCommunityReport).filter(Boolean);
   return { friends: ids('friends'), friendRequestsSent: ids('friendRequestsSent'), friendRequestsReceived: ids('friendRequestsReceived'), messages, bugReports };
 }
 function communityAccountSummary(account) {
@@ -343,7 +342,7 @@ function communitySnapshot(account) {
     friends: profiles(account.community.friends),
     friendRequestsSent: profiles(account.community.friendRequestsSent),
     friendRequestsReceived: profiles(account.community.friendRequestsReceived),
-    bugReports: isStudioStaff(account) ? account.community.bugReports : []
+    bugReports: account.community.bugReports.filter(report=>isStudioStaff(account)||report.reporterId===account.id)
   };
 }
 function normalizeAccount(account) {
@@ -632,7 +631,7 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
     cornerSize: numeric(source?.cornerSize,9,1,30), cornerSizes: Object.fromEntries(cornerNames.map(name => [name,numeric(source?.cornerSizes?.[name],source?.cornerSize || 9,1,30)])),
     visiblePieces: Object.fromEntries(pieceNames.map(name => [name,source?.visiblePieces?.[name] !== false])),
     horizontalThickness: numeric(source?.horizontalThickness,5,1,25), verticalThickness: numeric(source?.verticalThickness,5,1,25),
-    sideMode: ['stretch','repeat','connected'].includes(source?.sideMode) ? source.sideMode : 'stretch', placement: source?.placement === 'foreground' ? 'foreground' : 'background', offsetX: numeric(source?.offsetX,0,-100,100), offsetY: numeric(source?.offsetY,0,-100,100), rotation: numeric(source?.rotation,0,-180,180), overlap: numeric(source?.overlap,0,0,100), visible: source?.visible !== false,
+    sideMode: ['stretch','repeat','connected'].includes(source?.sideMode) ? source.sideMode : 'stretch', placement: source?.placement === 'foreground' ? 'foreground' : 'background', offsetX: numeric(source?.offsetX,0,-100,100), offsetY: numeric(source?.offsetY,0,-100,100), rotation: numeric(source?.rotation,0,-180,180), pieces: Object.fromEntries(pieceNames.map(key=>[key,{offsetX:numeric(source?.pieces?.[key]?.offsetX,0,-100,100),offsetY:numeric(source?.pieces?.[key]?.offsetY,0,-100,100),rotation:numeric(source?.pieces?.[key]?.rotation,0,-180,180)}])), overlap: numeric(source?.overlap,0,0,100), visible: source?.visible !== false,
     alignments: { top: ['left','center','right'].includes(source?.alignments?.top) ? source.alignments.top : 'center', bottom: ['left','center','right'].includes(source?.alignments?.bottom) ? source.alignments.bottom : 'center', left: ['top','middle','bottom'].includes(source?.alignments?.left) ? source.alignments.left : 'middle', right: ['top','middle','bottom'].includes(source?.alignments?.right) ? source.alignments.right : 'middle' }
   });
   const frame = cleanFramePreset(frameSource);
@@ -1002,29 +1001,7 @@ async function handleApi(req, res, pathname) {
     catch (error) { account.community.messages = JSON.parse(beforeAccount); target.community.messages = JSON.parse(beforeTarget); throw error; }
     return send(res, 201, { message });
   }
-  if (req.method === 'POST' && pathname === '/api/community/bug-report') {
-    const account = await getAccount(req);
-    if (!account) return send(res, 401, { error: 'Log in to send a report to Helunemi.' });
-    const input = await readBody(req), title = text(input.title, 120), details = text(input.details, 4000);
-    if (!title || !details) return send(res, 400, { error: 'Add a short title and describe what happened.' });
-    const recipients = accounts.filter(isStudioStaff);
-    if (!recipients.length) return send(res, 503, { error: 'The studio report inbox is unavailable right now.' });
-    const report = { id: crypto.randomUUID(), reporterId: account.id, reporterName: account.profile.username, title, details, page: text(input.page, 300), createdAt: Date.now(), status: 'open' };
-    const previous = recipients.map(member => [member, JSON.stringify(member.community?.bugReports || [])]);
-    for (const member of recipients) {
-      normalizeAccount(member);
-      member.community.bugReports = [...member.community.bugReports, report].slice(-100);
-    }
-    try { await saveAccounts(); }
-    catch (error) { for (const [member, old] of previous) member.community.bugReports = JSON.parse(old); throw error; }
-    return send(res, 201, { message: 'Your report was sent to the Helunemi team.' });
-  }
-  if (req.method === 'GET' && pathname === '/api/community/bug-reports') {
-    const account = await getAccount(req);
-    if (!account || !isStudioStaff(account)) return send(res, 403, { error: 'Only Helunemi staff can view reports.' });
-    normalizeAccount(account);
-    return send(res, 200, { reports: account.community.bugReports });
-  }
+  if(await communityReports.handle(req,res,pathname))return;
   if (req.method === 'PUT' && pathname === '/api/personal-info') {
     const account = await getAccount(req);
     if (!account) return send(res, 401, { error: 'Log in to update your private account information.' });
