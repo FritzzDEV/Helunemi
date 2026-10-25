@@ -13,6 +13,7 @@ const { createSocialSystem, sniffMedia } = require('./social-system');
 const DEFAULT_CONTENT = require('./site-defaults.json');
 const { createShopSystem, countryCode } = require('./shop-system');
 const {createFriendCardLibrary,validateFriendCardIdentity} = require('./friend-card-library');
+const CFC_RULES = require('./friend-card-rules');
 
 const scrypt = promisify(crypto.scrypt);
 const ROOT = __dirname;
@@ -26,7 +27,7 @@ const USERNAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_BODY = 16 * 1024 * 1024;
 const MAX_GAME_BUILD_BYTES = Math.min(4 * 1024 ** 3, Math.max(50 * 1024 ** 2, Number(process.env.SOLARIS_MAX_GAME_BUILD_BYTES) || 2 * 1024 ** 3));
 const BUILT_IN_GAME_IDS = new Set(['gamma-frost', 'omiwo']);
-const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'publish.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js', 'profile-social.js', 'profile-social.css', 'storefront.js', 'create-post.html', 'shop-product.html', 'explore-ais.html', 'assets/menu-icon.png']);
+const STATIC_FILES = new Set(['index.html', 'list.html', 'members.html', 'games.html', 'project.html', 'artwork.html', 'updates.html', 'account.html', 'arts.html', 'groups.html', 'download.html', 'shop.html', 'chat.html', 'publish.html', 'assets/hollow-shift-icon.webp', 'assets/gamma-frost-banner.webp', 'assets/golden-spiral-sun-icon.png', 'assets/namecard-ticket.png', 'assets/who-ticket.png', 'styles.css', 'app.js', 'friend-card-rules.js', 'profile-social.js', 'profile-social.css', 'storefront.js', 'create-post.html', 'shop-product.html', 'explore-ais.html', 'assets/menu-icon.png']);
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webp': 'image/webp', '.png': 'image/png' };
 const PRIMARY_ROLES = {
   assistant: { label: 'Assistant', explanation: 'Supports studio coordination and helps keep Helunemi projects moving.' },
@@ -609,7 +610,7 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
     const path = typeof layer.path === 'string' && layer.path.length <= 16000 && /^[MmLlHhVvCcSsQqTtAaZz0-9., +\-]*$/.test(layer.path) ? layer.path : '';
     const fontFamily = uploadedFontIds.has(layer.fontId) ? `SolarisFont-${layer.fontId}` : new Set(['DM Sans','Unbounded','Arial','Georgia','Trebuchet MS','Verdana','Courier New','serif','sans-serif','monospace']).has(layer.fontFamily) ? layer.fontFamily : 'DM Sans';
     return {
-      id: layerId, type, label: type === 'avatar' ? 'Profile picture' : type === 'username' ? 'Username' : text(layer.label || type, 80),
+      id: layerId, type, buttonAction: type === 'button' ? CFC_RULES.action(layer.buttonAction).id : '', label: type === 'avatar' ? 'Profile picture' : type === 'username' ? 'Username' : text(layer.label || type, 80),
       field: ['avatar','username','likes','dislikes','favoriteThing','lookingFor','personalityTags','button'].includes(layer.field) ? layer.field : '',
       groupId: usedGroupIds.has(idSafe(layer.groupId)) ? idSafe(layer.groupId) : '',
       x: numeric(layer.x, 0, -10000, 10000), y: numeric(layer.y, 0, -10000, 10000), width: layerWidth, height: type === 'avatar' || type === 'shape' && ['circle','square','rounded'].includes(layer.shapeStyle) ? layerWidth : numeric(layer.height, 10, 1, 10000),
@@ -617,7 +618,7 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
       color: safeColor(layer.color, cardDefaults.textColor), fill: safeColor(layer.fill, cardDefaults.backgroundColor),
       align: ['left','center','right'].includes(layer.align) ? layer.align : 'left', weight: Number(layer.weight) === 700 ? 700 : 500, radius: numeric(layer.radius, 8, 0, 100), shapeStyle: ['circle','rounded','rectangle','square','triangle','diamond','star','hexagon'].includes(layer.shapeStyle) ? layer.shapeStyle : 'rounded',
       text: text(layer.text, 500), fontFamily, fontId: uploadedFontIds.has(layer.fontId) ? layer.fontId : '', image: ['image','sticker','frame-piece'].includes(type) ? friendCardAsset(layer.image, 800_000, ownerId) : '', imageFit: ['contain','cover','fill'].includes(layer.imageFit) ? layer.imageFit : 'contain', imagePositionX: numeric(layer.imagePositionX, 50, 0, 100), imagePositionY: numeric(layer.imagePositionY, 50, 0, 100), imageMask: ['square','rounded','circle'].includes(layer.imageMask) ? layer.imageMask : 'square', path,
-      strokeWidth: numeric(layer.strokeWidth, 8, 1, 100), visible: layer.visible !== false, visibilityMode: ['preview','full','both'].includes(layer.visibilityMode) ? layer.visibilityMode : 'both', locked: layer.locked === true
+      strokeWidth: numeric(layer.strokeWidth, 8, 1, 100), visible: layer.visible !== false, visibilityMode: type === 'button' ? CFC_RULES.action(layer.buttonAction).view : ['preview','full','both'].includes(layer.visibilityMode) ? layer.visibilityMode : 'both', locked: layer.locked === true
     };
   }).filter(Boolean);
   const referencedGroupIds = new Set(layers.map(layer => layer.groupId).filter(Boolean));
@@ -631,7 +632,7 @@ function cleanFriendCardDesign(value, cardDefaults, ownerId = '') {
     cornerSize: numeric(source?.cornerSize,9,1,30), cornerSizes: Object.fromEntries(cornerNames.map(name => [name,numeric(source?.cornerSizes?.[name],source?.cornerSize || 9,1,30)])),
     visiblePieces: Object.fromEntries(pieceNames.map(name => [name,source?.visiblePieces?.[name] !== false])),
     horizontalThickness: numeric(source?.horizontalThickness,5,1,25), verticalThickness: numeric(source?.verticalThickness,5,1,25),
-    sideMode: ['stretch','repeat','connected'].includes(source?.sideMode) ? source.sideMode : 'stretch', placement: 'background', overlap: numeric(source?.overlap,0,0,100), visible: source?.visible !== false,
+    sideMode: ['stretch','repeat','connected'].includes(source?.sideMode) ? source.sideMode : 'stretch', placement: source?.placement === 'foreground' ? 'foreground' : 'background', offsetX: numeric(source?.offsetX,0,-100,100), offsetY: numeric(source?.offsetY,0,-100,100), rotation: numeric(source?.rotation,0,-180,180), overlap: numeric(source?.overlap,0,0,100), visible: source?.visible !== false,
     alignments: { top: ['left','center','right'].includes(source?.alignments?.top) ? source.alignments.top : 'center', bottom: ['left','center','right'].includes(source?.alignments?.bottom) ? source.alignments.bottom : 'center', left: ['top','middle','bottom'].includes(source?.alignments?.left) ? source.alignments.left : 'middle', right: ['top','middle','bottom'].includes(source?.alignments?.right) ? source.alignments.right : 'middle' }
   });
   const frame = cleanFramePreset(frameSource);

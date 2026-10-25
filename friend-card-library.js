@@ -1,5 +1,6 @@
 'use strict';
 const crypto = require('node:crypto');
+const CFC_RULES = require('./friend-card-rules');
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const MAX_IDENTITY_LAYERS = 3; // One original and at most two duplicates.
 function validateFriendCardIdentity(card) {
@@ -15,6 +16,7 @@ function validateFriendCardIdentity(card) {
       throw fail(`Your ${label} must be visible in ${missingViews.map(view => view === 'full' ? 'full view' : 'preview').join(' and ')} before saving or posting. Use one layer in both views or separate visible layers for each view.`);
     }
   }
+  const navigation=CFC_RULES.openButtonIssue(card);if(navigation)throw fail(navigation);
 }
 function createFriendCardLibrary({ getAccount, send, readBody, save, clean, publishAssets, privateProfile }) {
   let mutation = Promise.resolve();

@@ -1866,3 +1866,21 @@ body.friend-card-edit-mode #friend-card-editor-stage>.friend-card-frame-space{wi
 .social-cfc-viewer .cfc-expanded-preview{display:grid;place-items:center;align-self:center;width:min(680px,100%);min-width:0;margin:0 auto}
 .social-cfc-viewer .cfc-expanded-preview>img{display:block;max-width:100%;max-height:calc(100dvh - 150px);width:auto;height:auto;object-fit:contain}
 .social-cfc-viewer .cfc-expanded-preview .friend-card-frame-space{padding:0!important}
+
+/* The complete frame moves independently; front placement never intercepts card buttons. */
+.friend-card-exterior-frame{transform-origin:50% 50%;pointer-events:none}
+.friend-card-exterior-frame.is-foreground{z-index:2}
+body.friend-card-edit-mode .friend-frame-range{grid-column:1/-1;display:grid;gap:.4rem}
+.friend-frame-range>span{display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+.friend-frame-range output{color:var(--muted);font-size:.7rem}
+.friend-frame-range input[type=range]{width:100%;margin:0;accent-color:var(--ember)}
+/* Do not repaint or blur the whole directory underneath an expanded CFC. */
+body.cfc-viewing{overflow:hidden}
+body.cfc-viewing #app{visibility:hidden}
+body.cfc-viewing #app *,body.cfc-viewing #app *:before,body.cfc-viewing #app *:after{animation-play-state:paused!important}
+.friend-card-dialog::backdrop{background:#101017ed;backdrop-filter:none}
+#friend-card-dialog-content{grid-template-rows:auto minmax(0,1fr)}
+.friend-card-view-surface{contain:layout style}
+.friend-viewer-mode-label{justify-self:center;align-self:center;margin:.85rem 3rem .5rem;color:#e9e5f2;font-size:.75rem;font-weight:700}
+#cfc-action-dialog{z-index:20}
+#cfc-action-dialog [data-cfc-invite-form]{display:grid;gap:1rem}

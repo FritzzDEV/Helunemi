@@ -153,6 +153,7 @@
       if (page === 'list' && container) { container.innerHTML = ''; setMessage('#member-load-message','Team profiles could not be loaded. Please refresh the page.'); }
     }
   }
+  const CFC_RULES=window.HelunemiCfcRules;
   let friendCardEditorContext = null;
   let friendCardChoiceMode = '';
   let friendCardViewMode = 'all';
@@ -173,11 +174,11 @@
       const missingViews = ['preview','full'].filter(view => !identity.some(layer => layer.visible !== false && ['both',view].includes(layer.visibilityMode || 'both')));
       if (missingViews.length) return `Cannot save or post: ${label} must be visible in ${missingViews.map(view => view === 'full' ? 'full view' : 'preview').join(' and ')}. Use one layer in both views, or separate visible layers for each view.`;
     }
-    return '';
+    return CFC_RULES.openButtonIssue(card);
   }
   function updateFriendCardRequirementNotice() {
     const message = friendCardIdentityMessage(), notice = $('[data-cfc-required-notice]');
-    if (notice) { notice.textContent = message || 'Each view needs a visible PFP and username. Separate layers are okay; up to three of each.'; notice.classList.toggle('is-error',Boolean(message)); }
+    if (notice) { notice.textContent = message || 'Each view needs a PFP and username. Preview also needs a visible Open CFC button.'; notice.classList.toggle('is-error',Boolean(message)); }
   }
   let friendCardChoiceGeneration = 0;
   function friendCardChoiceContents() {
@@ -536,7 +537,7 @@
     const id = type => `${type}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
     const layer = (type, label, x, y, width, height, extra = {}) => ({id:id(type),type,label,x,y,width,height,rotation:0,fontSize:3.2,color:card.textColor,align:'left',opacity:100,visible:true,locked:false,...extra});
     const ratio = (card.aspectRatio || '1:1').split(':').map(Number), scale = Math.min(1000 / ratio[0],1600 / ratio[0],1200 / ratio[1]), width = Math.round(ratio[0] * scale), height = Math.round(ratio[1] * scale);
-    return {version:1,name:'My Friend-Card',width,height,aspectRatio:card.aspectRatio || '1:1',backgroundLocked:true,showGuides:false,background:{color:card.backgroundColor,image:card.backgroundImage,tint:card.backgroundOverlayColor,tintOpacity:card.backgroundOverlayOpacity,positionX:50,positionY:50,scale:100},frame:{corners:{},sides:{},cornerSize:9,cornerSizes:{topLeft:9,topRight:9,bottomLeft:9,bottomRight:9},visiblePieces:{topLeft:true,topRight:true,bottomLeft:true,bottomRight:true,top:true,bottom:true,left:true,right:true},horizontalThickness:5,verticalThickness:5,sideMode:'stretch',placement:'background',overlap:0,visible:true,alignments:{top:'center',bottom:'center',left:'middle',right:'middle'},presets:[]},groups:[],layers:[
+    return {version:1,name:'My Friend-Card',width,height,aspectRatio:card.aspectRatio || '1:1',backgroundLocked:true,showGuides:false,background:{color:card.backgroundColor,image:card.backgroundImage,tint:card.backgroundOverlayColor,tintOpacity:card.backgroundOverlayOpacity,positionX:50,positionY:50,scale:100},frame:{corners:{},sides:{},cornerSize:9,cornerSizes:{topLeft:9,topRight:9,bottomLeft:9,bottomRight:9},visiblePieces:{topLeft:true,topRight:true,bottomLeft:true,bottomRight:true,top:true,bottom:true,left:true,right:true},horizontalThickness:5,verticalThickness:5,sideMode:'stretch',placement:'background',offsetX:0,offsetY:0,rotation:0,overlap:0,visible:true,alignments:{top:'center',bottom:'center',left:'middle',right:'middle'},presets:[]},groups:[],layers:[
       layer('avatar','Profile picture',5,7,18,18,{fontSize:3.5,field:'avatar'}),
       layer('username','Username',27,9,68,12,{fontSize:5,field:'username',fontFamily:'Unbounded',color:card.titleColor,weight:700})
     ]};
@@ -560,7 +561,7 @@
     const customFontIds = new Set(customFonts.map(font => font.id));
     const normalizeFramePreset = input => {
       const sourceFrame = input && typeof input === 'object' ? input : {}, sourceAlignments = sourceFrame.alignments && typeof sourceFrame.alignments === 'object' ? sourceFrame.alignments : {};
-      return {name:String(sourceFrame.name || 'Frame preset').slice(0,60),corners:cleanFrameImages(sourceFrame.corners,cornerNames),sides:cleanFrameImages(sourceFrame.sides,sideNames),cornerSize:number(sourceFrame.cornerSize,9,1,30),cornerSizes:Object.fromEntries(cornerNames.map(key => [key,number(sourceFrame.cornerSizes?.[key],sourceFrame.cornerSize || 9,1,30)])),visiblePieces:Object.fromEntries(pieceNames.map(key => [key,sourceFrame.visiblePieces?.[key] !== false])),horizontalThickness:number(sourceFrame.horizontalThickness,5,1,25),verticalThickness:number(sourceFrame.verticalThickness,5,1,25),sideMode:['stretch','repeat','connected'].includes(sourceFrame.sideMode) ? sourceFrame.sideMode : 'stretch',placement:'background',overlap:number(sourceFrame.overlap,0,0,100),visible:sourceFrame.visible !== false,alignments:{top:['left','center','right'].includes(sourceAlignments.top) ? sourceAlignments.top : 'center',bottom:['left','center','right'].includes(sourceAlignments.bottom) ? sourceAlignments.bottom : 'center',left:['top','middle','bottom'].includes(sourceAlignments.left) ? sourceAlignments.left : 'middle',right:['top','middle','bottom'].includes(sourceAlignments.right) ? sourceAlignments.right : 'middle'}};
+      return {name:String(sourceFrame.name || 'Frame preset').slice(0,60),corners:cleanFrameImages(sourceFrame.corners,cornerNames),sides:cleanFrameImages(sourceFrame.sides,sideNames),cornerSize:number(sourceFrame.cornerSize,9,1,30),cornerSizes:Object.fromEntries(cornerNames.map(key => [key,number(sourceFrame.cornerSizes?.[key],sourceFrame.cornerSize || 9,1,30)])),visiblePieces:Object.fromEntries(pieceNames.map(key => [key,sourceFrame.visiblePieces?.[key] !== false])),horizontalThickness:number(sourceFrame.horizontalThickness,5,1,25),verticalThickness:number(sourceFrame.verticalThickness,5,1,25),sideMode:['stretch','repeat','connected'].includes(sourceFrame.sideMode) ? sourceFrame.sideMode : 'stretch',placement:sourceFrame.placement === 'foreground' ? 'foreground' : 'background',offsetX:number(sourceFrame.offsetX,0,-100,100),offsetY:number(sourceFrame.offsetY,0,-100,100),rotation:number(sourceFrame.rotation,0,-180,180),overlap:number(sourceFrame.overlap,0,0,100),visible:sourceFrame.visible !== false,alignments:{top:['left','center','right'].includes(sourceAlignments.top) ? sourceAlignments.top : 'center',bottom:['left','center','right'].includes(sourceAlignments.bottom) ? sourceAlignments.bottom : 'center',left:['top','middle','bottom'].includes(sourceAlignments.left) ? sourceAlignments.left : 'middle',right:['top','middle','bottom'].includes(sourceAlignments.right) ? sourceAlignments.right : 'middle'}};
     };
     const normalizedFrame = normalizeFramePreset(frame);
     normalizedFrame.presets = (Array.isArray(frame.presets) ? frame.presets : []).slice(0,8).map(normalizeFramePreset);
@@ -579,13 +580,14 @@
       const width = number(layer.width,20,1,10000);
       return {
       id:layerId,groupId:usedGroupIds.has(layer.groupId) ? layer.groupId : '',
+      buttonAction:type === 'button' ? CFC_RULES.action(layer.buttonAction).id : '',
       type,label:type === 'avatar' ? 'Profile picture' : type === 'username' ? 'Username' : String(layer.label || type || 'Layer').slice(0,80),field:String(layer.field || ''),
       x:number(layer.x,0,-10000,10000),y:number(layer.y,0,-10000,10000),width,height:friendCardSquareLayer(layer) ? width : number(layer.height,10,1,10000),rotation:number(layer.rotation,0,-180,180),
       fontSize:number(layer.fontSize,3.2,1,14),fontFamily:customFontIds.has(layer.fontId) ? `SolarisFont-${layer.fontId}` : builtInFonts.includes(layer.fontFamily) ? layer.fontFamily : 'DM Sans',fontId:customFontIds.has(layer.fontId) ? layer.fontId : '',lineHeight:number(layer.lineHeight,1.2,.8,2.2),letterSpacing:number(layer.letterSpacing,0,-.5,2),italic:layer.italic === true,
       color:color(layer.color,card.textColor),fill:color(layer.fill,card.backgroundColor),align:['left','center','right'].includes(layer.align) ? layer.align : 'left',weight:Number(layer.weight) === 700 ? 700 : 500,
       radius:number(layer.radius,8,0,100),shapeStyle:['circle','rounded','rectangle','square','triangle','diamond','star','hexagon'].includes(layer.shapeStyle) ? layer.shapeStyle : 'rounded',opacity:number(layer.opacity,100,0,100),
       image:image(layer.image),imageFit:['contain','cover','fill'].includes(layer.imageFit) ? layer.imageFit : 'contain',imagePositionX:number(layer.imagePositionX,50,0,100),imagePositionY:number(layer.imagePositionY,50,0,100),imageMask:['square','rounded','circle'].includes(layer.imageMask) ? layer.imageMask : 'square',
-      text:String(layer.text || '').slice(0,500),path:typeof layer.path === 'string' && layer.path.length <= 16000 && /^[MmLlHhVvCcSsQqTtAaZz0-9., +\-]*$/.test(layer.path) ? layer.path : '',strokeWidth:number(layer.strokeWidth,8,1,100),visible:layer.visible !== false,visibilityMode:['preview','full','both'].includes(layer.visibilityMode) ? layer.visibilityMode : 'both',locked:layer.locked === true
+      text:String(layer.text || '').slice(0,500),path:typeof layer.path === 'string' && layer.path.length <= 16000 && /^[MmLlHhVvCcSsQqTtAaZz0-9., +\-]*$/.test(layer.path) ? layer.path : '',strokeWidth:number(layer.strokeWidth,8,1,100),visible:layer.visible !== false,visibilityMode:type === 'button' ? CFC_RULES.action(layer.buttonAction).view : ['preview','full','both'].includes(layer.visibilityMode) ? layer.visibilityMode : 'both',locked:layer.locked === true
     }; });
     const aspectRatio = source.aspectRatio === 'custom' ? 'custom' : friendCardRatios.includes(source.aspectRatio) ? source.aspectRatio : card.aspectRatio;
     let width = number(source.width,1000,320,1600), height = number(source.height,1000,320,1200);
@@ -610,8 +612,8 @@
     if (layer.type === 'username') return `<span class="friend-layer-username">${esc(member.username || 'Helunemi Member')}</span>`;
     if (layer.type === 'likes' || layer.type === 'dislikes' || layer.type === 'favorite' || layer.type === 'lookingFor') return `<span class="friend-layer-caption"><small>${label}</small><span>${esc(value[layer.type] || 'Add this detail in your Friend-Card editor.')}</span></span>`;
     if (layer.type === 'tags') return `<span class="friend-layer-tags">${card.personalityTags.map(tag => `<span class="friend-personality-tag">${esc(tag)}</span>`).join('') || '<small>Add personality tags in your Friend-Card editor.</small>'}</span>`;
-    if (layer.type === 'button') return `<button class="friend-card-open friend-layer-button" type="button"${editor ? ' aria-disabled="true"' : openAction} style="${friendCardButtonStyle({...card,buttonColor:layer.fill || card.buttonColor,buttonTextColor:layer.color || card.buttonTextColor})}">${esc(layer.text || 'Open Friend-Card')}</button>`;
-    if (['image','sticker','frame-piece'].includes(layer.type)) return layer.image ? `<img class="friend-layer-image" src="${esc(layer.image)}" alt="${label}" draggable="false">` : `<span class="friend-layer-placeholder">${label || 'Choose an image'}</span>`;
+    if (layer.type === 'button') return friendCardButtonContent(layer,card,member,editor,openAction);
+    if (['image','sticker','frame-piece'].includes(layer.type)) return layer.image ? `<img class="friend-layer-image" decoding="async" src="${esc(layer.image)}" alt="${label}" draggable="false">` : `<span class="friend-layer-placeholder">${label || 'Choose an image'}</span>`;
     if (layer.type === 'shape') return friendCardShapeMarkup(layer);
     if (layer.type === 'textbox') return `<span class="friend-layer-caption"><small>${label}</small><span>${esc(layer.text || '')}</span></span>`;
     if (layer.type === 'drawing') {
@@ -624,8 +626,8 @@
     if (layer.type === 'eraser') return '';
     return `<span class="friend-layer-text">${esc(layer.text || label || 'Text')}</span>`;
   }
-  function friendCardLayersMarkup(card, member, editor = false, openAction = '', full = false) {
-    const design = normalizedFriendCardDesign(card.design,card);
+  function friendCardLayersMarkup(card, member, editor = false, openAction = '', full = false, preparedDesign = null) {
+    const design = preparedDesign || normalizedFriendCardDesign(card.design,card);
     const action = openAction === 'own' ? 'data-open-own-friend-card' : member.id ? `data-open-friend-card="${esc(member.id)}"` : '';
     return design.layers.map((layer,index)=>({layer,index})).filter(({layer})=>friendCardVisibleInView(layer,editor ? friendCardViewMode : full ? 'full' : 'preview')).map(({layer,index}) => {
       const safeWidth = friendCardSize(layer.width), square = friendCardSquareLayer(layer);
@@ -686,15 +688,22 @@
     });
   }
   function friendCardFrameInsets(design) {
-    return friendCardFramePieces(design).reduce((insets,piece) => ({
-      top:Math.max(insets.top,-piece.y),right:Math.max(insets.right,piece.x + piece.width - 100),
-      bottom:Math.max(insets.bottom,piece.y + piece.height - 100),left:Math.max(insets.left,-piece.x)
-    }),{top:0,right:0,bottom:0,left:0});
+    const width=Number(design.width)||1000,height=Number(design.height)||1000,frame=design.frame||{};
+    const angle=(Number(frame.rotation)||0)*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle);
+    const offsetX=(Number(frame.offsetX)||0)*width/100,offsetY=(Number(frame.offsetY)||0)*height/100;
+    const insets={top:0,right:0,bottom:0,left:0};
+    for(const piece of friendCardFramePieces(design)) for(const [px,py] of [[piece.x,piece.y],[piece.x+piece.width,piece.y],[piece.x+piece.width,piece.y+piece.height],[piece.x,piece.y+piece.height]]) {
+      const x=px*width/100-width/2,y=py*height/100-height/2;
+      const tx=width/2+x*cos-y*sin+offsetX,ty=height/2+x*sin+y*cos+offsetY;
+      insets.left=Math.max(insets.left,-tx/width*100);insets.right=Math.max(insets.right,(tx-width)/width*100);
+      insets.top=Math.max(insets.top,-ty/height*100);insets.bottom=Math.max(insets.bottom,(ty-height)/height*100);
+    }
+    return insets;
   }
   function friendCardFrameMarkup(design) {
     const pieces = friendCardFramePieces(design);
     if (!pieces.length) return '';
-    return `<div class="friend-card-exterior-frame" aria-hidden="true">${pieces.map(piece => {
+    return `<div class="friend-card-exterior-frame${design.frame.placement === 'foreground' ? ' is-foreground' : ''}" style="transform:translate(${Number(design.frame.offsetX)||0}%,${Number(design.frame.offsetY)||0}%) rotate(${Number(design.frame.rotation)||0}deg)" aria-hidden="true">${pieces.map(piece => {
       const horizontal = ['top','bottom'].includes(piece.key), repeat = design.frame.sideMode === 'repeat' && !piece.corner;
       const style = `left:${piece.x}%;top:${piece.y}%;width:${piece.width}%;height:${piece.height}%;z-index:${piece.corner ? 1 : 0};background-image:url(&quot;${esc(piece.image)}&quot;);background-size:${repeat ? horizontal ? 'auto 100%' : '100% auto' : '100% 100%'};background-repeat:${repeat ? horizontal ? 'repeat-x' : 'repeat-y' : 'no-repeat'}`;
       return `<div class="friend-custom-frame-piece frame-${piece.key}" style="${style}"></div>`;
@@ -713,7 +722,16 @@
         input.disabled = framed || input.hasAttribute('data-export-stk') && !$('#friend-card-form')?.elements.friendCardBorderImage?.value;
       });
     }
-    const overlap = $('[data-frame-overlap-value]'); if (overlap) overlap.textContent = `${frame.overlap || 0}%`;
+    $$('[data-frame-asset-row]').forEach(row=>{
+      const [group,key]=row.dataset.frameAssetRow.split('.'),image=frame[group]?.[key]||'';
+      const upload=$('.frame-piece-upload',row),remove=$('[data-remove-frame-piece]',row),visible=$('[data-frame-piece-visible]',row);
+      if(upload){upload.classList.toggle('has-image',Boolean(image));upload.title=image?'Image loaded — click to replace':'Choose image';
+        if(image)upload.style.setProperty('--frame-preview',`url("${image}")`);else upload.style.removeProperty('--frame-preview');
+        const icon=$('span',upload);if(icon)icon.textContent=image?'↺':'+';
+      }
+      if(remove)remove.disabled=!image;if(visible)visible.checked=frame.visiblePieces?.[key]!==false;
+    });
+    $$('[data-frame-output]').forEach(output=>{const key=output.dataset.frameOutput;output.textContent=`${Number(frame[key])||0}${key==='rotation'?'°':'%'}`;});
     $$('[data-frame-alignment]').forEach(label => { label.hidden = frame.sideMode !== 'connected'; });
     $$('[data-frame-property]').forEach(input => {
       const value = input.dataset.frameProperty.split('.').reduce((source,key) => source?.[key],frame);
@@ -736,18 +754,19 @@
       document.head.append(style);
     }
   }
-  function friendCardMarkup(member, full = false, editor = false, openAction = '') {
+  function friendCardMarkup(member, full = false, editor = false, openAction = '', preparedDesign = null) {
     const card = normalizedFriendCard(member.friendCard);
     const aspect = friendCardRatios.includes(card.aspectRatio) ? card.aspectRatio : '1:1';
     const effect = ['none','glow','lift','shine'].includes(card.effect) ? card.effect : 'glow';
     const title = esc(member.username || 'Helunemi Member');
     const searchData = !full && !editor ? esc([member.username,card.likes,card.dislikes,card.favoriteThing,card.lookingFor,...card.personalityTags].join(' ')) : '';
     const action = openAction === 'own' ? 'data-open-own-friend-card' : `data-open-friend-card="${esc(member.id || '')}"`;
-    const design = normalizedFriendCardDesign(card.design,card);
+    const design = preparedDesign || normalizedFriendCardDesign(card.design,card);
+    card.design=design;
     ensureFriendCardFontFaces(design.fonts);
     const image = design.background.image ? `background-image:linear-gradient(${colorWithOpacity(design.background.tint,design.background.tintOpacity)},${colorWithOpacity(design.background.tint,design.background.tintOpacity)}),url(&quot;${esc(design.background.image)}&quot;);background-position:${design.background.positionX}% ${design.background.positionY}%;background-size:${design.background.scale}% auto;background-repeat:no-repeat` : '';
     const frameMarkup = friendCardFrameMarkup(design);
-    const markup = `<article class="friend-card friend-card-effect-${effect}${full ? ' friend-card-full' : ' friend-card-preview'}${editor && design.showGuides ? ' friend-show-guides' : ''}" data-friend-aspect="${aspect}"${!full && !editor ? ` data-friend-member data-friend-search="${searchData}"` : ''} style="${friendCardStyle({...card,aspectRatio:design.aspectRatio === 'custom' ? '1:1' : design.aspectRatio},Boolean(frameMarkup))};--friend-ratio:${design.width} / ${design.height};--design-ratio:${design.width} / ${design.height};${image}"><div class="friend-card-layer-canvas">${friendCardLayersMarkup(card,member,editor,openAction,full)}</div><span class="visually-hidden">${title} Friend-Card</span></article>`;
+    const markup = `<article class="friend-card friend-card-effect-${effect}${full ? ' friend-card-full' : ' friend-card-preview'}${editor && design.showGuides ? ' friend-show-guides' : ''}" data-friend-aspect="${aspect}"${!full && !editor ? ` data-friend-member data-friend-search="${searchData}"` : ''} style="${friendCardStyle({...card,aspectRatio:design.aspectRatio === 'custom' ? '1:1' : design.aspectRatio},Boolean(frameMarkup))};--friend-ratio:${design.width} / ${design.height};--design-ratio:${design.width} / ${design.height};${image}"><div class="friend-card-layer-canvas">${friendCardLayersMarkup(card,member,editor,openAction,full,design)}</div><span class="visually-hidden">${title} Friend-Card</span></article>`;
     const insets = friendCardFrameInsets(design);
     if (!frameMarkup) return markup;
     const outerWidth = 100 + insets.left + insets.right, ratio = design.width / design.height;
@@ -758,11 +777,15 @@
     const thumb = value ? `<span class="friend-card-image-thumb" data-friend-card-thumb="${field}" style="background-image:url(&quot;${esc(value)}&quot;)"></span>` : `<span class="friend-card-image-thumb friend-card-image-empty" data-friend-card-thumb="${field}">No image selected</span>`;
     return `<div class="friend-card-asset-row" data-friend-card-asset-row="${field}"><div><strong>${title}</strong><small>${supportsStk ? 'Upload JPG, PNG, WebP, or a Helunemi .stk stroke file.' : 'Upload a JPG, PNG, or WebP image.'} Images are resized before saving.</small></div>${thumb}<input type="file" accept="image/png,image/jpeg,image/webp${supportsStk ? ',.stk,application/json' : ''}" data-friend-card-image="${field}" hidden><input type="hidden" name="${field}" value="${esc(value)}"><div class="friend-card-asset-actions"><button class="btn btn-ghost btn-sm" type="button" data-choose-friend-card-image="${field}">Choose image</button><button class="btn btn-ghost btn-sm" type="button" data-remove-friend-card-image="${field}"${value ? '' : ' hidden'}>Remove</button>${supportsStk ? `<button class="btn btn-ghost btn-sm" type="button" data-export-stk="${field}"${value ? '' : ' disabled'}>Export .stk</button>` : ''}</div></div>`;
   }
+  function friendFrameRangeControl(label,key,min,max,suffix='%') {
+    const value=Number(friendCardDesignState?.frame?.[key])||0;
+    return `<label class="friend-frame-range"><span>${label}<output data-frame-output="${key}">${value}${suffix}</output></span><input type="range" min="${min}" max="${max}" step="1" value="${value}" data-frame-property="${key}"></label>`;
+  }
   function friendFrameAssetRow(group,key,label) {
     const image=friendCardDesignState?.frame?.[group]?.[key]||'',visible=friendCardDesignState?.frame?.visiblePieces?.[key]!==false;
     const short=label.replace(' corner','').replace(' side','');
     const size=group==='corners'?`<input class="frame-piece-size-value" type="number" min="1" max="30" data-frame-property="cornerSizes.${key}" value="${esc(friendCardDesignState.frame.cornerSizes?.[key]||friendCardDesignState.frame.cornerSize||9)}" aria-label="${esc(label)} size in percent" title="Corner size (%)">`:'<span class="frame-piece-size-empty" aria-hidden="true">—</span>';
-    return `<div class="frame-piece-row"><span title="${esc(label)}">${esc(short)}</span><label class="frame-piece-upload${image?' has-image':''}" title="${image?'Replace':'Choose'} ${esc(label)} image"${image?` style="--frame-preview:url(&quot;${esc(image)}&quot;)"`:''}><input type="file" accept="image/png,image/jpeg,image/webp" data-frame-piece="${group}.${key}" aria-label="Choose ${esc(label)} image"><span aria-hidden="true">${image?'↺':'+'}</span></label>${size}<button type="button" class="frame-piece-remove" data-remove-frame-piece="${group}.${key}" aria-label="Remove ${esc(label)} image"${image?'':' disabled'}>×</button><label class="frame-piece-visibility" title="Show ${esc(label)}"><input type="checkbox" data-frame-piece-visible="${key}"${visible?' checked':''} aria-label="Show ${esc(label)}"></label></div>`;
+    return `<div class="frame-piece-row" data-frame-asset-row="${group}.${key}"><span title="${esc(label)}">${esc(short)}</span><label class="frame-piece-upload${image?' has-image':''}" title="${image?'Replace':'Choose'} ${esc(label)} image"${image?` style="--frame-preview:url(&quot;${esc(image)}&quot;)"`:''}><input type="file" accept="image/png,image/jpeg,image/webp" data-frame-piece="${group}.${key}" aria-label="Choose ${esc(label)} image"><span aria-hidden="true">${image?'↺':'+'}</span></label>${size}<button type="button" class="frame-piece-remove" data-remove-frame-piece="${group}.${key}" aria-label="Remove ${esc(label)} image"${image?'':' disabled'}>×</button><label class="frame-piece-visibility" title="Show ${esc(label)}"><input type="checkbox" data-frame-piece-visible="${key}"${visible?' checked':''} aria-label="Show ${esc(label)}"></label></div>`;
   }
 
   function friendColorControl(label, name, value, binding = '') {
@@ -793,7 +816,7 @@
     const linkedContent = linkedField ? (['likes','dislikes','lookingFor'].includes(layer.type) ? `<label>${layer.type === 'likes' ? 'What I like' : layer.type === 'dislikes' ? 'What I dislike' : 'What I’m looking for'}<textarea data-layer-content-field rows="3" maxlength="400">${esc(getContent())}</textarea></label>` : `<label>${layer.type === 'tags' ? 'Tags (comma separated)' : layer.type === 'favorite' ? 'Favorite thing' : 'Content'}<input data-layer-content-field value="${esc(getContent())}" maxlength="${layer.type === 'favorite' ? 160 : 400}"></label>`) : '';
     const positionControls = friendCardSquareLayer(layer) ? `<label>X position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="x" value="${esc(layer.x)}"></label><label>Y position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="y" value="${esc(layer.y)}"></label><label>Size<input type="number" min="1" max="10000" step="0.1" data-layer-property="width" value="${esc(layer.width)}"></label><label>Rotation<input type="number" min="-180" max="180" step="1" data-layer-property="rotation" value="${esc(layer.rotation)}"></label><label>Opacity<input type="range" min="0" max="100" data-layer-property="opacity" value="${esc(layer.opacity)}"></label>` : `<label>X position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="x" value="${esc(layer.x)}"></label><label>Y position<input type="number" min="-10000" max="10000" step="0.1" data-layer-property="y" value="${esc(layer.y)}"></label><label>Width<input type="number" min="1" max="10000" step="0.1" data-layer-property="width" value="${esc(layer.width)}"></label><label>Height<input type="number" min="1" max="10000" step="0.1" data-layer-property="height" value="${esc(layer.height)}"></label><label>Rotation<input type="number" min="-180" max="180" step="1" data-layer-property="rotation" value="${esc(layer.rotation)}"></label><label>Opacity<input type="range" min="0" max="100" data-layer-property="opacity" value="${esc(layer.opacity)}"></label>`;
     const tab = friendCardPropertiesTab === 'assets' ? 'assets' : 'properties';
-    return `<div class="friend-properties-shell"><div class="friend-properties-heading"><span class="friend-layer-kind" aria-hidden="true">✦</span><div><strong>${esc(layer.label)}</strong><small>${esc(layer.type)} layer</small></div></div><nav class="friend-properties-tabs" aria-label="Selected layer settings"><button type="button" data-property-pane-tab="properties" aria-pressed="${tab === 'properties'}">Properties</button><button type="button" data-property-pane-tab="assets" aria-pressed="${tab === 'assets'}">Assets</button></nav><div class="friend-properties-panes"><div class="friend-properties-content" data-property-pane-content="properties"${tab === 'properties' ? '' : ' hidden'}>${!['avatar','username'].includes(layer.type) ? `<label>Layer name<input data-layer-property="label" maxlength="80" value="${esc(layer.label)}"></label>` : ''}${linkedContent}${['text','textbox','button'].includes(layer.type) ? `<label>${layer.type === 'button' ? 'Button label' : 'Text'}<textarea data-layer-property="text" rows="3" maxlength="500">${esc(layer.text || '')}</textarea></label>` : ''}<label>Show in<select data-layer-property="visibilityMode"><option value="both"${layer.visibilityMode === 'both' ? ' selected' : ''}>Preview and full view</option><option value="preview"${layer.visibilityMode === 'preview' ? ' selected' : ''}>Preview only</option><option value="full"${layer.visibilityMode === 'full' ? ' selected' : ''}>Full view only</option></select></label>${['avatar','username'].includes(layer.type) ? '<p class="friend-identity-help">Each view needs a visible PFP and username. You can use separate Preview only and Full view only layers, or one layer in both views.</p>' : ''}<div class="friend-property-grid friend-layer-position-grid">${positionControls}</div>${typographyControls}${layer.type === 'shape' ? `<div class="friend-property-grid">${friendColorControl('Shape color','',layer.fill || '#f5a300','data-layer-property="fill"')}<label>Shape type<select data-layer-property="shapeStyle">${[['rectangle','Rectangle'],['square','Square'],['rounded','Rounded square'],['circle','Circle'],['triangle','Triangle'],['diamond','Diamond'],['star','Star'],['hexagon','Hexagon']].map(([value,label]) => `<option value="${value}"${layer.shapeStyle === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label><label>Corner roundness<input type="number" min="0" max="100" data-layer-property="radius" value="${esc(layer.radius || 8)}"></label></div>` : ''}<div class="friend-layer-controls"><button type="button" class="btn btn-ghost btn-sm" data-duplicate-layer="${esc(layer.id)}">Duplicate</button><button type="button" class="btn btn-ghost btn-sm" data-lock-layer="${esc(layer.id)}">${layer.locked ? 'Unlock' : 'Lock'}</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="front" data-layer-id="${esc(layer.id)}">Move to front</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="back" data-layer-id="${esc(layer.id)}">Move to back</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="up" data-layer-id="${esc(layer.id)}">Move up</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="down" data-layer-id="${esc(layer.id)}">Move down</button><button type="button" class="btn btn-danger btn-sm" data-delete-layer="${esc(layer.id)}">Delete</button></div></div><div class="friend-properties-content friend-property-assets" data-property-pane-content="assets"${tab === 'assets' ? '' : ' hidden'}>${assetContent}</div></div></div>`;
+    return `<div class="friend-properties-shell"><div class="friend-properties-heading"><span class="friend-layer-kind" aria-hidden="true">✦</span><div><strong>${esc(layer.label)}</strong><small>${esc(layer.type)} layer</small></div></div><nav class="friend-properties-tabs" aria-label="Selected layer settings"><button type="button" data-property-pane-tab="properties" aria-pressed="${tab === 'properties'}">Properties</button><button type="button" data-property-pane-tab="assets" aria-pressed="${tab === 'assets'}">Assets</button></nav><div class="friend-properties-panes"><div class="friend-properties-content" data-property-pane-content="properties"${tab === 'properties' ? '' : ' hidden'}>${!['avatar','username'].includes(layer.type) ? `<label>Layer name<input data-layer-property="label" maxlength="80" value="${esc(layer.label)}"></label>` : ''}${linkedContent}${layer.type==='button'?`<label>Button action<select data-layer-property="buttonAction">${CFC_RULES.actions.map(action=>`<option value="${action.id}"${CFC_RULES.action(layer.buttonAction).id===action.id?' selected':''}>${esc(action.label)}</option>`).join('')}</select></label><p class="friend-identity-help">Open CFC appears in Preview only. Other action buttons appear in Full view only. Preview needs a visible Open CFC button to save or post.</p>`:''}${['text','textbox','button'].includes(layer.type) ? `<label>${layer.type === 'button' ? 'Button label' : 'Text'}<textarea data-layer-property="text" rows="3" maxlength="500">${esc(layer.text || '')}</textarea></label>` : ''}<label>Show in<select data-layer-property="visibilityMode"${layer.type === 'button' ? ' disabled' : ''}><option value="both"${layer.visibilityMode === 'both' ? ' selected' : ''}>Preview and full view</option><option value="preview"${layer.visibilityMode === 'preview' ? ' selected' : ''}>Preview only</option><option value="full"${layer.visibilityMode === 'full' ? ' selected' : ''}>Full view only</option></select></label>${['avatar','username'].includes(layer.type) ? '<p class="friend-identity-help">Each view needs a visible PFP and username. You can use separate Preview only and Full view only layers, or one layer in both views.</p>' : ''}<div class="friend-property-grid friend-layer-position-grid">${positionControls}</div>${typographyControls}${layer.type === 'shape' ? `<div class="friend-property-grid">${friendColorControl('Shape color','',layer.fill || '#f5a300','data-layer-property="fill"')}<label>Shape type<select data-layer-property="shapeStyle">${[['rectangle','Rectangle'],['square','Square'],['rounded','Rounded square'],['circle','Circle'],['triangle','Triangle'],['diamond','Diamond'],['star','Star'],['hexagon','Hexagon']].map(([value,label]) => `<option value="${value}"${layer.shapeStyle === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label><label>Corner roundness<input type="number" min="0" max="100" data-layer-property="radius" value="${esc(layer.radius || 8)}"></label></div>` : ''}<div class="friend-layer-controls"><button type="button" class="btn btn-ghost btn-sm" data-duplicate-layer="${esc(layer.id)}">Duplicate</button><button type="button" class="btn btn-ghost btn-sm" data-lock-layer="${esc(layer.id)}">${layer.locked ? 'Unlock' : 'Lock'}</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="front" data-layer-id="${esc(layer.id)}">Move to front</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="back" data-layer-id="${esc(layer.id)}">Move to back</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="up" data-layer-id="${esc(layer.id)}">Move up</button><button type="button" class="btn btn-ghost btn-sm" data-layer-order="down" data-layer-id="${esc(layer.id)}">Move down</button><button type="button" class="btn btn-danger btn-sm" data-delete-layer="${esc(layer.id)}">Delete</button></div></div><div class="friend-properties-content friend-property-assets" data-property-pane-content="assets"${tab === 'assets' ? '' : ' hidden'}>${assetContent}</div></div></div>`;
   }
   function hiddenFriendCardFields(card) {
     const fields = {friendCardLikes:card.likes,friendCardDislikes:card.dislikes,friendCardFavoriteThing:card.favoriteThing,friendCardLookingFor:card.lookingFor,friendCardPersonalityTags:card.personalityTags.join(', '),friendCardTitleColor:card.titleColor,friendCardTextColor:card.textColor,friendCardMutedTextColor:card.mutedTextColor,friendCardTagTextColor:card.tagTextColor,friendCardButtonOverlayColor:card.buttonOverlayColor,friendCardButtonOverlayOpacity:card.buttonOverlayOpacity,friendCardButtonBorderStyle:card.buttonBorderStyle};
@@ -827,7 +850,7 @@
       <div class="friend-card-editor-layout friend-design-workspace"><aside class="friend-editor-panel friend-editor-left"><div class="friend-editor-panel-head"><div><span class="section-eyebrow">DESIGN</span><h2>Elements &amp; layers</h2></div><button type="button" class="friend-panel-collapse" aria-label="Collapse elements panel" data-collapse-editor-panel="left">‹</button></div>
         <div class="friend-editor-section"><h3>Card setup</h3><label>Aspect ratio<select name="friendCardAspectRatio" data-design-ratio><option value="custom"${friendCardDesignState.aspectRatio === 'custom' ? ' selected' : ''}>Custom dimensions</option>${options(friendCardRatios,friendCardDesignState.aspectRatio)}</select></label><div class="friend-property-grid friend-dimensions"><label>Width<input type="number" min="320" max="1600" step="10" data-design-dimension="width" value="${esc(friendCardDesignState.width)}"></label><label>Height<input type="number" min="320" max="1200" step="10" data-design-dimension="height" value="${esc(friendCardDesignState.height)}"></label></div><label>Background<input type="color" name="friendCardBackgroundColor" value="${esc(card.backgroundColor)}"></label><label>Background tint<input type="color" name="friendCardBackgroundOverlayColor" value="${esc(card.backgroundOverlayColor)}"></label>${friendRangeControl('Tint strength','friendCardBackgroundOverlayOpacity',card.backgroundOverlayOpacity)}<div class="friend-background-crop"><span>Background image position</span><div class="friend-property-grid"><label>Horizontal<input type="range" min="0" max="100" value="${esc(friendCardDesignState.background.positionX)}" data-background-property="positionX"></label><label>Vertical<input type="range" min="0" max="100" value="${esc(friendCardDesignState.background.positionY)}" data-background-property="positionY"></label><label>Scale<input type="range" min="50" max="300" value="${esc(friendCardDesignState.background.scale)}" data-background-property="scale"></label></div></div><label class="friend-check-row"><input type="checkbox" data-background-locked${friendCardDesignState.backgroundLocked ? ' checked' : ''}> Lock background from canvas selection</label><label class="friend-check-row"><input type="checkbox" data-show-guides${friendCardDesignState.showGuides ? ' checked' : ''}> Show safe-area guides</label></div>
         <div class="friend-editor-section"><h3>Add to card</h3><div class="friend-tool-grid"><button type="button" data-insert-layer="text">＋ Text</button><button type="button" data-insert-layer="button">▱ Button</button><button type="button" data-insert-image>＋ Image</button><button type="button" data-insert-sticker>▧ Sticker</button><button type="button" data-insert-sticker-url>↗ Image URL</button></div><div class="friend-sticker-library" data-friend-sticker-library>${friendCardStickerLibraryMarkup()}</div><input type="file" accept="image/png,image/jpeg,image/webp" data-cfc-image-input multiple hidden><input type="file" accept="image/png,image/jpeg,image/webp" data-sticker-input hidden></div>
-        <details class="friend-editor-section friend-frame-section"><summary><strong>Custom 8-piece frame</strong><small>Frame images stay behind the card. Adjust overlap to tuck them under its edges; Connected mode joins the chosen corners.</small></summary><div class="friend-frame-assets">${frameNames}</div>${framePresets}<div class="friend-property-grid"><label>Default corner size<input type="number" min="1" max="30" data-frame-property="cornerSize" value="${esc(friendCardDesignState.frame.cornerSize || 9)}"></label><label>Horizontal width<input type="number" min="1" max="25" data-frame-property="horizontalThickness" value="${esc(friendCardDesignState.frame.horizontalThickness || 5)}"></label><label>Vertical width<input type="number" min="1" max="25" data-frame-property="verticalThickness" value="${esc(friendCardDesignState.frame.verticalThickness || 5)}"></label><label class="friend-frame-overlap">Overlap behind card <output data-frame-overlap-value>${esc(friendCardDesignState.frame.overlap || 0)}%</output><input type="range" min="0" max="100" step="1" data-frame-property="overlap" value="${esc(friendCardDesignState.frame.overlap || 0)}"></label><label>Side mode<select data-frame-property="sideMode">${options(['stretch','repeat','connected'],friendCardDesignState.frame.sideMode,['Stretch','Repeat','Connected'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Top side alignment<select data-frame-property="alignments.top">${options(['left','center','right'],friendCardDesignState.frame.alignments.top,['Left corner','Both corners','Right corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Bottom side alignment<select data-frame-property="alignments.bottom">${options(['left','center','right'],friendCardDesignState.frame.alignments.bottom,['Left corner','Both corners','Right corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Left side alignment<select data-frame-property="alignments.left">${options(['top','middle','bottom'],friendCardDesignState.frame.alignments.left,['Top corner','Both corners','Bottom corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Right side alignment<select data-frame-property="alignments.right">${options(['top','middle','bottom'],friendCardDesignState.frame.alignments.right,['Top corner','Both corners','Bottom corner'])}</select></label></div><label class="friend-check-row"><input type="checkbox" data-frame-property="visible"${friendCardDesignState.frame.visible ? ' checked' : ''}> Show frame</label></details>
+        <details class="friend-editor-section friend-frame-section"><summary><strong>Custom 8-piece frame</strong><small>Position and rotate the frame independently. Choose Very back or Very front; Connected mode joins the selected corners.</small></summary><div class="friend-frame-assets">${frameNames}</div>${framePresets}<div class="friend-property-grid"><label>Default corner size<input type="number" min="1" max="30" data-frame-property="cornerSize" value="${esc(friendCardDesignState.frame.cornerSize || 9)}"></label><label>Horizontal width<input type="number" min="1" max="25" data-frame-property="horizontalThickness" value="${esc(friendCardDesignState.frame.horizontalThickness || 5)}"></label><label>Vertical width<input type="number" min="1" max="25" data-frame-property="verticalThickness" value="${esc(friendCardDesignState.frame.verticalThickness || 5)}"></label>${friendFrameRangeControl('Overlap behind card','overlap',0,100)}${friendFrameRangeControl('Horizontal position','offsetX',-100,100)}${friendFrameRangeControl('Vertical position','offsetY',-100,100)}${friendFrameRangeControl('Rotation','rotation',-180,180,'°')}<label>Frame placement<select data-frame-property="placement">${options(['background','foreground'],friendCardDesignState.frame.placement,['Very back','Very front'])}</select></label><label>Side mode<select data-frame-property="sideMode">${options(['stretch','repeat','connected'],friendCardDesignState.frame.sideMode,['Stretch','Repeat','Connected'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Top side alignment<select data-frame-property="alignments.top">${options(['left','center','right'],friendCardDesignState.frame.alignments.top,['Left corner','Both corners','Right corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Bottom side alignment<select data-frame-property="alignments.bottom">${options(['left','center','right'],friendCardDesignState.frame.alignments.bottom,['Left corner','Both corners','Right corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Left side alignment<select data-frame-property="alignments.left">${options(['top','middle','bottom'],friendCardDesignState.frame.alignments.left,['Top corner','Both corners','Bottom corner'])}</select></label><label data-frame-alignment${friendCardDesignState.frame.sideMode === 'connected' ? '' : ' hidden'}>Right side alignment<select data-frame-property="alignments.right">${options(['top','middle','bottom'],friendCardDesignState.frame.alignments.right,['Top corner','Both corners','Bottom corner'])}</select></label></div><label class="friend-check-row"><input type="checkbox" data-frame-property="visible"${friendCardDesignState.frame.visible ? ' checked' : ''}> Show frame</label></details>
         <section class="friend-editor-section friend-layer-panel"><div class="friend-panel-title"><h3>Layers</h3><span data-friend-layer-count>${friendCardDesignState.layers.length}</span></div><p class="friend-layer-summary" data-friend-layer-summary role="status"></p><p class="friend-layer-list-help">Frontmost layers are at the top. Shift-click to select several layers.</p><div class="friend-layer-list-actions"><button class="btn btn-ghost btn-sm" type="button" data-group-action="group" data-cfc-group-create>Group selected</button><button class="btn btn-ghost btn-sm" type="button" data-group-action="ungroup" data-cfc-group-ungroup>Ungroup</button></div><div data-friend-layer-list>${friendCardLayerListMarkup()}</div></section>
         <details class="friend-editor-section"><summary><strong>Image assets</strong><small>Card background and legacy frame images.</small></summary><div class="friend-card-asset-list">${imageRows}</div></details>
         <details class="friend-editor-section"><summary><strong>Font library</strong><small>Upload fonts you have permission to use.</small></summary><label class="btn btn-ghost btn-sm friend-font-upload">Upload font<input type="file" accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf" data-friend-font-input hidden></label><div class="friend-font-list" data-friend-font-list>${friendCardFontListMarkup()}</div></details>
@@ -918,12 +941,13 @@
     const count = friendCardDesignState.layers.length;
     const id = `layer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
     const cardColors = friendCardFromForm($('#friend-card-form'));
-    const defaults = {avatar:{label:'Profile picture',x:5,y:7,width:18,height:18,fontSize:3.5,field:'avatar'},username:{label:'Username',x:27,y:9,width:60,height:12,fontSize:5,field:'username',fontFamily:'Unbounded',weight:700},textbox:{label:'Text box',text:'Write something about yourself.',x:8,y:35,width:42,height:18,fontSize:3.2},text:{label:'Text',text:'Add your text',x:32,y:35,width:38,height:15,fontSize:4.2},shape:{label:'Square',shapeStyle:'square',fill:'#f5a300',x:30,y:35,width:35,height:20,fontSize:3.2},button:{label:'Button',text:'Visit my profile',fill:cardColors?.buttonColor || '#3c315b',color:cardColors?.buttonTextColor || '#ffffff',x:30,y:74,width:40,height:10,fontSize:3},image:{label:'Image',image:'',x:20,y:25,width:40,height:30,fontSize:3.2},sticker:{label:'Sticker',image:'',x:34,y:35,width:30,height:30,fontSize:3.2}}[type];
+    const defaults = {avatar:{label:'Profile picture',x:5,y:7,width:18,height:18,fontSize:3.5,field:'avatar'},username:{label:'Username',x:27,y:9,width:60,height:12,fontSize:5,field:'username',fontFamily:'Unbounded',weight:700},textbox:{label:'Text box',text:'Write something about yourself.',x:8,y:35,width:42,height:18,fontSize:3.2},text:{label:'Text',text:'Add your text',x:32,y:35,width:38,height:15,fontSize:4.2},shape:{label:'Square',shapeStyle:'square',fill:'#f5a300',x:30,y:35,width:35,height:20,fontSize:3.2},button:{label:'Button',buttonAction:'open-cfc',text:'Open CFC',fill:cardColors?.buttonColor || '#3c315b',color:cardColors?.buttonTextColor || '#ffffff',x:30,y:74,width:40,height:10,fontSize:3},image:{label:'Image',image:'',x:20,y:25,width:40,height:30,fontSize:3.2},sticker:{label:'Sticker',image:'',x:34,y:35,width:30,height:30,fontSize:3.2}}[type];
     if (!defaults) return;
     recordFriendCardHistory();
-    const layer = {id,type,...defaults,rotation:0,opacity:100,color:defaults.color || '#302344',align:'center',visible:true,visibilityMode:'both',locked:false,radius:8};
+    const layer = {id,type,...defaults,rotation:0,opacity:100,color:defaults.color || '#302344',align:'center',visible:true,visibilityMode:type==='button'?'preview':'both',locked:false,radius:8};
     friendCardDesignState.layers.push(layer);
     friendCardSetSelection([id]);
+    if(!friendCardVisibleInView(layer))friendCardViewMode='all';
     repaintFriendCardEditor();
     return layer;
   }
@@ -948,6 +972,13 @@
     const customFont = key === 'fontFamily' ? friendCardDesignState.fonts.find(font => font.family === value) : null;
     if (key === 'fontFamily' && !customFont && !['DM Sans','Unbounded','Arial','Georgia','Trebuchet MS','Verdana','Courier New','serif','sans-serif','monospace'].includes(value)) return;
     if (key === 'shapeStyle' && !['circle','rounded','rectangle','square','triangle','diamond','star','hexagon'].includes(value)) return;
+    if(key==='buttonAction'){
+      if(layer.type!=='button'||!CFC_RULES.actions.some(action=>action.id===value))return;
+      const previous=CFC_RULES.action(layer.buttonAction),next=CFC_RULES.action(value);
+      if(!layer.text||[previous.label,'Open Friend-Card','Visit my profile'].includes(layer.text))layer.text=next.label;
+      layer.visibilityMode=next.view;
+    }
+    if(key==='visibilityMode'&&layer.type==='button')value=CFC_RULES.action(layer.buttonAction).view;
     if (key === 'visibilityMode' && !['preview','full','both'].includes(value)) return;
     if (key === 'imageFit' && !['contain','cover','fill'].includes(value)) return;
     if (key === 'imageMask' && !['square','rounded','circle'].includes(value)) return;
@@ -957,7 +988,12 @@
     if (['color','fill'].includes(key) && !/^#[0-9a-f]{6}$/i.test(String(value))) return;
     if (key === 'fontFamily') layer.fontId = customFont?.id || '';
     if (friendCardSquareLayer(layer) && ['width','height'].includes(key)) { layer.width = value; layer.height = value; } else layer[key] = value;
-    repaintFriendCardEditor({layers:false,properties:false});
+    if(key==='buttonAction'&&!friendCardVisibleInView(layer))friendCardViewMode='all';
+    repaintFriendCardEditor({layers:key==='buttonAction',properties:false});
+    if(key==='buttonAction'){
+      const mode=$('[data-layer-property="visibilityMode"]'),text=$('[data-layer-property="text"]');
+      if(mode)mode.value=layer.visibilityMode;if(text)text.value=layer.text;
+    }
   }
   function updateFriendCardLayerContent(value) {
     const layer = friendCardDesignState?.layers.find(item => item.id === friendCardSelectedLayer);
@@ -979,7 +1015,8 @@
     return nearest != null && Math.abs(nearest - value) <= 1.25 ? nearest : value;
   }
   function friendCardVisibleInView(layer, mode = friendCardViewMode) {
-    return layer.visible !== false && layer.type !== 'eraser' && (mode === 'all' || (layer.visibilityMode || 'both') === 'both' || layer.visibilityMode === mode);
+    const view=layer.type==='button'?CFC_RULES.action(layer.buttonAction).view:layer.visibilityMode||'both';
+    return layer.visible !== false && layer.type !== 'eraser' && (mode === 'all' || view === 'both' || view === mode);
   }
   function updateFriendCardLayerCounts() {
     if (!friendCardDesignState) return;
@@ -1368,31 +1405,76 @@
     viewport.scrollLeft = Math.max(0,(viewport.scrollWidth - viewport.clientWidth) / 2);
     viewport.scrollTop = Math.max(0,(viewport.scrollHeight - viewport.clientHeight) / 2);
   }
-  function openFriendCardDialog(member,initialView = 'full',passive = false) {
-    let dialog = $('#friend-card-dialog');
-    if (!dialog) {
-      dialog = document.createElement('dialog'); dialog.id = 'friend-card-dialog'; dialog.className = 'friend-card-dialog';
-      dialog.setAttribute('aria-label','Friend-Card viewer');
-      dialog.innerHTML = '<button class="friend-card-dialog-close" type="button" data-close-friend-card aria-label="Close Friend-Card">×</button><div id="friend-card-dialog-content"></div>';
-      dialog.addEventListener('click',event => {
-        if (event.target === dialog || event.target.matches('[data-cfc-view-viewport],[data-cfc-view-plane]')) dialog.close();
-      });
-      window.addEventListener('resize',() => { if (dialog.open) fitFriendCardViewer(dialog); });
-      document.body.append(dialog);
-    }
-    const content = $('#friend-card-dialog-content',dialog), editing = Boolean($('#friend-card-form')), readonly = editing || passive;
-    const card = normalizedFriendCard(member.friendCard);
-    dialog.friendCardViewerDesign = normalizedFriendCardDesign(card.design,card);
-    const paint = mode => {
-      content.innerHTML = `<div class="friend-preview-switch friend-dialog-view-switch" role="group" aria-label="Friend-Card view"><button type="button" data-dialog-cfc-view="preview" aria-pressed="${mode === 'preview'}">Preview</button><button type="button" data-dialog-cfc-view="full" aria-pressed="${mode === 'full'}">Full view</button></div><div class="friend-card-view-viewport" data-cfc-view-viewport><div class="friend-card-view-plane" data-cfc-view-plane><div class="friend-card-view-surface" data-cfc-view-surface${readonly ? ' inert' : ''}>${friendCardMarkup(member,mode === 'full')}</div></div></div><div class="friend-card-view-actions">${readonly ? '' : communityFriendAction(member)}</div>`;
-      requestAnimationFrame(() => fitFriendCardViewer(dialog));
-    };
-    content.onclick = event => { const button = event.target.closest('[data-dialog-cfc-view]'); if (button) paint(button.dataset.dialogCfcView); };
-    paint(initialView === 'preview' ? 'preview' : 'full');
-    if (!dialog.open) dialog.showModal();
-    requestAnimationFrame(() => fitFriendCardViewer(dialog));
+  let friendCardViewerFitFrame=0;
+  function scheduleFriendCardViewerFit(dialog){
+    if(friendCardViewerFitFrame)cancelAnimationFrame(friendCardViewerFitFrame);
+    friendCardViewerFitFrame=requestAnimationFrame(()=>{friendCardViewerFitFrame=0;fitFriendCardViewer(dialog);});
   }
-
+  function openFriendCardDialog(member,initialView='full',passive=false){
+    let dialog=$('#friend-card-dialog');
+    if(!dialog){
+      dialog=document.createElement('dialog');dialog.id='friend-card-dialog';dialog.className='friend-card-dialog';dialog.setAttribute('aria-label','Friend-Card viewer');
+      dialog.innerHTML='<button class="friend-card-dialog-close" type="button" data-close-friend-card aria-label="Close Friend-Card">×</button><div id="friend-card-dialog-content"></div>';
+      dialog.addEventListener('click',event=>{if(event.target===dialog||event.target.matches('[data-cfc-view-viewport],[data-cfc-view-plane]'))dialog.close();});
+      dialog.addEventListener('close',()=>{
+        document.body.classList.remove('cfc-viewing');
+        if(friendCardViewerFitFrame)cancelAnimationFrame(friendCardViewerFitFrame);friendCardViewerFitFrame=0;
+        $('#friend-card-dialog-content',dialog).replaceChildren();dialog.friendCardViewerDesign=null;
+        if(dialog.friendCardGridDirty){dialog.friendCardGridDirty=false;renderMemberCardGrid();}
+      });
+      window.addEventListener('resize',()=>{if(dialog.open)scheduleFriendCardViewerFit(dialog);});document.body.append(dialog);
+    }
+    const content=$('#friend-card-dialog-content',dialog),editing=Boolean($('#friend-card-form')),readonly=editing||passive;
+    const card=normalizedFriendCard(member.friendCard),design=normalizedFriendCardDesign(card.design,card);
+    const preparedMember={...member,friendCard:{...card,design}};dialog.friendCardViewerDesign=design;
+    const paint=mode=>{
+      const tabs=editing?`<div class="friend-preview-switch friend-dialog-view-switch" role="group" aria-label="Friend-Card view"><button type="button" data-dialog-cfc-view="preview" aria-pressed="${mode==='preview'}">Preview</button><button type="button" data-dialog-cfc-view="full" aria-pressed="${mode==='full'}">Full view</button></div>`:'<div class="friend-viewer-mode-label">Full view</div>';
+      content.innerHTML=`${tabs}<div class="friend-card-view-viewport" data-cfc-view-viewport><div class="friend-card-view-plane" data-cfc-view-plane><div class="friend-card-view-surface" data-cfc-view-surface${readonly?' inert':''}>${friendCardMarkup(preparedMember,mode==='full',false,'',design)}</div></div></div>`;
+      scheduleFriendCardViewerFit(dialog);
+    };
+    content.onclick=event=>{const button=event.target.closest('[data-dialog-cfc-view]');if(editing&&button)paint(button.dataset.dialogCfcView);};
+    document.body.classList.add('cfc-viewing');paint(editing&&initialView==='preview'?'preview':'full');
+    if(!dialog.open)dialog.showModal();
+  }
+  function friendCardButtonContent(layer,card,member,editor,openAction){
+    const action=CFC_RULES.action(layer.buttonAction),id=esc(member.id||''),own=currentUser?.id===member.id;
+    let attributes='';
+    if(!editor){
+      if(action.id==='open-cfc')attributes=openAction;
+      else if(action.id==='add-friend')attributes=`data-community-add-friend="${id}"`;
+      else attributes=`data-cfc-action="${action.id}" data-cfc-user="${id}"`;
+    }
+    const knownFriend=(communityData.friends||[]).some(user=>user.id===member.id);
+    const pending=(communityData.friendRequestsSent||[]).some(user=>user.id===member.id);
+    const disabled=!editor&&(own&&['add-friend','invite-party','invite-group','message'].includes(action.id)||action.id==='add-friend'&&(knownFriend||pending));
+    const title=own&&disabled?'This action is for another member.':action.id==='add-friend'&&knownFriend?'Already friends':action.id==='add-friend'&&pending?'Friend request already sent':action.label;
+    return `<button class="friend-card-open friend-layer-button" type="button" ${attributes}${editor?' aria-disabled="true"':''}${disabled?' disabled':''} title="${esc(title)}" style="${friendCardButtonStyle({...card,buttonColor:layer.fill||card.buttonColor,buttonTextColor:layer.color||card.buttonTextColor})}">${esc(layer.text||action.label)}</button>`;
+  }
+  async function openFriendCardInvitation(recipientId,kind){
+    if(!currentUser){toast('Log in to invite members to a party or group.');return;}
+    if(recipientId===currentUser.id){toast('Choose another member to invite.');return;}
+    let dialog=$('#cfc-action-dialog');
+    if(!dialog){dialog=document.createElement('dialog');dialog.id='cfc-action-dialog';dialog.className='social-dialog';dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});document.body.append(dialog);}
+    const requestId=(dialog.friendCardInviteRequest||0)+1;dialog.friendCardInviteRequest=requestId;
+    const title=kind==='party'?'Invite to party':'Invite to group';
+    dialog.innerHTML=`<header class="social-dialog-head"><h2>${title}</h2><button class="btn btn-ghost btn-sm" type="button" data-cfc-invite-close aria-label="Close invitation">×</button></header><div class="social-dialog-body"><p data-cfc-invite-status role="status">Loading your ${kind==='party'?'parties':'groups'}…</p><div data-cfc-invite-choices></div></div>`;
+    dialog.onclick=event=>{if(event.target.closest('[data-cfc-invite-close]'))dialog.close();};
+    if(!dialog.open)dialog.showModal();
+    try{
+      const context=await api('/api/social/profile?user='+encodeURIComponent(currentUser.id));if(!dialog.open||dialog.friendCardInviteRequest!==requestId)return;
+      const status=$('[data-cfc-invite-status]',dialog),choices=$('[data-cfc-invite-choices]',dialog);
+      if(!(context.friends||[]).some(user=>user.id===recipientId)){status.textContent='Add this member as a friend first. Invitations are available after they accept.';return;}
+      const circles=(context.circles||[]).filter(circle=>circle.kind===kind&&circle.ownerId===currentUser.id&&!circle.members.some(user=>user.id===recipientId)&&!circle.invited.includes(recipientId));
+      if(!circles.length){status.textContent=`No ${kind==='party'?'parties':'groups'} are available to invite this member to. Create one from your profile, or check whether they are already a member or invited.`;return;}
+      status.textContent=`Choose your ${kind}.`;
+      choices.innerHTML=`<form data-cfc-invite-form><label>${kind==='party'?'Party':'Group'}<select name="circleId">${circles.map(circle=>`<option value="${esc(circle.id)}">${esc(circle.name)}</option>`).join('')}</select></label><button class="btn btn-primary" type="submit">Send invitation</button></form>`;
+      $('form',choices).addEventListener('submit',async event=>{
+        event.preventDefault();const button=$('button[type="submit"]',event.target);button.disabled=true;
+        try{await api('/api/social/circles/'+encodeURIComponent(event.target.elements.circleId.value)+'/invite','POST',{userId:recipientId});toast('Invitation sent.');dialog.close();}
+        catch(error){status.textContent=error.message;button.disabled=false;}
+      });
+    }catch(error){if(dialog.open&&dialog.friendCardInviteRequest===requestId)$('[data-cfc-invite-status]',dialog).textContent=error.message;}
+  }
 
   async function loadMemberProfiles() {
     const grid = $('#member-card-grid');
@@ -1431,6 +1513,7 @@
     return `<button class="community-add-friend" type="button" data-community-add-friend="${id}">Add Friend</button>`;
   }
   function renderMemberCardGrid() {
+    const viewer=$('#friend-card-dialog');if(viewer?.open){viewer.friendCardGridDirty=true;return;}
     const grid = $('#member-card-grid');
     if (!grid) return;
     const postedCards = memberProfiles.filter(member => member.friendCard?.published === true);
@@ -1618,6 +1701,7 @@
       if (!currentUser || document.visibilityState === 'hidden') return;
       try {
         await api('/api/community/presence','POST',{});
+        if($('#friend-card-dialog')?.open)return;
         const result = await api('/api/community');
         communityData = result.community || communityData;
         renderCommunitySidebar();
@@ -2938,6 +3022,7 @@
     }
   });
   document.addEventListener('pointermove',event=>{
+    if($('#friend-card-dialog')?.open)return;
     friendCardPointer={x:event.clientX,y:event.clientY};
     if(friendCardActiveTransform){updateFriendCardActiveTransform(event);event.preventDefault();}
     else if(friendCardPan){friendCardPan.scroller.scrollLeft=friendCardPan.scrollLeft-(event.clientX-friendCardPan.startX);friendCardPan.scroller.scrollTop=friendCardPan.scrollTop-(event.clientY-friendCardPan.startY);event.preventDefault();}
@@ -2965,6 +3050,17 @@
   window.addEventListener('blur',cancelFriendCardPointerGesture);
 
   document.addEventListener('click', async event => {
+    const cfcAction=event.target.closest('[data-cfc-action]');
+    if(cfcAction){
+      if($('#friend-card-form'))return;
+      const id=cfcAction.dataset.cfcUser,action=cfcAction.dataset.cfcAction;
+      if(!/^[a-f0-9-]{36}$/i.test(id))return;
+      if(action==='view-profile'){location.href='account.html?user='+encodeURIComponent(id);return;}
+      if(!currentUser){toast('Log in to use account actions.');return;}
+      if(action==='invite-party'||action==='invite-group'){await openFriendCardInvitation(id,action==='invite-party'?'party':'group');return;}
+      if(action==='message'){if(!(communityData.friends||[]).some(user=>user.id===id)){toast('Add this member as a friend before messaging them.');return;}location.href='chat.html?with='+encodeURIComponent(id);return;}
+      return;
+    }
     const selectGroup=event.target.closest('[data-select-group]');
     if(selectGroup){selectFriendCardGroup(selectGroup.dataset.selectGroup,event.shiftKey);return;}
     const toggleGroup=event.target.closest('[data-toggle-group]');
@@ -3561,7 +3657,7 @@
     const dimension = event.target.closest('[data-design-dimension]');
     if (dimension) { updateFriendEditorDimension(dimension.dataset.designDimension,dimension.value); return; }
     const frameProperty = event.target.closest('[data-frame-property]');
-    if (frameProperty && friendCardDesignState) { if (!frameProperty.dataset.overlapHistory) recordFriendCardHistory(); delete frameProperty.dataset.overlapHistory; const key = frameProperty.dataset.frameProperty; if (key.startsWith('alignments.')) friendCardDesignState.frame.alignments[key.split('.')[1]] = frameProperty.value; else if (key.startsWith('cornerSizes.')) friendCardDesignState.frame.cornerSizes[key.split('.')[1]] = Number(frameProperty.value); else if (key === 'cornerSize') { friendCardDesignState.frame.cornerSize = Number(frameProperty.value); for (const corner of ['topLeft','topRight','bottomLeft','bottomRight']) friendCardDesignState.frame.cornerSizes[corner] = Number(frameProperty.value); } else friendCardDesignState.frame[key] = key === 'visible' ? frameProperty.checked : ['sideMode','placement'].includes(key) ? frameProperty.value : Number(frameProperty.value); repaintFriendCardEditor(); return; }
+    if (frameProperty && friendCardDesignState) { if (!frameProperty.dataset.frameRangeHistory) recordFriendCardHistory(); delete frameProperty.dataset.frameRangeHistory; const key = frameProperty.dataset.frameProperty; if (key.startsWith('alignments.')) friendCardDesignState.frame.alignments[key.split('.')[1]] = frameProperty.value; else if (key.startsWith('cornerSizes.')) friendCardDesignState.frame.cornerSizes[key.split('.')[1]] = Number(frameProperty.value); else if (key === 'cornerSize') { friendCardDesignState.frame.cornerSize = Number(frameProperty.value); for (const corner of ['topLeft','topRight','bottomLeft','bottomRight']) friendCardDesignState.frame.cornerSizes[corner] = Number(frameProperty.value); } else friendCardDesignState.frame[key] = key === 'visible' ? frameProperty.checked : ['sideMode','placement'].includes(key) ? frameProperty.value : Number(frameProperty.value); repaintFriendCardEditor(); return; }
     const framePieceVisible = event.target.closest('[data-frame-piece-visible]');
     if (framePieceVisible && friendCardDesignState) { recordFriendCardHistory(); friendCardDesignState.frame.visiblePieces[framePieceVisible.dataset.framePieceVisible] = framePieceVisible.checked; repaintFriendCardEditor(); return; }
     const showGuides = event.target.closest('[data-show-guides]');
@@ -3601,7 +3697,7 @@
     const layerImageInput = event.target.closest('[data-layer-image-input]');
     if (layerImageInput) { const file = layerImageInput.files?.[0], id = layerImageInput.dataset.layerImageInput; layerImageInput.value = ''; if (!file) return; try { const image = await readFriendCardAsset(file), layer = friendCardDesignState.layers.find(item => item.id === id); if (layer) { recordFriendCardHistory(); layer.image = image; layer.label = file.name.replace(/\.[^.]+$/,'').slice(0,80); repaintFriendCardEditor(); } } catch (error) { toast(error.message); } return; }
     const frameInput = event.target.closest('[data-frame-piece]');
-    if (frameInput) { const file = frameInput.files?.[0], key = frameInput.dataset.framePiece.split('.'); frameInput.value = ''; if (!file) return; try { const data = await importFriendCardImage(file); recordFriendCardHistory(); friendCardDesignState.frame[key[0]][key[1]] = data; repaintFriendCardEditor(); } catch (error) { toast(error.message); } return; }
+    if (frameInput) { const file=frameInput.files?.[0],key=frameInput.dataset.framePiece.split('.'),context=friendCardDraftKey(),frame=friendCardDesignState?.frame;frameInput.value='';if(!file||!frame)return;frameInput.disabled=true;try{const data=await importFriendCardImage(file);if(context!==friendCardDraftKey()||frame!==friendCardDesignState?.frame)return;recordFriendCardHistory();frame[key[0]][key[1]]=data;repaintFriendCardEditor();}catch(error){toast(error.message);}finally{frameInput.disabled=false;}return;}
     if (event.target.closest('#profile-form') && event.target.name?.startsWith('friendCard')) { updateFriendCardEditorPreview(); return; }
     if (event.target.closest('#friend-card-form') && event.target.name?.startsWith('friendCard')) { recordFriendCardHistory(); updateFriendCardEditorPreview(); saveFriendCardDraftLocally(); return; }
     const friendImage = event.target.closest('[data-friend-card-image]');
@@ -3639,10 +3735,10 @@
     }
   });
   document.addEventListener('input',event => {
-    const overlap = event.target.closest('[data-frame-property="overlap"]');
-    if (overlap && friendCardDesignState) {
-      if (!overlap.dataset.overlapHistory) { recordFriendCardHistory(); overlap.dataset.overlapHistory = 'true'; }
-      friendCardDesignState.frame.overlap = Math.max(0,Math.min(100,Number(overlap.value) || 0));
+    const frameRange = event.target.closest('input[type="range"][data-frame-property]');
+    if (frameRange && friendCardDesignState) {
+      if (!frameRange.dataset.frameRangeHistory) { recordFriendCardHistory(); frameRange.dataset.frameRangeHistory = 'true'; }
+      friendCardDesignState.frame[frameRange.dataset.frameProperty] = Math.max(Number(frameRange.min),Math.min(Number(frameRange.max),Number(frameRange.value) || 0));
       updateFriendCardEditorPreview(); saveFriendCardDraftLocally(); return;
     }
     if (event.target.matches('[data-member-search]')) { updateMemberResults(); return; }
