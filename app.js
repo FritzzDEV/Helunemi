@@ -204,6 +204,47 @@
   function tagsForMember(member) {
     return [...new Set([...(member.roles || []),...(member.projects || [])])];
   }
+  const tagSearchCategories = {
+    members:[['primary','Primary role'],['secondary','Secondary role'],['projects','Game projects']],
+    friends:[['personality','Personality'],['likes','Likes'],['dislikes','Dislikes'],['favorites','Favorites'],['lookingFor','Looking for']],
+    projects:[['status','Project status'],['genre','Genre'],['theme','Card theme']],
+    artwork:[['type','Artwork type'],['project','Project'],['mainTag','Main tag'],['tags','Artwork tags']],
+    global:[['gameStatus','Game status'],['genre','Game genre'],['theme','Card theme'],['artType','Artwork type'],['artTag','Artwork tag'],['project','Game project'],['role','Member role'],['skill','Member skill'],['personality','Friend personality'],['favorite','Member favorite']]
+  };
+  function tagSearchMarkup(scope) {
+    return `<div class="tag-search-filters" data-tag-search="${scope}"><label><span>Category</span><select data-tag-search-category="${scope}"><option value="">All categories</option>${tagSearchCategories[scope].map(([key,label])=>`<option value="${key}">${label}</option>`).join('')}</select></label><label><span>Subcategory</span><select data-tag-search-value="${scope}" disabled><option value="">All tags</option></select></label></div>`;
+  }
+  function uniqueSearchTags(values) { return [...new Set(values.flat(Infinity).map(value=>String(value||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'})); }
+  function valuesForTagSearch(scope,category,item=null) {
+    const split=value=>String(value||'').split('|').filter(Boolean);
+    if(scope==='members') {
+      if(category==='primary')return item?[item.dataset.primary||'']:DATA.members.map(member=>member.primaryRole||'');
+      if(category==='secondary')return item?split(item.dataset.secondary):DATA.members.flatMap(member=>member.roles||[]);
+      if(category==='projects')return item?split(item.dataset.projects):DATA.members.flatMap(member=>member.projects||[]);
+    }
+    if(scope==='friends') {
+      const members=item?[item]:memberProfiles;
+      return members.map(member=>{const card=normalizedFriendCard(member.friendCard);return ({personality:card.personalityTags,likes:card.likes,dislikes:card.dislikes,favorites:card.favoriteThing,lookingFor:card.lookingFor})[category]||[];});
+    }
+    if(scope==='projects') { const games=item?[item]:DATA.games; return games.map(game=>({status:game.status,genre:game.genre,theme:game.cover})[category]||''); }
+    if(scope==='artwork') { const arts=item?[item]:DATA.arts; return arts.map(art=>({type:art.type,project:gameById(art.projectId)?.name||'Helunemi',mainTag:art.mainTag,tags:art.tags})[category]||[]); }
+    if(scope==='global') {
+      const games=!item||item.type==='game'?(item?[item.item]:DATA.games):[],arts=!item||item.type==='artwork'?(item?[item.item]:DATA.arts):[];
+      const developers=!item||item.type==='developer'?(item?[item.item]:DATA.members):[],members=!item||item.type==='member'?(item?[item.item]:memberProfiles):[];
+      return ({gameStatus:games.map(game=>game.status),genre:games.map(game=>game.genre),theme:games.map(game=>game.cover),artType:arts.map(art=>art.type),artTag:arts.flatMap(art=>[art.mainTag,...(art.tags||[])]),project:games.map(game=>game.name).concat(arts.map(art=>gameById(art.projectId)?.name||'').filter(Boolean),developers.flatMap(member=>member.projects||[]),members.flatMap(member=>member.projects||[])),role:developers.flatMap(member=>[member.primaryRole,...(member.roles||[])]).concat(members.flatMap(member=>[member.primaryRole,...(member.roles||[])])),skill:developers.flatMap(member=>member.roles||[]),personality:members.flatMap(member=>normalizedFriendCard(member.friendCard).personalityTags),favorite:members.map(member=>normalizedFriendCard(member.friendCard).favoriteThing)})[category]||[];
+    }
+    return [];
+  }
+  function refreshTagSearchOptions(scope) {
+    const category=$(`[data-tag-search-category="${scope}"]`),sub=$(`[data-tag-search-value="${scope}"]`); if(!category||!sub)return;
+    const selected=sub.value,key=category.value,tags=key?uniqueSearchTags(valuesForTagSearch(scope,key)):[];
+    sub.innerHTML=`<option value="">All tags</option>${tags.map(tag=>`<option value="${esc(tag)}">${esc(tag)}</option>`).join('')}`; sub.disabled=!key||!tags.length;
+    if(tags.includes(selected))sub.value=selected;
+  }
+  function refreshAllTagSearchOptions() { for(const scope of Object.keys(tagSearchCategories))refreshTagSearchOptions(scope); }
+  function tagSearchSelection(scope) { return {category:$(`[data-tag-search-category="${scope}"]`)?.value||'',tag:$(`[data-tag-search-value="${scope}"]`)?.value||''}; }
+  function matchesTagSearch(scope,item,category,tag) { if(!category)return true; const values=uniqueSearchTags(valuesForTagSearch(scope,category,item)); return values.length>0&&(!tag||values.includes(tag)); }
+  function runTagSearch(scope) { if(scope==='members')updateMemberResults(); else if(scope==='friends')filterFriendCards($('[data-friend-search]')?.value||''); else if(scope==='global')updateGlobalSearchResults(); else if(scope==='projects'||scope==='artwork')filterSwitchCards(scope); }
   function renderMemberFilters() {
     const bar = $('.member-filter-bar');
     if (!bar) return;
@@ -214,18 +255,19 @@
   function memberCard(member) {
     const tags = tagsForMember(member);
     const photo = member.id ? `<a class="member-avatar-link" href="account.html?user=${encodeURIComponent(member.id)}" aria-label="Open ${esc(member.online)}’s full profile">${avatar(member.online,'',member.avatarImage)}</a>` : avatar(member.online,'',member.avatarImage);
-    return `<article class="member" data-member-card data-tags="${esc(tags.join('|'))}" data-search="${esc([member.online,member.real,...member.roles,...member.projects].join(' '))}">${photo}<div><h3>${esc(member.online)}</h3><p><strong>Real name:</strong> ${esc(member.real)}</p><div class="member-tags" aria-label="Member roles and projects">${tags.map(tag => `<span class="tag member-tag${DATA.games.some(game => game.name === tag) ? ' member-tag-project' : ''}">${esc(tag)}</span>`).join('')}</div>${member.id ? `<a class="member-profile-link" href="account.html?user=${encodeURIComponent(member.id)}">View profile <span aria-hidden="true">↗</span></a>` : ''}</div></article>`;
+    return `<article class="member" data-member-card data-tags="${esc(tags.join('|'))}" data-primary="${esc(member.primaryRole||'')}" data-secondary="${esc((member.roles||[]).join('|'))}" data-projects="${esc((member.projects||[]).join('|'))}" data-search="${esc([member.online,member.real,...member.roles,...member.projects].join(' '))}">${photo}<div><h3>${esc(member.online)}</h3><p><strong>Real name:</strong> ${esc(member.real)}</p><div class="member-tags" aria-label="Member roles and projects">${tags.map(tag => `<span class="tag member-tag${DATA.games.some(game => game.name === tag) ? ' member-tag-project' : ''}">${esc(tag)}</span>`).join('')}</div>${member.id ? `<a class="member-profile-link" href="account.html?user=${encodeURIComponent(member.id)}">View profile <span aria-hidden="true">↗</span></a>` : ''}</div></article>`;
   }
   let activeMemberTag = 'All';
   function updateMemberResults() {
-    const query = ($('#member-search')?.value || '').trim().toLowerCase();
+    const query = ($('#member-search')?.value || '').trim().toLowerCase(),tagFilter=tagSearchSelection('members');
     const cards = $$('[data-member-card]');
     let shown = 0;
     cards.forEach(card => {
       const tags = card.dataset.tags.split('|');
       const matchesTag = activeMemberTag === 'All' || tags.includes(activeMemberTag);
       const matchesQuery = !query || `${card.dataset.search} ${card.dataset.tags}`.toLowerCase().includes(query);
-      card.hidden = !(matchesTag && matchesQuery);
+      const matchesCategory=matchesTagSearch('members',card,tagFilter.category,tagFilter.tag);
+      card.hidden = !(matchesTag && matchesQuery && matchesCategory);
       if (!card.hidden) shown++;
     });
     const empty = $('#member-no-results');
@@ -237,7 +279,7 @@
       const result = await api('/api/team');
       DATA.members = result.members || [];
       if (page === 'list' && container) { container.innerHTML = DATA.members.map(memberCard).join(''); renderMemberFilters(); updateMemberResults(); }
-      updateGlobalSearchResults();
+      refreshAllTagSearchOptions(); updateGlobalSearchResults();
       if (page === 'account' && currentUser && editingProfile) showAccount();
     } catch (_) {
       if (page === 'list' && container) { container.innerHTML = ''; setMessage('#member-load-message','Team profiles could not be loaded. Please refresh the page.'); }
@@ -850,6 +892,9 @@
       document.head.append(style);
     }
   }
+  function designHasAction(design,actionId,mode='full') {
+    return (design?.layers||[]).some(layer=>layer.type==='button'&&CFC_RULES.action(layer.buttonAction).id===actionId&&friendCardVisibleInView(layer,mode)&&CFC_RULES.buttonOnCard(layer,design));
+  }
   function friendCardMarkup(member, full = false, editor = false, openAction = '', preparedDesign = null) {
     const card = normalizedFriendCard(member.friendCard);
     const aspect = friendCardRatios.includes(card.aspectRatio) ? card.aspectRatio : '1:1';
@@ -862,7 +907,7 @@
     ensureFriendCardFontFaces(design.fonts);
     const image = design.background.image ? `background-image:linear-gradient(${colorWithOpacity(design.background.tint,design.background.tintOpacity)},${colorWithOpacity(design.background.tint,design.background.tintOpacity)}),url(&quot;${esc(design.background.image)}&quot;);background-position:${design.background.positionX}% ${design.background.positionY}%;background-size:${design.background.scale}% auto;background-repeat:no-repeat` : '';
     const frameMarkup = friendCardFrameMarkup(design);
-    const markup = `<article class="friend-card friend-card-effect-${effect}${full ? ' friend-card-full' : ' friend-card-preview'}${editor && design.showGuides ? ' friend-show-guides' : ''}" data-friend-aspect="${aspect}"${!full && !editor ? ` data-friend-member data-friend-search="${searchData}"` : ''} style="${friendCardStyle({...card,aspectRatio:design.aspectRatio === 'custom' ? '1:1' : design.aspectRatio},Boolean(frameMarkup))};--friend-ratio:${design.width} / ${design.height};--design-ratio:${design.width} / ${design.height};${image}"><div class="friend-card-layer-canvas">${friendCardLayersMarkup(card,member,editor,openAction,full,design)}</div><span class="visually-hidden">${title} Friend-Card</span></article>`;
+    const markup = `<article class="friend-card friend-card-effect-${effect}${full ? ' friend-card-full' : ' friend-card-preview'}${editor && design.showGuides ? ' friend-show-guides' : ''}" data-friend-aspect="${aspect}"${!full && !editor ? ` data-friend-member data-friend-search="${searchData}"` : ''} style="${friendCardStyle({...card,aspectRatio:design.aspectRatio === 'custom' ? '1:1' : design.aspectRatio},Boolean(frameMarkup))};--friend-ratio:${design.width} / ${design.height};--design-ratio:${design.width} / ${design.height};${image}"><div class="friend-card-layer-canvas">${friendCardLayersMarkup(card,member,editor,openAction,full,design)}</div>${full&&!editor&&!designHasAction(design,'add-friend','full')?`<div class="friend-card-member-action">${communityFriendAction(member)}</div>`:''}<span class="visually-hidden">${title} Friend-Card</span></article>`;
     const insets = friendCardFrameInsets(design);
     if (!frameMarkup) return markup;
     const outerWidth = 100 + insets.left + insets.right, ratio = design.width / design.height;
@@ -1107,16 +1152,19 @@
     if (field && form.elements[field]) form.elements[field].value = value;
     repaintFriendCardEditor({layers:false,properties:false});
   }
-  function snapFriendCardPosition(value,size,axis,id) {
-    const edge = axis === 'x' ? 'x' : 'y', dimension = axis === 'x' ? 'width' : 'height';
-    const candidates = [0,(100 - size) / 2,100 - size];
-    for (const other of friendCardDesignState?.layers || []) {
-      if ((id instanceof Set ? id.has(other.id) : other.id === id) || other.visible === false || other.type === 'eraser') continue;
-      const start = Number(other[edge]) || 0, otherSize = axis === 'y' && friendCardSquareLayer(other) ? other.width * friendCardDesignState.width / friendCardDesignState.height : Number(other[dimension]) || 0;
-      candidates.push(start,start + otherSize - size,start + (otherSize - size) / 2);
+  const friendCardSnapSettings={grid:true,items:true,edges:true};
+  function snapFriendCardPosition(value,size,axis,id,event={}) {
+    if(event.shiftKey)return value;
+    const edge=axis==='x'?'x':'y',dimension=axis==='x'?'width':'height',candidates=[];
+    if(friendCardSnapSettings.edges)candidates.push(0,(100-size)/2,100-size);
+    if(friendCardSnapSettings.grid){const step=event.ctrlKey?2.5:5;candidates.push(Math.round(value/step)*step);}
+    if(friendCardSnapSettings.items)for(const other of friendCardDesignState?.layers||[]){
+      if((id instanceof Set?id.has(other.id):other.id===id)||other.visible===false||other.type==='eraser')continue;
+      const start=Number(other[edge])||0,otherSize=axis==='y'&&friendCardSquareLayer(other)?other.width*friendCardDesignState.width/friendCardDesignState.height:Number(other[dimension])||0;
+      candidates.push(start,start+otherSize-size,start+(otherSize-size)/2);
     }
-    const nearest = candidates.sort((a,b) => Math.abs(a - value) - Math.abs(b - value))[0];
-    return nearest != null && Math.abs(nearest - value) <= 1.25 ? nearest : value;
+    const nearest=candidates.sort((a,b)=>Math.abs(a-value)-Math.abs(b-value))[0],threshold=event.ctrlKey?3.5:1.25;
+    return nearest!=null&&Math.abs(nearest-value)<=threshold?nearest:value;
   }
   function friendCardVisibleInView(layer, mode = friendCardViewMode) {
     const view=layer.type==='button'?CFC_RULES.action(layer.buttonAction).view:layer.visibilityMode||'both';
@@ -1588,7 +1636,7 @@
       if (grid) {
         renderMemberCardGrid();
       }
-      updateGlobalSearchResults();
+      refreshTagSearchOptions('friends'); refreshTagSearchOptions('global'); updateGlobalSearchResults();
     } catch (error) {
       if (grid) {
         grid.innerHTML = '';
@@ -1597,9 +1645,9 @@
     }
   }
   function filterFriendCards(value) {
-    const query = String(value || '').trim().toLowerCase();
+    const query = String(value || '').trim().toLowerCase(),tagFilter=tagSearchSelection('friends');
     let shown = 0;
-    $$('[data-friend-member]').forEach(card => { const entry = card.closest('[data-friend-entry]') || card; entry.hidden = !card.dataset.friendSearch.toLowerCase().includes(query); if (!entry.hidden) shown++; });
+    $$('[data-friend-entry]').forEach(entry => { const card=$('[data-friend-member]',entry),member=memberProfiles.find(item=>item.id===entry.dataset.memberId);const matchesQuery=!query||String(card?.dataset.friendSearch||'').toLowerCase().includes(query);const matchesCategory=member&&matchesTagSearch('friends',member,tagFilter.category,tagFilter.tag);entry.hidden=!(matchesQuery&&matchesCategory);if(!entry.hidden)shown++; });
     const empty = $('#member-card-empty');
     if (empty) {
       empty.hidden = shown > 0;
@@ -1621,8 +1669,8 @@
     const grid = $('#member-card-grid');
     if (!grid) return;
     const postedCards = memberProfiles.filter(member => member.friendCard?.published === true);
-    grid.innerHTML = postedCards.map(member => `<div class="friend-card-entry" data-friend-entry>${friendCardMarkup(member)}<div class="friend-entry-actions"><button class="btn btn-ghost btn-sm" type="button" data-open-friend-card="${esc(member.id)}">Open Friend-Card</button>${communityFriendAction(member)}</div></div>`).join('');
-    filterFriendCards($('[data-friend-search]')?.value || '');
+    grid.innerHTML = postedCards.map(member => `<div class="friend-card-entry" data-friend-entry data-member-id="${esc(member.id)}">${friendCardMarkup(member)}<a class="friend-entry-identity" href="account.html?user=${encodeURIComponent(member.id)}">${avatar(member.username,'friend-entry-avatar',member.avatarImage)}<strong>${esc(member.username)}</strong><span aria-hidden="true">↗</span></a></div>`).join('');
+    refreshTagSearchOptions('friends'); filterFriendCards($('[data-friend-search]')?.value || '');
   }
   function isCurrentUserStaff() {
     return currentUser?.accountRole === 'owner' || ['assistant','ai-assistant','developer'].includes(currentUser?.primaryRole);
@@ -1977,8 +2025,8 @@
   const ownerPostFields = {
     games: [
       {key:'name',label:'Game title',required:true}, {key:'subtitle',label:'Subtitle'}, {key:'genre',label:'Genre',required:true},
-      {key:'status',label:'Project status',type:'select',required:true,options:['In Development','Future project','Beta','Released']},
-      {key:'version',label:'Version'}, {key:'cover',label:'Card theme',type:'select',options:['frost','collide']},
+      {key:'status',label:'Project status',type:'select',required:true,options:['In Development','Future project','Prototype','Pre-production','Paused','On Hold','Reworking','Overhaul','Beta','Early Access','Released','Final','Abandoned']},
+      {key:'version',label:'Version'}, {key:'cover',label:'Card theme',type:'select',help:'Used as the project card and banner background when no banner image is uploaded.',options:[{value:'frost',label:'Frost'},{value:'collide',label:'Collide'},{value:'starry',label:'Starry'},{value:'clouds',label:'Clouds'},{value:'solar',label:'Solar'},{value:'lunar',label:'Lunar'},{value:'eclipse',label:'Eclipse'},{value:'lovely',label:'Lovely / Hearts'},{value:'dark',label:'Dark'},{value:'fluids',label:'Fluids'},{value:'slimey',label:'Slimey'},{value:'snowy',label:'Snowy'},{value:'rainbow',label:'Rainbow'}]},
       {key:'icon',label:'Game icon',type:'image'}, {key:'banner',label:'Project banner',type:'image'},
       {key:'blurb',label:'Short summary',type:'textarea',required:true,placeholder:'A short overview shown on game cards.'},
       {key:'details',label:'Project details',type:'textarea',required:true,placeholder:'The main project description shown on its details page.'},
@@ -2016,7 +2064,7 @@
     const controlName = field.key;
     let control;
     if (field.type === 'textarea') control = `<textarea name="${controlName}" rows="4"${field.required ? ' required' : ''} placeholder="${esc(field.placeholder || '')}"></textarea>`;
-    else if (field.type === 'select') control = `<select name="${controlName}"${field.required ? ' required' : ''}>${(field.options || []).map((option,index) => `<option value="${esc(option)}"${index === 0 ? ' selected' : ''}>${esc(option)}</option>`).join('')}</select>`;
+    else if (field.type === 'select') control = `<select name="${controlName}"${field.required ? ' required' : ''}>${(field.options || []).map((option,index) => {const value=typeof option==='string'?option:option.value,label=typeof option==='string'?option:option.label;return `<option value="${esc(value)}"${index === 0 ? ' selected' : ''}>${esc(label)}</option>`;}).join('')}</select>${field.help?`<small class="owner-post-help">${esc(field.help)}</small>`:''}`;
     else if (field.type === 'games') control = `<select name="${controlName}"><option value="">No game selected</option>${DATA.games.map(game => `<option value="${esc(game.id)}">${esc(game.name)}</option>`).join('')}</select>`;
     else if (field.type === 'image') control = `<div class="owner-image-import"><input type="hidden" name="${controlName}" data-owner-image-value="${controlName}"><label class="owner-image-picker"><input type="file" accept="image/png,image/jpeg,image/webp" data-owner-image-import="${controlName}" data-owner-image-required="${field.required ? 'true' : 'false'}"><span class="btn btn-ghost btn-sm">Choose image</span><span class="owner-image-hint">PNG, JPG, or WebP · imported into Helunemi</span></label><div class="owner-image-preview-wrap"><img data-owner-image-preview="${controlName}" alt="${esc(field.label)} preview" hidden><button class="btn btn-ghost btn-sm" type="button" data-owner-image-clear="${controlName}" hidden>Remove image</button></div></div>`;
     else control = `<input name="${controlName}" type="text" maxlength="${field.maxLength || (field.key === 'tags' ? 1800 : 1200)}"${field.required ? ' required' : ''} placeholder="${esc(field.placeholder || '')}">`;
@@ -2265,12 +2313,12 @@
     },
     list() {
       return `<div class="wrap"><div class="page-head"><h1>List</h1><p>Meet the active members of Helunemi.</p></div>
-        <section class="member-directory" aria-label="Search and filter members"><label class="member-search-wrap"><span class="visually-hidden">Search by member, role, or project</span><span class="member-search-icon" aria-hidden="true">⌕</span><input id="member-search" type="search" data-member-search placeholder="Search members, roles, or games…" autocomplete="off"></label>
+        <section class="member-directory" aria-label="Search and filter members"><label class="member-search-wrap"><span class="visually-hidden">Search by member, role, or project</span><span class="member-search-icon" aria-hidden="true">⌕</span><input id="member-search" type="search" data-member-search placeholder="Search members, roles, or games…" autocomplete="off"></label>${tagSearchMarkup('members')}
         <div class="member-filter-bar" role="group" aria-label="Filter members by role or project"><button class="member-filter-chip" type="button" data-member-filter="All" aria-pressed="true">All</button>${memberFilterOptions.map(tag => `<button class="member-filter-chip" type="button" data-member-filter="${esc(tag)}" aria-pressed="false">${esc(tag)}</button>`).join('')}</div></section>
         <div class="members" id="member-results"></div><p class="empty member-empty" id="member-no-results">Studio team profiles appear here when the Owner assigns Assistant, AI Assistant, or Developer roles.</p><p class="form-message" id="member-load-message" role="status"></p><div class="page-end"></div></div>`;
     },
     members() {
-      return `<div class="wrap"><div class="page-head"><span class="section-eyebrow">MEET THE COMMUNITY</span><h1>Members</h1><p>Member accounts make a Friend-Card in their own style. Cards appear here only after the member chooses to post them. Studio roles have their own profiles on the List page.</p></div><section class="member-directory friend-directory" aria-label="Search member Friend-Cards"><label class="member-search-wrap"><span class="visually-hidden">Search member Friend-Cards</span><span class="member-search-icon" aria-hidden="true">⌕</span><input type="search" data-friend-search placeholder="Search posted cards…" autocomplete="off"></label></section><div class="friend-card-grid" id="member-card-grid"></div><p class="empty member-empty" id="member-card-empty">No custom Friend-Cards have been posted yet.</p><p class="form-message" id="member-card-message" role="status"></p><div class="page-end"></div></div>`;
+      return `<div class="wrap"><div class="page-head"><span class="section-eyebrow">MEET THE COMMUNITY</span><h1>Members</h1><p>Member accounts make a Friend-Card in their own style. Cards appear here only after the member chooses to post them. Studio roles have their own profiles on the List page.</p></div><section class="member-directory friend-directory" aria-label="Search member Friend-Cards"><label class="member-search-wrap"><span class="visually-hidden">Search member Friend-Cards</span><span class="member-search-icon" aria-hidden="true">⌕</span><input type="search" data-friend-search placeholder="Search posted cards…" autocomplete="off"></label>${tagSearchMarkup('friends')}</section><div class="friend-card-grid" id="member-card-grid"></div><p class="empty member-empty" id="member-card-empty">No custom Friend-Cards have been posted yet.</p><p class="form-message" id="member-card-message" role="status"></p><div class="page-end"></div></div>`;
     },
     games() { return `<div class="wrap">${ownerPageHeading('games','Games','Explore our releases, games in development, and plans for the future.')}<div class="grid">${DATA.games.map(projectCard).join('')}</div><div class="page-end"></div></div>`; },
     updates() {
@@ -2306,7 +2354,7 @@
       const requestedId = new URLSearchParams(location.search).get('id');
       const game = gameById(requestedId) || DATA.games[0];
       const currentProject = `<a class="project-switch-card is-current" href="project.html?id=${encodeURIComponent(game.id)}" aria-current="page">${projectIcon(game)}<span class="project-switch-copy"><strong>${esc(game.name)}</strong><small>${esc(game.subtitle)}</small><span class="project-switch-status">${esc(game.status)}</span></span><span class="project-switch-arrow" aria-hidden="true">↗</span></a>`;
-      const otherProjects = DATA.games.filter(project => project.id !== game.id).map(project => `<a class="project-switch-card" data-switch-project data-project-text="${esc([project.name,project.subtitle,project.genre,project.status].join(' '))}" href="project.html?id=${encodeURIComponent(project.id)}">${projectIcon(project)}<span class="project-switch-copy"><strong>${esc(project.name)}</strong><small>${esc(project.subtitle)}</small><span class="project-switch-status">${esc(project.status)}</span></span><span class="project-switch-arrow" aria-hidden="true">↗</span></a>`).join('');
+      const otherProjects = DATA.games.filter(project => project.id !== game.id).map(project => `<a class="project-switch-card" data-switch-project data-project-text="${esc([project.name,project.subtitle,project.genre,project.status].join(' '))}" data-filter-status="${esc(project.status)}" data-filter-genre="${esc(project.genre)}" data-filter-theme="${esc(project.cover)}" href="project.html?id=${encodeURIComponent(project.id)}">${projectIcon(project)}<span class="project-switch-copy"><strong>${esc(project.name)}</strong><small>${esc(project.subtitle)}</small><span class="project-switch-status">${esc(project.status)}</span></span><span class="project-switch-arrow" aria-hidden="true">↗</span></a>`).join('');
       const relatedArtworks = DATA.arts.filter(art => art.projectId === game.id);
       const artworkSection = relatedArtworks.length ? `<section class="project-copy related-artwork-section"><h2>Related artwork</h2><div class="related-artwork-list">${relatedArtworks.map(art => `<a class="related-artwork-link" href="${artworkHref(art)}"><img src="${esc(art.image)}" alt=""><span><strong>${esc(art.title)}</strong><small>${esc(art.mainTag)}</small></span><span aria-hidden="true">↗</span></a>`).join('')}</div></section>` : '';
       const worldIntro = game.worldIntro ? `<section class="project-copy project-story"><h2>Short introduction</h2>${paragraphs(game.worldIntro)}</section>` : '';
@@ -2319,14 +2367,14 @@
       const defaultPlatform = /android/i.test(platformHint) ? 'android' : /windows/i.test(platformHint) ? 'windows' : 'other';
       const gameDownloads = `<div class="game-os-downloads"><div class="game-os-tabs" role="tablist" aria-label="Choose your operating system">${groups.map(group => `<button class="game-os-tab" type="button" role="tab" data-game-os-select="${group.id}" aria-selected="${group.id === defaultPlatform}" aria-controls="game-os-panel-${group.id}">${group.name}</button>`).join('')}</div>${groups.map(group => { const entries = builds.filter(item => item.platform === group.id); return `<section class="game-os-group game-os-panel" id="game-os-panel-${group.id}" role="tabpanel" data-game-os-panel="${group.id}"${group.id !== defaultPlatform ? ' hidden' : ''}><h3>${group.name}</h3>${entries.length ? entries.map(item => `<article class="game-build-card"><div><strong>${esc(item.title)}</strong><span>${esc([item.version,item.osName && group.id === 'other' ? item.osName : group.name].filter(Boolean).join(' · '))}${item.supported && item.fileName ? ` · ${formatGameBuildSize(item.size)}` : ''}</span></div>${item.supported ? currentUser ? `${gameBuildDownloadButton(item)}` : `<a class="btn btn-ghost btn-sm" href="account.html?mode=login">Log in to download</a>` : `<p class="game-build-unsupported">${esc(item.unsupportedMessage || 'This operating system is not supported yet.')}</p>`}</article>`).join('') : `<p class="game-build-empty">No ${group.name} build has been posted yet.</p>`}</section>`; }).join('')}</div>`;
       const manageDownloads = currentUser?.accountRole === 'owner' || contentPermissions.games.includes(game.id) ? `<a class="btn btn-ghost btn-sm" href="publish.html?type=game-builds&amp;gameId=${encodeURIComponent(game.id)}">Manage game downloads</a>` : '';
-      return `<div class="project-page"><div class="project-banner project-banner-${esc(game.cover)}" role="img" aria-label="${esc(game.name)} project banner">${gameBannerImage(game)}<div class="project-banner-mark">${esc(game.name)}</div></div><div class="wrap project-layout"><main class="project-detail-main"><div class="project-detail-actions"><a class="project-back" href="games.html">← All projects</a>${manageDownloads}</div><div class="project-heading">${projectIcon(game)}<div><div class="project-status-row">${badge(game.status)}${game.version ? `<span class="project-version">${esc(game.version)}</span>` : ''}</div><h1>${esc(game.name)}</h1><p class="project-subtitle">${esc(game.subtitle)} · ${esc(game.genre)}</p></div></div><section class="project-copy"><h2>About this project</h2><p>${esc(game.details)}</p><p>${esc(game.blurb)}</p></section>${worldIntro}${playerIntro}${releasePlan}${extraText}${game.screenshots?.length?`<section class="project-copy"><h2>Screenshots</h2><div class="project-screenshots">${game.screenshots.map(image=>`<img src="${esc(image)}" alt="${esc(game.name)} screenshot" loading="lazy">`).join('')}</div></section>`:''}<section class="project-copy project-extra"><h2>Downloads</h2>${gameDownloads}<a class="text-link" href="download.html">Browse plugins, mods, and extras <span aria-hidden="true">↗</span></a></section>${artworkSection}</main><aside class="project-switcher" aria-label="Helunemi projects"><label class="project-search-wrap"><span class="project-search-icon" aria-hidden="true">⌕</span><span class="visually-hidden">Search other games</span><input type="search" data-project-search placeholder="Search other games…" autocomplete="off"></label><section class="project-selected-section"><span class="section-eyebrow">Selected Game</span>${currentProject}</section><div class="project-switch-divider"><span>Explore other games</span></div><div class="project-switch-list">${otherProjects}</div><p class="project-no-results" data-project-empty hidden>No other games match that search.</p></aside></div></div>`;
+      return `<div class="project-page"><div class="project-banner project-banner-${esc(game.cover)}" role="img" aria-label="${esc(game.name)} project banner">${gameBannerImage(game)}<div class="project-banner-mark">${esc(game.name)}</div></div><div class="wrap project-layout"><main class="project-detail-main"><div class="project-detail-actions"><a class="project-back" href="games.html">← All projects</a>${manageDownloads}</div><div class="project-heading">${projectIcon(game)}<div><div class="project-status-row">${badge(game.status)}${game.version ? `<span class="project-version">${esc(game.version)}</span>` : ''}</div><h1>${esc(game.name)}</h1><p class="project-subtitle">${esc(game.subtitle)} · ${esc(game.genre)}</p></div></div><section class="project-copy"><h2>About this project</h2><p>${esc(game.details)}</p><p>${esc(game.blurb)}</p></section>${worldIntro}${playerIntro}${releasePlan}${extraText}${game.screenshots?.length?`<section class="project-copy"><h2>Screenshots</h2><div class="project-screenshots">${game.screenshots.map(image=>`<img src="${esc(image)}" alt="${esc(game.name)} screenshot" loading="lazy">`).join('')}</div></section>`:''}<section class="project-copy project-extra"><h2>Downloads</h2>${gameDownloads}<a class="text-link" href="download.html">Browse plugins, mods, and extras <span aria-hidden="true">↗</span></a></section>${artworkSection}</main><aside class="project-switcher" aria-label="Helunemi projects"><label class="project-search-wrap"><span class="project-search-icon" aria-hidden="true">⌕</span><span class="visually-hidden">Search other games</span><input type="search" data-project-search placeholder="Search other games…" autocomplete="off"></label>${tagSearchMarkup('projects')}<section class="project-selected-section"><span class="section-eyebrow">Selected Game</span>${currentProject}</section><div class="project-switch-divider"><span>Explore other games</span></div><div class="project-switch-list">${otherProjects}</div><p class="project-no-results" data-project-empty hidden>No other games match that search.</p></aside></div></div>`;
     },
     artwork() {
       const artwork = artById(new URLSearchParams(location.search).get('id')) || DATA.arts[0];
       const project = gameById(artwork.projectId);
       const currentArt = `<a class="artwork-switch-card is-current" href="${artworkHref(artwork)}" aria-current="page"><img src="${esc(artwork.image)}" alt=""><span><strong>${esc(artwork.title)}</strong><small>${esc(artwork.type)}</small></span></a>`;
-      const otherArt = DATA.arts.filter(art => art.id !== artwork.id).map(art => `<a class="artwork-switch-card" data-switch-artwork data-artwork-text="${esc([art.title,art.type,art.mainTag,...art.tags].join(' '))}" href="${artworkHref(art)}"><img src="${esc(art.image)}" alt=""><span><strong>${esc(art.title)}</strong><small>${esc(art.type)}</small></span></a>`).join('');
-      return `<div class="wrap artwork-detail-layout"><main class="artwork-detail-main"><a class="project-back" href="arts.html">← Back to Arts</a><figure class="artwork-detail-image artwork-detail-image-${esc(artwork.shape)}"><img src="${esc(artwork.image)}" alt="${esc(artwork.title)}"><figcaption>${esc(artwork.title)}</figcaption></figure><span class="artwork-main-tag">${esc(artwork.mainTag)}</span><h1>${esc(artwork.title)}</h1><p class="artwork-detail-type">${esc(artwork.type)}${project ? ` · <a href="project.html?id=${encodeURIComponent(project.id)}">${esc(project.name)}</a>` : ''}</p><section class="artwork-detail-section"><h2>Artwork details</h2>${artwork.description?paragraphs(artwork.description):''}<dl><dt>Type</dt><dd>${esc(artwork.type)}</dd><dt>Credit</dt><dd>${esc(artwork.credit || 'Not credited yet')}</dd><dt>Project</dt><dd>${project ? esc(project.name) : 'Helunemi'}</dd></dl></section><section class="artwork-detail-section"><h2>Tags</h2><div class="artwork-tags artwork-tags-detail">${artwork.tags.map(tag => `<span class="artwork-tag">${esc(tag)}</span>`).join('')}</div></section></main><aside class="artwork-switcher" aria-label="Browse artwork"><label class="project-search-wrap"><span class="project-search-icon" aria-hidden="true">⌕</span><span class="visually-hidden">Search other artwork</span><input type="search" data-artwork-search placeholder="Search other artwork…" autocomplete="off"></label><section class="project-selected-section"><span class="section-eyebrow">Selected Artwork</span>${currentArt}</section><div class="project-switch-divider"><span>Explore other art</span></div><div class="artwork-switch-list">${otherArt}</div><p class="project-no-results" data-artwork-empty hidden>No other artwork matches that search.</p></aside></div>`;
+      const otherArt = DATA.arts.filter(art => art.id !== artwork.id).map(art => `<a class="artwork-switch-card" data-switch-artwork data-artwork-text="${esc([art.title,art.type,art.mainTag,...art.tags].join(' '))}" data-filter-type="${esc(art.type)}" data-filter-project="${esc(gameById(art.projectId)?.name||'Helunemi')}" data-filter-main-tag="${esc(art.mainTag)}" data-filter-tags="${esc((art.tags||[]).join('|'))}" href="${artworkHref(art)}"><img src="${esc(art.image)}" alt=""><span><strong>${esc(art.title)}</strong><small>${esc(art.type)}</small></span></a>`).join('');
+      return `<div class="wrap artwork-detail-layout"><main class="artwork-detail-main"><a class="project-back" href="arts.html">← Back to Arts</a><figure class="artwork-detail-image artwork-detail-image-${esc(artwork.shape)}"><img src="${esc(artwork.image)}" alt="${esc(artwork.title)}"><figcaption>${esc(artwork.title)}</figcaption></figure><span class="artwork-main-tag">${esc(artwork.mainTag)}</span><h1>${esc(artwork.title)}</h1><p class="artwork-detail-type">${esc(artwork.type)}${project ? ` · <a href="project.html?id=${encodeURIComponent(project.id)}">${esc(project.name)}</a>` : ''}</p><section class="artwork-detail-section"><h2>Artwork details</h2>${artwork.description?paragraphs(artwork.description):''}<dl><dt>Type</dt><dd>${esc(artwork.type)}</dd><dt>Credit</dt><dd>${esc(artwork.credit || 'Not credited yet')}</dd><dt>Project</dt><dd>${project ? esc(project.name) : 'Helunemi'}</dd></dl></section><section class="artwork-detail-section"><h2>Tags</h2><div class="artwork-tags artwork-tags-detail">${artwork.tags.map(tag => `<span class="artwork-tag">${esc(tag)}</span>`).join('')}</div></section></main><aside class="artwork-switcher" aria-label="Browse artwork"><label class="project-search-wrap"><span class="project-search-icon" aria-hidden="true">⌕</span><span class="visually-hidden">Search other artwork</span><input type="search" data-artwork-search placeholder="Search other artwork…" autocomplete="off"></label>${tagSearchMarkup('artwork')}<section class="project-selected-section"><span class="section-eyebrow">Selected Artwork</span>${currentArt}</section><div class="project-switch-divider"><span>Explore other art</span></div><div class="artwork-switch-list">${otherArt}</div><p class="project-no-results" data-artwork-empty hidden>No other artwork matches that search.</p></aside></div>`;
     },
     account() { return '<div class="wrap"><div class="page-head"><h1>Profile</h1><p>Loading your Helunemi account…</p></div></div>'; }
   };
@@ -2338,6 +2386,7 @@
     document.title = selectedProject ? `${selectedProject.name} | Helunemi` : selectedArtwork ? `${selectedArtwork.title} | Helunemi` : `${titles[page] ? `${titles[page]} | ` : ''}Helunemi`;
     if ($('#nav-list')) $('#nav-list').innerHTML = ROUTES.map(([id,label,href]) => `<li><a href="${href}"${id === page ? ' aria-current="page"' : ''}>${label}</a></li>`).join('');
     ensureGlobalSearch();
+    refreshAllTagSearchOptions();
     ensureCommunityMessenger();
     if (page === 'shop') window.SolarisShop?.mount(app);
     if (page === 'home') mountDevelopmentCarousel();
@@ -2347,7 +2396,7 @@
     const slot = $('.top-in');
     const profile = slot?.querySelector('.profile-wrap');
     if (!slot || !profile || $('#global-search')) return;
-    profile.insertAdjacentHTML('beforebegin',`<div class="global-search" id="global-search"><button class="global-search-toggle" type="button" data-global-search-toggle aria-label="Search games, artwork, members, and developers" aria-expanded="false" aria-controls="global-search-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg></button><section class="global-search-panel" id="global-search-panel" data-global-search-panel hidden><label class="global-search-input-wrap"><span class="visually-hidden">Search games, artwork, members, and developers</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg><input type="search" data-global-search-input placeholder="Search games, artwork, people…" autocomplete="off"></label><div class="global-search-results" data-global-search-results aria-live="polite"><p class="global-search-hint">Search across Helunemi.</p></div></section></div>`);
+    profile.insertAdjacentHTML('beforebegin',`<div class="global-search" id="global-search"><button class="global-search-toggle" type="button" data-global-search-toggle aria-label="Search games, artwork, members, and developers" aria-expanded="false" aria-controls="global-search-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg></button><section class="global-search-panel" id="global-search-panel" data-global-search-panel hidden><label class="global-search-input-wrap"><span class="visually-hidden">Search games, artwork, members, and developers</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg><input type="search" data-global-search-input placeholder="Search games, artwork, people…" autocomplete="off"></label>${tagSearchMarkup('global')}<div class="global-search-results" data-global-search-results aria-live="polite"><p class="global-search-hint">Search across Helunemi.</p></div></section></div>`);
   }
   function closeGlobalSearch() {
     const panel = $('[data-global-search-panel]');
@@ -2356,22 +2405,26 @@
     toggle?.setAttribute('aria-expanded','false');
   }
   function updateGlobalSearchResults() {
-    const results = $('[data-global-search-results]');
-    const input = $('[data-global-search-input]');
-    if (!results || !input) return;
-    const query = input.value.trim().toLowerCase();
-    if (!query) { results.innerHTML = '<p class="global-search-hint">Search games, artwork, members, and developers.</p>'; return; }
-    const matches = (items, textFor) => items.filter(item => textFor(item).toLowerCase().includes(query)).slice(0,5);
-    const groups = [];
-    const games = matches(DATA.games,game => [game.name,game.subtitle,game.genre,game.status,game.blurb,game.details].join(' '));
-    if (games.length) groups.push(['Games',games.map(game => `<a class="global-search-result" href="project.html?id=${encodeURIComponent(game.id)}">${projectIcon(game,'global-search-thumb')}<span><strong>${esc(game.name)}</strong><small>${esc(game.status)}${game.subtitle ? ` · ${esc(game.subtitle)}` : ''}</small></span><span class="global-search-arrow" aria-hidden="true">↗</span></a>`).join('')]);
-    const artworks = matches(DATA.arts,art => [art.title,art.type,art.mainTag,...art.tags].join(' '));
-    if (artworks.length) groups.push(['Artworks',artworks.map(art => `<a class="global-search-result" href="${artworkHref(art)}"><span class="global-search-thumb"><img src="${esc(art.image)}" alt=""></span><span><strong>${esc(art.title)}</strong><small>${esc(art.mainTag)} · ${esc(art.type)}</small></span><span class="global-search-arrow" aria-hidden="true">↗</span></a>`).join('')]);
-    const members = matches(memberProfiles,member => [member.username].join(' '));
-    if (members.length) groups.push(['Members',members.map(member => `<a class="global-search-result" href="account.html?user=${encodeURIComponent(member.id)}">${avatar(member.username,'global-search-avatar',member.avatarImage)}<span><strong>${esc(member.username)}</strong><small>Member profile</small></span><span class="global-search-arrow" aria-hidden="true">↗</span></a>`).join('')]);
-    const developers = matches(DATA.members,member => [member.online,member.real,member.primaryRole,...(member.roles || []),...(member.projects || [])].join(' '));
-    if (developers.length) groups.push(['Developers & studio team',developers.map(member => `<a class="global-search-result" href="account.html?user=${encodeURIComponent(member.id)}">${avatar(member.online,'global-search-avatar',member.avatarImage)}<span><strong>${esc(member.online)}</strong><small>${esc(member.primaryRole || member.roles?.[0] || 'Studio profile')}${member.real ? ` · ${esc(member.real)}` : ''}</small></span><span class="global-search-arrow" aria-hidden="true">↗</span></a>`).join('')]);
-    results.innerHTML = groups.length ? groups.map(([title,items]) => `<section class="global-search-group"><h2>${title}</h2>${items}</section>`).join('') : '<p class="global-search-hint">No matches found.</p>';
+    const results=$('[data-global-search-results]'),input=$('[data-global-search-input]');
+    if(!results||!input)return;
+    const query=input.value.trim().toLowerCase(),filter=tagSearchSelection('global');
+    if(!query&&!filter.category){results.innerHTML='<p class="global-search-hint">Search games, artwork, members, and developers.</p>';return;}
+    const matches=(items,type,textFor)=>items.filter(item=>(!query||textFor(item).toLowerCase().includes(query))&&matchesTagSearch('global',{type,item},filter.category,filter.tag)).slice(0,5),groups=[];
+    const games=matches(DATA.games,'game',game=>[game.name,game.subtitle,game.genre,game.status,game.blurb,game.details].join(' '));
+    if(games.length)groups.push(['Games',games.map(game=>`<a class="global-search-result" href="project.html?id=${encodeURIComponent(game.id)}">${projectIcon(game,'global-search-thumb')}<span><strong>${esc(game.name)}</strong><small>${esc(game.status)}${game.subtitle?` · ${esc(game.subtitle)}`:''}</small></span><span class="global-search-arrow" aria-hidden="true">↗</span></a>`).join('')]);
+    const artworks=matches(DATA.arts,'artwork',art=>[art.title,art.type,art.mainTag,...art.tags].join(' '));
+    if(artworks.length)groups.push(['Artworks',artworks.map(art=>`<a class="global-search-result" href="${artworkHref(art)}"><span class="global-search-thumb"><img src="${esc(art.image)}" alt=""></span><span><strong>${esc(art.title)}</strong><small>${esc(art.mainTag)} · ${esc(art.type)}</small></span><span class="global-search-arrow" aria-hidden="true">↗</span></a>`).join('')]);
+    const members=matches(memberProfiles,'member',member=>[member.username].join(' '));
+    if(members.length)groups.push(['Members',members.map(member=>`<a class="global-search-result" href="account.html?user=${encodeURIComponent(member.id)}">${avatar(member.username,'global-search-avatar',member.avatarImage)}<span><strong>${esc(member.username)}</strong><small>Member profile</small></span><span class="global-search-arrow" aria-hidden="true">↗</span></a>`).join('')]);
+    const developers=matches(DATA.members,'developer',member=>[member.online,member.real,member.primaryRole,...(member.roles||[]),...(member.projects||[])].join(' '));
+    if(developers.length)groups.push(['Developers & studio team',developers.map(member=>`<a class="global-search-result" href="account.html?user=${encodeURIComponent(member.id)}">${avatar(member.online,'global-search-avatar',member.avatarImage)}<span><strong>${esc(member.online)}</strong><small>${esc(member.primaryRole||member.roles?.[0]||'Studio profile')}${member.real?` · ${esc(member.real)}`:''}</small></span><span class="global-search-arrow" aria-hidden="true">↗</span></a>`).join('')]);
+    results.innerHTML=groups.length?groups.map(([title,items])=>`<section class="global-search-group"><h2>${title}</h2>${items}</section>`).join(''):'<p class="global-search-hint">No matches found.</p>';
+  }
+  function filterSwitchCards(scope) {
+    const project=scope==='projects',input=$(project?'[data-project-search]':'[data-artwork-search]'),filter=tagSearchSelection(scope),selector=project?'[data-switch-project]':'[data-switch-artwork]',textKey=project?'projectText':'artworkText',empty=$(project?'[data-project-empty]':'[data-artwork-empty]');
+    const dataKey=project?({status:'filterStatus',genre:'filterGenre',theme:'filterTheme'}[filter.category]):({type:'filterType',project:'filterProject',mainTag:'filterMainTag',tags:'filterTags'}[filter.category]);let shown=0;
+    $$(selector).forEach(card=>{const textMatch=!(input?.value||'').trim()||card.dataset[textKey].toLowerCase().includes(input.value.trim().toLowerCase());const tags=dataKey?String(card.dataset[dataKey]||'').split('|'):[];const tagMatch=!filter.category||tags.length>0&&(!filter.tag||tags.includes(filter.tag));card.hidden=!(textMatch&&tagMatch);if(!card.hidden)shown++;});
+    if(empty)empty.hidden=shown>0;
   }
   function toast(message) {
     const node = $('#toast'); node.textContent = message; node.classList.add('show');
@@ -2662,6 +2715,7 @@
         const button = document.createElement('button'); button.type='button'; button.dataset.transformMode=mode; button.setAttribute('aria-pressed',String(mode === friendCardTransformMode)); button.innerHTML=`${label} <kbd>${key}</kbd>`;
         canvasTools.append(button);
       }
+      const snap=document.createElement('span');snap.className='friend-snap-controls';snap.innerHTML='<span>Snap</span>'+[['grid','Grid'],['items','Items'],['edges','Edges']].map(([key,label])=>`<button type="button" data-snap-toggle="${key}" aria-pressed="${friendCardSnapSettings[key]}">${label}</button>`).join('');canvasTools.append(snap);
     }
     const actions = $('.friend-editor-toolbar-actions',toolbar), post = $('[data-post-friend-card]'), publish = $('.friend-card-publish-row'), message = $('#friend-card-post-message');
     if (post && actions) actions.append(post);
@@ -2828,8 +2882,8 @@
     let dy = (event.clientY-transform.startY)/transform.bounds.height*100;
     const selectedIds = new Set(transform.layers.map(layer => layer.id));
     if (transform.mode === 'move') {
-      dx = snapFriendCardPosition(box.x/design.width*100+dx,box.width/design.width*100,'x',selectedIds)-box.x/design.width*100;
-      dy = snapFriendCardPosition(box.y/design.height*100+dy,box.height/design.height*100,'y',selectedIds)-box.y/design.height*100;
+      dx = snapFriendCardPosition(box.x/design.width*100+dx,box.width/design.width*100,'x',selectedIds,event)-box.x/design.width*100;
+      dy = snapFriendCardPosition(box.y/design.height*100+dy,box.height/design.height*100,'y',selectedIds,event)-box.y/design.height*100;
     }
     let fx = transform.axis === 'y' ? 1 : Math.max(.01,(box.width+dx*design.width/100)/box.width);
     let fy = transform.axis === 'x' ? 1 : Math.max(.01,(box.height+dy*design.height/100)/box.height);
@@ -3208,6 +3262,8 @@
     if(reportStatus){reportStatus.disabled=true;try{await api('/api/community/bug-reports/'+encodeURIComponent(reportStatus.dataset.reportId)+'/status','POST',{status:reportStatus.dataset.reportStatus});await renderCommunityReports(reportStatus.dataset.reportId);}catch(error){toast(error.message);reportStatus.disabled=false;}return;}
     if(event.target.closest('[data-chat-settings-reset]')){communityChatSettings={...defaultCommunityChatSettings};saveCommunityChatSettings();renderCommunityChatSettings();return;}
 
+    const snapToggle=event.target.closest('[data-snap-toggle]');
+    if(snapToggle){const key=snapToggle.dataset.snapToggle;if(Object.hasOwn(friendCardSnapSettings,key)){friendCardSnapSettings[key]=!friendCardSnapSettings[key];snapToggle.setAttribute('aria-pressed',String(friendCardSnapSettings[key]));}return;}
     const cfcAction=event.target.closest('[data-cfc-action]');
     if(cfcAction){
       if($('#friend-card-form'))return;
@@ -3730,6 +3786,10 @@
     }
   });
   document.addEventListener('change', async event => {
+    const tagCategory=event.target.closest('[data-tag-search-category]');
+    if(tagCategory){const scope=tagCategory.dataset.tagSearchCategory;refreshTagSearchOptions(scope);runTagSearch(scope);return;}
+    const tagValue=event.target.closest('[data-tag-search-value]');
+    if(tagValue){runTagSearch(tagValue.dataset.tagSearchValue);return;}
     const groupName=event.target.closest('[data-cfc-group-name]');
     if(groupName){const group=friendCardDesignState?.groups?.find(item=>item.id===groupName.dataset.cfcGroupName);if(group){recordFriendCardHistory();group.name=groupName.value.trim().slice(0,80)||'Group';repaintFriendCardEditor();}return;}
 
@@ -3944,22 +4004,8 @@
       if (friendCardDesignState && event.target.name === 'friendCardButtonTextColor') friendCardDesignState.layers.filter(layer => layer.type === 'button').forEach(layer => { layer.color = event.target.value; });
       updateFriendCardEditorPreview(); saveFriendCardDraftLocally(); const status = $('[data-friend-save-status]'); if (status) status.textContent = 'Unsaved changes'; return;
     }
-    if (event.target.matches('[data-project-search]')) {
-      const query = event.target.value.trim().toLowerCase();
-      let shown = 0;
-      $$('[data-switch-project]').forEach(card => { card.hidden = !card.dataset.projectText.toLowerCase().includes(query); if (!card.hidden) shown++; });
-      const empty = $('[data-project-empty]');
-      if (empty) empty.hidden = shown > 0;
-      return;
-    }
-    if (event.target.matches('[data-artwork-search]')) {
-      const query = event.target.value.trim().toLowerCase();
-      let shown = 0;
-      $$('[data-switch-artwork]').forEach(card => { card.hidden = !card.dataset.artworkText.toLowerCase().includes(query); if (!card.hidden) shown++; });
-      const empty = $('[data-artwork-empty]');
-      if (empty) empty.hidden = shown > 0;
-      return;
-    }
+    if (event.target.matches('[data-project-search]')) { filterSwitchCards('projects'); return; }
+    if (event.target.matches('[data-artwork-search]')) { filterSwitchCards('artwork'); return; }
     if (!cropSession) return;
     if (event.target.id === 'crop-zoom') { cropSession.zoom = Number(event.target.value); paintCrop(); }
     else if (event.target.id === 'crop-rotation') { cropSession.rotation = Number(event.target.value); paintCrop(); }

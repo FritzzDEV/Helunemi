@@ -6,11 +6,11 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
   const actions=Object.freeze([
-    {id:'open-cfc',label:'Open CFC',view:'preview'},
-    {id:'add-friend',label:'Add friend',view:'full'},
-    {id:'invite-party',label:'Invite to party',view:'full'},
-    {id:'invite-group',label:'Invite to group',view:'full'},
-    {id:'view-profile',label:'View profile',view:'full'},
+    {id:'open-cfc',label:'Open Friend-Card',view:'preview'},
+    {id:'add-friend',label:'Add Friend',view:'full'},
+    {id:'invite-party',label:'Invite to Party',view:'full'},
+    {id:'invite-group',label:'Invite to Group',view:'full'},
+    {id:'view-profile',label:'View User Profile',view:'full'},
     {id:'message',label:'Message',view:'full'}
   ].map(Object.freeze));
   const action=value=>actions.find(item=>item.id===value)||actions[0];
