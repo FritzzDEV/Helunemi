@@ -53,9 +53,24 @@ function createSocialSystem(context) {
     const unlocked = accessibleMedia(item, user);
     return { id: item.id, kind: item.kind, name: item.name, collection: item.collection, classification: item.classification, price: item.price, currency: 'USD', ownerId: item.ownerId, creator: brief(accountById(item.ownerId)), available: true, locked: !unlocked, previewUrl: fileUrl(item.previewId), ...(unlocked ? { url: fileUrl(item.assetId) } : {}), canManage: ownerOf(item, user), claimed: entitled(item, user) && !ownerOf(item, user), createdAt: item.createdAt };
   }
+  const builtInReactions = new Set(['like','love','laugh','wow','sad','fire','clap']);
+  const validReactionKey = value => builtInReactions.has(value) || /^media:[a-f0-9-]{36}$/i.test(value);
   function postSummary(post, user) {
     const comments = (post.comments || []).map(comment => ({ ...comment, author: accountById(comment.authorId) ? brief(accountById(comment.authorId)) : { id: '', username: 'Deleted account', avatarImage: '' }, canDelete: ownerOf(post, user) || comment.authorId === user?.id || moderator(user) }));
-    return { id: post.id, authorId: post.authorId, author: brief(accountById(post.authorId)), html: sanitizePost(post.html), kind: post.kind, visibility: post.visibility, partyId: post.partyId, partyName: post.partyId ? circleFor(post.partyId)?.name || 'Party' : '', createdAt: post.createdAt, updatedAt: post.updatedAt, likeCount: post.likes.length, liked: Boolean(user && post.likes.includes(user.id)), commentCount: comments.length, comments, canManage: ownerOf(post, user), canInteract: Boolean(user), attachments: post.attachments.map(attachment => {
+    const grouped = new Map();
+    const addReaction = (key, userId) => {
+      if (!validReactionKey(key) || !userId) return;
+      if (!grouped.has(key)) grouped.set(key, new Set());
+      grouped.get(key).add(userId);
+    };
+    for (const id of post.likes || []) addReaction('like', id);
+    for (const reaction of post.reactions || []) addReaction(reaction.key, reaction.userId);
+    const reactionGroups = [...grouped.entries()].map(([key, users]) => {
+      const media = key.startsWith('media:') ? mediaById(key.slice(6)) : null;
+      return { key, count: users.size, active: Boolean(user && users.has(user.id)), ...(media && activeOwner(media) ? { media: mediaSummary(media, user) } : {}) };
+    });
+    const ownReaction = reactionGroups.find(reaction => reaction.active)?.key || '';
+    return { id: post.id, authorId: post.authorId, author: brief(accountById(post.authorId)), html: sanitizePost(post.html), kind: post.kind, visibility: post.visibility, partyId: post.partyId, partyName: post.partyId ? circleFor(post.partyId)?.name || 'Party' : '', createdAt: post.createdAt, updatedAt: post.updatedAt, likeCount: reactionGroups.find(reaction => reaction.key === 'like')?.count || 0, liked: ownReaction === 'like', myReaction: ownReaction, reactions: reactionGroups, commentCount: comments.length, comments, canManage: ownerOf(post, user), canInteract: Boolean(user), attachments: post.attachments.map(attachment => {
       if (attachment.mediaId) { const item = mediaById(attachment.mediaId); return item && activeOwner(item) ? { mediaId: item.id, ...mediaSummary(item,user) } : null; }
       const file = asset(attachment.assetId); return file ? { assetId: file.id, kind: file.kind, url: fileUrl(file.id), name: file.name } : null;
     }).filter(Boolean) };
@@ -154,6 +169,19 @@ function createSocialSystem(context) {
       const own = owner.id === user?.id;
       send(res,200,{ owner:brief(owner),own,circles:own ? state.circles.filter(circle=>circle.members.includes(user.id)).map(circle=>({...circle,members:circle.members.map(id=>accountById(id)).filter(Boolean).map(brief),invited:circle.ownerId===user.id ? circle.invited : []})) : [],friends:own ? (owner.community?.friends||[]).map(accountById).filter(Boolean).map(brief) : [],invitations:own ? state.circles.filter(circle=>circle.invited.includes(user.id)).map(circle=>({id:circle.id,name:circle.name,kind:circle.kind})) : [],storage:own ? await files.status() : undefined }); return true;
     }
+    if (method === 'GET' && pathname === '/api/social/feed') {
+      const all = state.posts.filter(post => visiblePost(post,user)).sort((a,b) => b.createdAt-a.createdAt || b.id.localeCompare(a.id));
+      const after = query.get('after'), index = after ? all.findIndex(post => post.id === after)+1 : 0;
+      const posts = all.slice(index,index+15), seen = new Set(), stories = [];
+      for (const post of all) {
+        if (seen.has(post.authorId)) continue;
+        seen.add(post.authorId);
+        const summary = postSummary(post,user);
+        stories.push({ id:post.id, authorId:post.authorId, author:summary.author, createdAt:post.createdAt, snippet:sanitizeHtml(summary.html,{allowedTags:[],allowedAttributes:{}}).replace(/\s+/g,' ').slice(0,100), attachment:summary.attachments[0] || null });
+        if (stories.length >= 12) break;
+      }
+      send(res,200,{posts:posts.map(post=>postSummary(post,user)),stories,nextCursor:index+15<all.length ? posts.at(-1)?.id : null}); return true;
+    }
     if (method === 'GET' && pathname === '/api/social/posts') {
       const ownerId = query.get('user') || user?.id;
       if (!accountById(ownerId)) throw fail('Profile not found.',404);
@@ -162,15 +190,15 @@ function createSocialSystem(context) {
       const posts = all.slice(index,index+15);
       send(res,200,{posts:posts.map(post=>postSummary(post,user)),nextCursor:index+15<all.length ? posts.at(-1)?.id : null}); return true;
     }
-    const postMatch = /^\/api\/social\/posts\/([a-f0-9-]{36})(?:\/(like|comments)(?:\/([a-f0-9-]{36}))?)?$/.exec(pathname);
+    const postMatch = /^\/api\/social\/posts\/([a-f0-9-]{36})(?:\/(like|react|comments)(?:\/([a-f0-9-]{36}))?)?$/.exec(pathname);
     if (postMatch && method === 'GET') {
       const post = postById(postMatch[1]);
       if (!post || !visiblePost(post,user)) throw fail('This post is unavailable or its audience does not include you.',403);
       send(res,200,{post:postSummary(post,user)}); return true;
     }
     if (method === 'GET' && pathname === '/api/social/media') {
-      const ownerId = query.get('user') || user?.id, kind = query.get('kind') === 'gif' ? 'gif' : 'sticker';
-      const all = state.media.filter(item=>item.ownerId===ownerId && item.kind===kind && activeOwner(item)).sort((a,b)=>b.createdAt-a.createdAt);
+      const ownerId = query.get('user') || user?.id, kind = query.get('kind') === 'gif' ? 'gif' : 'sticker', catalog = query.get('catalog') === '1';
+      const all = state.media.filter(item=>item.kind===kind && activeOwner(item) && (catalog ? item.ownerId===user?.id || item.classification==='store' : item.ownerId===ownerId)).sort((a,b)=>b.createdAt-a.createdAt);
       send(res,200,{items:all.map(item=>mediaSummary(item,user))}); return true;
     }
     const mediaMatch = /^\/api\/social\/media\/([a-f0-9-]{36})(?:\/(claim))?$/.exec(pathname);
@@ -198,7 +226,7 @@ function createSocialSystem(context) {
       if (state.posts.filter(post=>post.authorId===user.id).length>=1000) throw fail('You have reached the post limit.');
       const nonce=text(input.clientId,100), duplicate=nonce && state.posts.find(post=>post.authorId===user.id&&post.clientId===nonce);
       if (duplicate) { send(res,200,{post:postSummary(duplicate,user)}); return true; }
-      const post={id:crypto.randomUUID(),authorId:user.id,...values,clientId:nonce,createdAt:Date.now(),updatedAt:0,likes:[],comments:[]};
+      const post={id:crypto.randomUUID(),authorId:user.id,...values,clientId:nonce,createdAt:Date.now(),updatedAt:0,likes:[],reactions:[],comments:[]};
       await commit(()=>state.posts.push(post)); send(res,201,{post:postSummary(post,user)}); return true;
     }
     if (postMatch) {
@@ -210,6 +238,23 @@ function createSocialSystem(context) {
       if (!postMatch[2] && method==='DELETE') {
         if (!ownerOf(post,user)) throw fail('Only the author can delete this post.',403);
         await commit(()=>{state.posts=state.posts.filter(item=>item.id!==post.id);}); await cleanupAssets(post.attachments.map(item=>item.assetId)); send(res,200,{message:'Post deleted.'}); return true;
+      }
+      if (postMatch[2]==='react' && method==='POST') {
+        const key = text((await readBody(req)).reaction,100);
+        if (!validReactionKey(key)) throw fail('Choose a Helunemi reaction or an emoji sticker from your library or the store.');
+        if (key.startsWith('media:')) {
+          const emoji = mediaById(key.slice(6));
+          if (!emoji || emoji.kind !== 'sticker' || !activeOwner(emoji)) throw fail('That custom emoji is unavailable.',404);
+          if (!accessibleMedia(emoji,user)) throw fail('Access this paid emoji before using it as a reaction.',403);
+        }
+        await commit(()=>{
+          const reactions = Array.isArray(post.reactions) ? post.reactions : [];
+          const current = reactions.find(item => item.userId === user.id) || ((post.likes || []).includes(user.id) ? {key:'like'} : null);
+          post.reactions = reactions.filter(item => item.userId !== user.id);
+          if (current?.key !== key) post.reactions.push({userId:user.id,key,createdAt:Date.now()});
+          post.likes = (post.likes || []).filter(id => id !== user.id);
+        });
+        send(res,200,{post:postSummary(post,user)}); return true;
       }
       if (postMatch[2]==='like' && method==='POST') {
         await commit(()=>{ post.likes=post.likes.includes(user.id) ? post.likes.filter(id=>id!==user.id) : [...post.likes,user.id]; }); send(res,200,{post:postSummary(post,user)}); return true;
@@ -227,7 +272,7 @@ function createSocialSystem(context) {
     if (pathname==='/api/social/media' && method==='POST' || mediaMatch && method==='PUT') {
       const input=await readBody(req), existing=mediaMatch?mediaById(mediaMatch[1]):null;
       if(!existing && !mediaMatch){const duplicate=state.media.find(item=>item.ownerId===user.id&&item.assetId===input.assetId);if(duplicate){
-        if(input.announce===true&&!duplicate.announcementId)await commit(()=>{if(duplicate.announcementId)return;const post={id:crypto.randomUUID(),authorId:user.id,html:'<p>'+sanitizeHtml('Released: '+duplicate.name,{allowedTags:[],allowedAttributes:{}})+'</p>',kind:'announcement',visibility:'public',partyId:'',attachments:[{mediaId:duplicate.id}],createdAt:Date.now(),updatedAt:0,likes:[],comments:[]};state.posts.push(post);duplicate.announcementId=post.id;});
+        if(input.announce===true&&!duplicate.announcementId)await commit(()=>{if(duplicate.announcementId)return;const post={id:crypto.randomUUID(),authorId:user.id,html:'<p>'+sanitizeHtml('Released: '+duplicate.name,{allowedTags:[],allowedAttributes:{}})+'</p>',kind:'announcement',visibility:'public',partyId:'',attachments:[{mediaId:duplicate.id}],createdAt:Date.now(),updatedAt:0,likes:[],reactions:[],comments:[]};state.posts.push(post);duplicate.announcementId=post.id;});
         send(res,200,{item:mediaSummary(duplicate,user),announcementId:duplicate.announcementId});return true;
       }}
       if (mediaMatch && (!existing||!ownerOf(existing,user)))throw fail('Only the creator can edit this item.',403);
@@ -246,7 +291,7 @@ function createSocialSystem(context) {
           if(existing)Object.assign(existing,item);else state.media.push(item);
         }
         if(input.announce===true&&!item.announcementId){
-          const post={id:crypto.randomUUID(),authorId:user.id,html:'<p>'+sanitizeHtml('Released: '+name,{allowedTags:[],allowedAttributes:{}})+'</p>',kind:'announcement',visibility:'public',partyId:'',attachments:[{mediaId:item.id}],createdAt:Date.now(),updatedAt:0,likes:[],comments:[]};
+          const post={id:crypto.randomUUID(),authorId:user.id,html:'<p>'+sanitizeHtml('Released: '+name,{allowedTags:[],allowedAttributes:{}})+'</p>',kind:'announcement',visibility:'public',partyId:'',attachments:[{mediaId:item.id}],createdAt:Date.now(),updatedAt:0,likes:[],reactions:[],comments:[]};
           state.posts.push(post);item.announcementId=post.id;if(existing)existing.announcementId=post.id;
         }
       });
@@ -310,7 +355,7 @@ function createSocialSystem(context) {
   return { handle, snapshot:()=>state, load(value) { const result=emptyState();for(const key of ['posts','media','assets','cfcs','circles','claims'])result[key]=Array.isArray(value?.[key])?value[key]:[];state=result; }, async removeAccount(id) {
     const owned=state.assets.filter(item=>item.ownerId===id).map(item=>item.id);
     await commit(()=>{
-      state.posts=state.posts.filter(item=>item.authorId!==id).map(post=>({...post,likes:post.likes.filter(value=>value!==id),comments:post.comments.filter(comment=>comment.authorId!==id)}));
+      state.posts=state.posts.filter(item=>item.authorId!==id).map(post=>({...post,likes:(post.likes||[]).filter(value=>value!==id),reactions:(post.reactions||[]).filter(reaction=>reaction.userId!==id),comments:post.comments.filter(comment=>comment.authorId!==id)}));
       state.media=state.media.filter(item=>item.ownerId!==id);state.cfcs=state.cfcs.filter(item=>item.ownerId!==id);state.assets=state.assets.filter(item=>item.ownerId!==id);state.claims=state.claims.filter(item=>item.userId!==id);
       state.circles=state.circles.filter(item=>item.ownerId!==id).map(item=>({...item,members:item.members.filter(value=>value!==id),invited:item.invited.filter(value=>value!==id)}));
     });for(const key of owned)await files.remove(key).catch(error=>console.error('ACCOUNT MEDIA DELETE ERROR:',error));

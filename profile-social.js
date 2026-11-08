@@ -8,6 +8,7 @@
   const cache=new Map();
   const money=item=>item.price>0?new Intl.NumberFormat(undefined,{style:'currency',currency:item.currency||'USD'}).format(item.price):'Free';
   const avatar=user=>`<a href="account.html?user=${encodeURIComponent(user.id)}" class="social-avatar" aria-label="View ${escape(user.username)}’s profile">${user.avatarImage?`<img src="${escape(user.avatarImage)}" alt="">`:escape(user.username.slice(0,2).toUpperCase())}</a>`;
+  const avatarBadge=user=>`<span class="social-avatar">${user?.avatarImage?`<img src="${escape(user.avatarImage)}" alt="">`:escape(String(user?.username||'G').slice(0,2).toUpperCase())}</span>`;
   const date=value=>`<time datetime="${new Date(value).toISOString()}">${escape(new Date(value).toLocaleString([],{dateStyle:'medium',timeStyle:'short'}))}</time>`;
   const empty=message=>`<div class="social-empty"><span aria-hidden="true">✦</span><p>${escape(message)}</p></div>`;
   function options(actions,label='Options') {
@@ -17,15 +18,20 @@
     try { await navigator.clipboard.writeText(url);toast('Link copied.'); }
     catch { const field=document.createElement('textarea');field.value=url;document.body.append(field);field.select();const success=document.execCommand('copy');field.remove();if(success)toast('Link copied.');else window.prompt('Copy this link:',url); }
   }
-  function shareUrl(post) { return new URL(`account.html?user=${encodeURIComponent(post.authorId)}&tab=posts&post=${encodeURIComponent(post.id)}`,location.href).href; }
+  function shareUrl(post) { return new URL(`social.html?post=${encodeURIComponent(post.id)}`,location.href).href; }
   function attachmentMarkup(item) {
-    if (item.kind==='video')return `<video controls playsinline preload="metadata" src="${escape(item.url)}"></video>`;
+    if (item.kind==='video')return `<figure class="social-post-image is-video"><video controls playsinline preload="metadata" src="${escape(item.url)}"></video></figure>`;
     return `<figure class="social-post-image ${item.kind==='sticker'?'is-sticker':''}"><img src="${escape(item.url||item.previewUrl)}" alt="${escape(item.name||'Post attachment')}" loading="lazy">${item.locked?'<figcaption>🔒 '+escape(money(item))+' · Paid content</figcaption>':''}</figure>`;
   }
+  const reactionEmoji={like:'👍',love:'❤️',laugh:'😂',wow:'😮',sad:'😢',fire:'🔥',clap:'👏'};
+  function reactionFace(reaction){return reaction.media?.url?`<img src="${escape(reaction.media.url)}" alt="${escape(reaction.media.name||'Custom emoji')}">`:reactionEmoji[reaction.key]||'✨';}
   function postMarkup(post) {
     cache.set(post.id,post);
-    const controls=(post.canManage?`<button type="button" data-social-edit-post="${post.id}">Edit Post</button><button type="button" data-social-edit-post="${post.id}" data-focus-visibility>Change Visibility</button>`:'')+`<button type="button" data-social-share="${post.id}">Copy Link</button>`+(post.canManage?`<button class="is-danger" type="button" data-social-delete-post="${post.id}">Delete Post</button>`:'');
-    return `<article class="social-post" id="post-${post.id}" data-post="${post.id}"><header>${avatar(post.author)}<div class="social-post-byline"><a href="account.html?user=${encodeURIComponent(post.authorId)}"><strong>${escape(post.author.username)}</strong></a><small>${date(post.createdAt)}${post.updatedAt?' · Edited':''}</small><span class="social-audience">${({public:'◎ Public',friends:'♧ Friends',party:'✦ Party',self:'🔒 Self'})[post.visibility]}${post.partyName?' · '+escape(post.partyName):''}${post.kind==='announcement'?' · Announcement':''}</span></div>${options(controls,'Post options')}</header><div class="social-rich-content">${post.html}</div>${post.attachments.length?`<div class="social-post-media">${post.attachments.map(attachmentMarkup).join('')}</div>`:''}<div class="social-post-actions"><button type="button" data-social-like="${post.id}" aria-pressed="${post.liked}" ${post.canInteract?'':'disabled'}>♡ <span>${post.likeCount}</span> Like</button><button type="button" data-social-comments="${post.id}" aria-expanded="false">☏ <span>${post.commentCount}</span> Comment</button><button type="button" data-social-share="${post.id}">↗ Share</button></div><section class="social-comments" data-comments="${post.id}" hidden><h3>Comments · ${post.commentCount}</h3>${post.comments.map(comment=>`<article class="social-comment">${avatar(comment.author)}<div><strong>${escape(comment.author.username)}</strong><p>${escape(comment.text)}</p><small>${date(comment.createdAt)}</small></div>${comment.canDelete?`<button class="text-link" type="button" data-social-delete-comment="${comment.id}" data-parent-post="${post.id}">Delete</button>`:''}</article>`).join('')}${post.canInteract?`<form data-comment-form="${post.id}" class="social-comment-form"><label class="visually-hidden" for="comment-${post.id}">Write a comment</label><textarea id="comment-${post.id}" name="text" rows="2" maxlength="2000" required placeholder="Write a comment…"></textarea><button class="btn btn-primary btn-sm" type="submit">Comment</button></form>`:'<p class="panel-help">Log in to comment or like.</p>'}</section></article>`;
+    const controls=(post.canManage?`<button type="button" data-social-edit-post="${post.id}">Edit post</button><button type="button" data-social-edit-post="${post.id}" data-focus-visibility>Change visibility</button>`:'')+`<button type="button" data-social-share="${post.id}">Share post</button>`+(post.canManage?`<button class="is-danger" type="button" data-social-delete-post="${post.id}">Delete post</button>`:'');
+    const reactions=post.reactions||[];
+    const reactionRow=reactions.length?`<div class="social-reaction-summary" aria-label="Post reactions">${reactions.map(reaction=>`<button type="button" data-social-quick-reaction="${escape(reaction.key)}" data-social-post="${post.id}" class="${reaction.active?'is-active':''}" aria-label="${reaction.count} reactions" ${post.canInteract?'':'disabled'}>${reactionFace(reaction)}<span>${reaction.count}</span></button>`).join('')}</div>`:'';
+    const attachmentCount=Math.min(8,post.attachments.length);
+    return `<article class="social-post" id="post-${post.id}" data-post="${post.id}"><header>${avatar(post.author)}<div class="social-post-byline"><a href="account.html?user=${encodeURIComponent(post.authorId)}"><strong>${escape(post.author.username)}</strong></a><small>${date(post.createdAt)}${post.updatedAt?' · Edited':''}</small><span class="social-audience">${({public:'◎ Public',friends:'♧ Friends',party:'✦ Party',self:'🔒 Self'})[post.visibility]}${post.partyName?' · '+escape(post.partyName):''}${post.kind==='announcement'?' · Announcement':''}</span></div>${options(controls,'Post options')}</header><div class="social-rich-content">${post.html}</div>${attachmentCount?`<div class="social-post-media media-count-${attachmentCount}">${post.attachments.map(attachmentMarkup).join('')}</div>`:''}${reactionRow}<div class="social-post-actions"><button type="button" class="social-react-button ${post.myReaction?'is-reacted':''}" data-social-reaction-picker="${post.id}" aria-pressed="${Boolean(post.myReaction)}" ${post.canInteract?'':'disabled'}><span>${post.myReaction?reactionEmoji[post.myReaction]||reactionFace(reactions.find(item=>item.key===post.myReaction)||{}):'✦'}</span>${post.myReaction?'Reacted':'React'}</button><button type="button" data-social-comments="${post.id}" aria-expanded="false"><span aria-hidden="true">◌</span><span>${post.commentCount} comments</span></button><button type="button" data-social-share="${post.id}"><span aria-hidden="true">↗</span>Share</button></div><section class="social-comments" data-comments="${post.id}" hidden><h3>Conversation · ${post.commentCount}</h3>${post.comments.map(comment=>`<article class="social-comment">${avatar(comment.author)}<div><strong>${escape(comment.author.username)}</strong><p>${escape(comment.text)}</p><small>${date(comment.createdAt)}</small></div>${comment.canDelete?`<button class="text-link" type="button" data-social-delete-comment="${comment.id}" data-parent-post="${post.id}">Delete</button>`:''}</article>`).join('')}${post.canInteract?`<form data-comment-form="${post.id}" class="social-comment-form"><label class="visually-hidden" for="comment-${post.id}">Write a comment</label><textarea id="comment-${post.id}" name="text" rows="2" maxlength="2000" required placeholder="Add a thoughtful reply…"></textarea><button class="btn btn-primary btn-sm" type="submit">Reply</button></form>`:'<p class="panel-help">Log in to join the conversation.</p>'}</section></article>`;
   }
   function shell(content,title='',wide=false) {
     const dialog=document.createElement('dialog');dialog.className='social-dialog'+(wide?' social-dialog-wide':'');
@@ -67,6 +73,7 @@
     if (existing) query.set('edit', existing.id);
     if (feature) query.set('media', feature.id);
     if (focusVisibility) query.set('focus', 'visibility');
+    if (document.body.dataset.page === 'social') query.set('return', 'social');
     location.assign('create-post.html' + (query.size ? '?' + query : ''));
   }
   async function mountPostPage(root) {
@@ -75,20 +82,22 @@
     try {
       const query = new URLSearchParams(location.search);
       const existing = query.has('edit') ? (await api('/api/social/posts/' + encodeURIComponent(query.get('edit')))).post : null;
+      const returnHref = query.get('return') === 'social' ? 'social.html' : 'account.html?tab=posts';
       if (existing && !existing.canManage) throw new Error('You can only edit your own posts.');
       const feature = !existing && query.has('media') ? (await api('/api/social/media/' + encodeURIComponent(query.get('media')))).item : null;
       if (feature?.locked) throw new Error('You do not have access to this media.');
-      await postEditor(existing, feature, query.get('focus') === 'visibility', root);
-    } catch (error) { root.innerHTML = `<div class="wrap"><div class="page-head"><h1>Post editor unavailable</h1><p>${escape(error.message)}</p><a class="btn btn-ghost" href="account.html?tab=posts">Back to posts</a></div></div>`; }
+      await postEditor(existing, feature, query.get('focus') === 'visibility', root, returnHref);
+    } catch (error) { const returnHref=new URLSearchParams(location.search).get('return')==='social'?'social.html':'account.html?tab=posts';root.innerHTML = `<div class="wrap"><div class="page-head"><h1>Post editor unavailable</h1><p>${escape(error.message)}</p><a class="btn btn-ghost" href="${returnHref}">Back to posts</a></div></div>`; }
   }
   window.addEventListener('beforeunload', event => {
     if (activePostEditor?.dirty()) { activePostEditor.recover(); event.preventDefault(); event.returnValue = ''; }
   });
-  async function postEditor(existing = null, feature = null, focusVisibility = false, root = null) {
+  async function postEditor(existing = null, feature = null, focusVisibility = false, root = null, returnHref = '') {
     if (!getUser()) return;
     if (!root) { openPostPage(existing, feature, focusVisibility); return; }
+    returnHref = returnHref || (new URLSearchParams(location.search).get('return') === 'social' ? 'social.html' : 'account.html?tab=posts');
     const context = await loadContext(getUser().id), parties = context.circles.filter(circle => circle.kind === 'party');
-    root.innerHTML = `<div class="wrap post-compose-page"><div class="post-compose-heading"><div><a class="text-link" href="account.html?tab=posts">← Back to posts</a><h1>${existing ? 'Edit post' : 'Create a post'}</h1><p>Write, add media, and choose who can see your post.</p></div><button class="btn btn-ghost btn-sm" type="button" data-cancel-post>Cancel</button></div><section class="post-draft-notice" data-draft-notice hidden><span>A draft is available in this browser tab.</span><button class="btn btn-ghost btn-sm" type="button" data-restore-post-draft>Restore draft</button><button class="text-link" type="button" data-discard-post-draft>Discard draft</button></section><section class="post-compose-card">${`<form data-post-editor><div class="social-form-grid"><label>Post type<select name="kind"><option value="post">Post</option><option value="announcement" ${existing?.kind==='announcement'?'selected':''}>Announcement</option></select></label><label>Visibility<select name="visibility">${[['public','Public'],['friends','Friends'],['party','Party'],['self','Self']].map(([key,label])=>`<option value="${key}" ${existing?.visibility===key?'selected':''}>${label}</option>`).join('')}</select></label><label data-post-party ${existing?.visibility==='party'?'':'hidden'}>Party<select name="partyId">${parties.map(circle=>`<option value="${circle.id}" ${existing?.partyId===circle.id?'selected':''}>${escape(circle.name)}</option>`).join('')}</select><small>${parties.length?'Only members of this party can view the post.':'Create a party from General → Parties & groups first.'}</small></label></div><div class="rich-toolbar" role="toolbar" aria-label="Text formatting">${[['bold','B','Bold'],['italic','I','Italic'],['underline','U','Underline'],['strikeThrough','S','Strikethrough'],['justifyLeft','⇤','Align left'],['justifyCenter','↔','Align center'],['justifyRight','⇥','Align right'],['insertUnorderedList','• List','Bulleted list'],['insertOrderedList','1. List','Numbered list'],['createLink','↗ Link','Add link'],['removeFormat','Clear','Clear formatting']].map(([command,label,title])=>`<button type="button" data-rich-command="${command}" aria-label="${title}" title="${title}">${label}</button>`).join('')}</div><div class="rich-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Post text"></div><div class="social-attachments" data-post-attachments></div><div class="social-composer-tools"><label class="btn btn-ghost btn-sm">Add images / video / GIF<input type="file" data-post-files accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm" multiple hidden></label><button class="btn btn-ghost btn-sm" type="button" data-post-library>Use a sticker / GIF</button></div><p class="panel-help">Up to 8 attachments. Images and GIFs: 20 MB each; videos: 100 MB each.</p><p class="form-message" data-social-message role="status"></p><div class="actions"><button class="btn btn-ghost" type="button" data-save-post-draft>Save draft</button><button class="btn btn-primary" type="submit">${existing?'Save changes':'Publish post'}</button></div></form>`}</section><p class="panel-help">Drafts are kept in this browser tab. Publish to save a post to your account. Leaving with unsaved changes will show a warning.</p></div>`;
+    root.innerHTML = `<div class="wrap post-compose-page"><div class="post-compose-heading"><div><a class="text-link" href="${returnHref}">← Back to ${returnHref==='social.html'?'Social':'posts'}</a><h1>${existing ? 'Edit post' : 'Create a post'}</h1><p>Write, add media, and choose who can see your post.</p></div><button class="btn btn-ghost btn-sm" type="button" data-cancel-post>Cancel</button></div><section class="post-draft-notice" data-draft-notice hidden><span>A draft is available in this browser tab.</span><button class="btn btn-ghost btn-sm" type="button" data-restore-post-draft>Restore draft</button><button class="text-link" type="button" data-discard-post-draft>Discard draft</button></section><section class="post-compose-card">${`<form data-post-editor><div class="social-form-grid"><label>Post type<select name="kind"><option value="post">Post</option><option value="announcement" ${existing?.kind==='announcement'?'selected':''}>Announcement</option></select></label><label>Visibility<select name="visibility">${[['public','Public'],['friends','Friends'],['party','Party'],['self','Self']].map(([key,label])=>`<option value="${key}" ${existing?.visibility===key?'selected':''}>${label}</option>`).join('')}</select></label><label data-post-party ${existing?.visibility==='party'?'':'hidden'}>Party<select name="partyId">${parties.map(circle=>`<option value="${circle.id}" ${existing?.partyId===circle.id?'selected':''}>${escape(circle.name)}</option>`).join('')}</select><small>${parties.length?'Only members of this party can view the post.':'Create a party from General → Parties & groups first.'}</small></label></div><div class="rich-toolbar" role="toolbar" aria-label="Text formatting">${[['bold','B','Bold'],['italic','I','Italic'],['underline','U','Underline'],['strikeThrough','S','Strikethrough'],['justifyLeft','⇤','Align left'],['justifyCenter','↔','Align center'],['justifyRight','⇥','Align right'],['insertUnorderedList','• List','Bulleted list'],['insertOrderedList','1. List','Numbered list'],['createLink','↗ Link','Add link'],['removeFormat','Clear','Clear formatting']].map(([command,label,title])=>`<button type="button" data-rich-command="${command}" aria-label="${title}" title="${title}">${label}</button>`).join('')}</div><div class="rich-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Post text"></div><div class="social-attachments" data-post-attachments></div><div class="social-composer-tools"><label class="btn btn-ghost btn-sm">Add images / video / GIF<input type="file" data-post-files accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm" multiple hidden></label><button class="btn btn-ghost btn-sm" type="button" data-post-library>Use a sticker / GIF</button></div><p class="panel-help">Up to 8 attachments. Images and GIFs: 20 MB each; videos: 100 MB each.</p><p class="form-message" data-social-message role="status"></p><div class="actions"><button class="btn btn-ghost" type="button" data-save-post-draft>Save draft</button><button class="btn btn-primary" type="submit">${existing?'Save changes':'Publish post'}</button></div></form>`}</section><p class="panel-help">Drafts are kept in this browser tab. Publish to save a post to your account. Leaving with unsaved changes will show a warning.</p></div>`;
     const form = $('[data-post-editor]', root), editor = $('.rich-editor', form), message = $('[data-social-message]', form);
     editor.innerHTML = existing?.html || '';
     let attachments = existing?.attachments.map(item => ({...item})) || [], uploading = false, saving = false;
@@ -126,7 +135,7 @@
     };
     $('[data-cancel-post]', root).onclick = () => {
       if (dirty() && !confirm('Leave with unsaved post changes? You can return to recover the draft in this browser tab.')) return;
-      if (dirty()) recover(); activePostEditor = null; location.assign('account.html?tab=posts');
+      if (dirty()) recover(); activePostEditor = null; location.assign(returnHref);
     };
     let selection = null;
     const rememberSelection = () => { const current = getSelection(); if (current.rangeCount && editor.contains(current.anchorNode)) selection = current.getRangeAt(0).cloneRange(); };
@@ -180,12 +189,88 @@
         const result = await api('/api/social/posts' + (existing ? '/' + existing.id : ''), existing ? 'PUT' : 'POST', {...submitted, clientId:form.dataset.clientId || (form.dataset.clientId = crypto.randomUUID())});
         try { sessionStorage.removeItem(draftKey); } catch {}
         activePostEditor = null;
-        location.assign('account.html?tab=posts&post=' + encodeURIComponent(result.post.id));
+        location.assign(returnHref==='social.html'?'social.html?post='+encodeURIComponent(result.post.id):'account.html?tab=posts&post='+encodeURIComponent(result.post.id));
       } catch (error) { formError(form, error); }
       finally { saving = false; editor.contentEditable = 'true'; controls.forEach(control => control.disabled = false); formBusy(form, false); }
     });
     document.title = (existing ? 'Edit Post' : 'Create Post') + ' | Helunemi';
     if (focusVisibility) form.elements.visibility.focus(); else editor.focus();
+  }
+
+  const socialState={root:null,posts:[],stories:[],friends:new Set(),filter:'all',query:'',cursor:null,loading:false};
+  function socialStoryMarkup(story){
+    const attachment=story.attachment, cover=attachment?.previewUrl||attachment?.url;
+    const face=story.author.avatarImage?`<img src="${escape(story.author.avatarImage)}" alt="">`:escape(story.author.username.slice(0,2).toUpperCase());
+    return `<button class="social-story" type="button" data-social-story="${escape(story.id)}" aria-label="Open ${escape(story.author.username)}’s latest post"><span class="social-story-cover${cover?' has-cover':''}">${cover?`<img src="${escape(cover)}" alt="" loading="lazy">`:`<span aria-hidden="true">✦</span>`}</span><span class="social-story-author"><span class="social-avatar">${face}</span><strong>${escape(story.author.username)}</strong><small>${escape(story.snippet||'Shared a new post')}</small></span></button>`;
+  }
+  function paintSocialStories(){
+    const rail=$('[data-social-stories]',socialState.root);if(!rail)return;
+    rail.innerHTML=`<div class="social-stories-heading"><div><span class="social-kicker">FRESH FROM THE COMMUNITY</span><h2>Latest stories</h2></div><span>One recent post per creator</span></div><div class="social-stories-track"><button class="social-story social-story-create" type="button" data-social-new-post><span class="social-story-cover"><span aria-hidden="true">＋</span></span><span class="social-story-author"><strong>Share a moment</strong><small>Start a conversation</small></span></button>${socialState.stories.map(socialStoryMarkup).join('')}</div>`;
+  }
+  function visibleSocialPosts(){
+    const query=socialState.query.trim().toLocaleLowerCase();
+    return socialState.posts.filter(post=>{
+      if(socialState.filter==='friends'&&!socialState.friends.has(post.authorId)&&post.authorId!==getUser()?.id)return false;
+      if(socialState.filter==='media'&&!post.attachments.length)return false;
+      if(!query)return true;
+      const plain=post.html.replace(/<[^>]*>/g,' ');
+      return `${post.author.username} ${plain} ${post.attachments.map(item=>item.name||'').join(' ')}`.toLocaleLowerCase().includes(query);
+    });
+  }
+  function paintSocialFeed(message=''){
+    const root=socialState.root,feed=$('[data-social-feed]',root);if(!feed)return;
+    const posts=visibleSocialPosts();
+    feed.innerHTML=message?`<div class="social-feed-notice"><p>${escape(message)}</p><button type="button" data-social-retry-feed>Try again</button></div>`:posts.length?posts.map(postMarkup).join(''):`<div class="social-first-post"><span aria-hidden="true">✦</span><h2>${socialState.query?'No posts match that search.':'A little quiet, for now.'}</h2><p>${socialState.query?'Try another name or phrase.':'Be the first to share an idea, a screenshot, or a small win.'}</p><button class="btn btn-primary" type="button" data-social-new-post>${getUser()?'Create the first post':'Log in to post'}</button></div>`;
+    const more=$('[data-social-load-more]',root);if(more)more.hidden=!socialState.cursor||Boolean(message);
+    const count=$('[data-social-feed-count]',root);if(count)count.textContent=`${posts.length} ${posts.length===1?'post':'posts'}`;
+  }
+  async function fetchSocialFeed(append=false){
+    const root=socialState.root;if(!root||socialState.loading)return;
+    socialState.loading=true;
+    if(!append){$('[data-social-feed]',root).innerHTML='<div class="social-feed-skeleton"><i></i><i></i><i></i></div>';}
+    try{
+      const suffix=append&&socialState.cursor?'?after='+encodeURIComponent(socialState.cursor):'';
+      const result=await api('/api/social/feed'+suffix);if(socialState.root!==root)return;
+      const incoming=result.posts||[];
+      socialState.posts=append?[...socialState.posts,...incoming.filter(post=>!socialState.posts.some(old=>old.id===post.id))]:incoming;
+      socialState.stories=append?[...socialState.stories,...(result.stories||[]).filter(story=>!socialState.stories.some(old=>old.authorId===story.authorId))].slice(0,16):result.stories||[];
+      socialState.cursor=result.nextCursor||null;paintSocialStories();paintSocialFeed();
+      const wanted=new URLSearchParams(location.search).get('post');
+      if(wanted&&!append){let target=socialState.posts.find(post=>post.id===wanted);if(!target){try{target=(await api('/api/social/posts/'+encodeURIComponent(wanted))).post;socialState.posts.unshift(target);paintSocialFeed();}catch(error){toast('This post is unavailable or its audience is limited.');}}
+        if(target)setTimeout(()=>document.getElementById('post-'+target.id)?.scrollIntoView({behavior:'smooth',block:'center'}),80);
+      }
+    }catch(error){if(socialState.root===root)paintSocialFeed(`The feed could not load: ${error.message}`);}
+    finally{socialState.loading=false;}
+  }
+  async function mountSocialPage(root){
+    socialState.root=root;socialState.posts=[];socialState.stories=[];socialState.friends=new Set();socialState.filter='all';socialState.query='';socialState.cursor=null;
+    root.innerHTML=`<div class="social-page"><header class="social-topbar"><a class="social-brand" href="index.html"><img src="assets/golden-spiral-sun-icon.png" alt=""><span>Helunemi</span><small>Social</small></a><label class="social-search"><span aria-hidden="true">⌕</span><span class="visually-hidden">Search the social feed</span><input type="search" data-social-search placeholder="Search people and posts…" autocomplete="off"></label><div class="social-top-actions"><a class="social-community-link" href="chat.html"><span class="social-community-glyph" aria-hidden="true">◈</span><span><strong>Community</strong><small>Friends · parties · groups</small></span></a><button class="social-theme-toggle" type="button" data-theme-toggle aria-label="Switch between light and dark theme" title="Switch theme">◐</button><a class="social-profile-link" href="account.html">${getUser()?avatarBadge(getUser()):'<span class="social-avatar">G</span>'}<span>${getUser()?escape(getUser().username):'Guest'}</span></a></div></header><div class="social-layout"><aside class="social-left-rail"><section class="social-rail-card social-space-card"><span class="social-orbit-mark">✦</span><span class="social-kicker">YOUR SPACE</span><h2>Make room for ideas.</h2><p>Follow the people behind Helunemi’s projects and share what you’re making, playing, or imagining.</p><button class="btn btn-primary" type="button" data-social-new-post>${getUser()?'Create a post':'Log in to post'}</button></section><nav class="social-feed-filters" aria-label="Feed filters"><span class="social-kicker">YOUR FEED</span><button type="button" data-social-filter="all" aria-pressed="true"><span>✦</span> For you</button><button type="button" data-social-filter="friends" aria-pressed="false"><span>♧</span> Friends</button><button type="button" data-social-filter="media" aria-pressed="false"><span>▧</span> With media</button></nav><a class="social-community-card" href="chat.html"><span>◈</span><strong>Keep the conversation going</strong><small>Open friends, party, and group chats</small><b>↗</b></a></aside><main class="social-main"><section class="social-stories-panel" data-social-stories aria-label="Latest community posts"><div class="social-feed-skeleton"><i></i><i></i></div></section><section class="social-composer-entry"><div class="social-composer-top">${getUser()?avatarBadge(getUser()):'<span class="social-avatar">G</span>'}<button type="button" class="social-composer-prompt" data-social-new-post>${getUser()?`What are you thinking, ${escape(getUser().username)}?`:'Join in with a Helunemi account'}</button></div><div class="social-composer-shortcuts"><button type="button" data-social-new-post><span>▧</span> Photo or video</button><button type="button" data-social-new-post><span>✦</span> Share an idea</button><span>Posts can include up to 8 images or videos</span></div></section><div class="social-feed-heading"><div><span class="social-kicker">THE HELUNEMI COMMUNITY</span><h1>Social feed</h1></div><span data-social-feed-count>Loading posts…</span></div><div class="social-feed-list" data-social-feed aria-live="polite"></div><button class="social-load-more" type="button" data-social-load-more hidden>Show more posts <span>↓</span></button></main><aside class="social-right-rail"><section class="social-rail-card social-community-intro"><span class="social-kicker">A PLACE TO BUILD TOGETHER</span><h2>Small studio. Big worlds.</h2><p>Helunemi is an early game development community. Follow project updates, discover members’ work, and trade inspiration along the way.</p><a class="social-inline-link" href="chat.html">Visit Community Chat <span>↗</span></a></section><section class="social-rail-card social-guidelines-card"><span class="social-kicker">GOOD TO KNOW</span><h3>Make it a good place to share</h3><ul><li>Credit artists and creators.</li><li>Keep posts welcoming and safe.</li><li>Only share media you have permission to post.</li></ul><a href="terms.html">Community terms ↗</a></section><div class="social-footer-note"><span>☼</span><span>Made by a small team<br>with worlds in mind.</span></div></aside></div></div>`;
+    document.title='Social | Helunemi';
+    if(getUser())try{const context=await loadContext(getUser().id);socialState.friends=new Set((context.friends||[]).map(friend=>friend.id));}catch{}
+    await fetchSocialFeed();
+  }
+  function openShareDialog(postId){
+    const post=cache.get(postId);if(!post)return;
+    const url=shareUrl(post);const dialog=shell(`<p class="social-share-intro">Pass this post along. People who open the link will only see it if they’re included in its audience.</p><label class="social-share-field">Post link<input type="url" readonly value="${escape(url)}" data-social-share-url></label><div class="social-share-actions"><button class="btn btn-primary" type="button" data-social-copy-link="${escape(url)}">Copy link</button><button class="btn btn-ghost" type="button" data-social-native-share="${post.id}">Share with…</button></div><p class="social-share-status" data-social-share-status role="status"></p>`, 'Share this post');
+    dialog.dataset.sharePost=post.id;
+  }
+  async function openReactionPicker(postId){
+    const post=cache.get(postId);if(!post)return;
+    const builtIns=[['like','👍','Like'],['love','❤️','Love'],['laugh','😂','Laugh'],['wow','😮','Wow'],['sad','😢','Support'],['fire','🔥','Fire'],['clap','👏','Celebrate']];
+    let personal=[],catalog=[];
+    try{const requests=[api('/api/social/media?kind=sticker')];if(getUser())requests.push(api('/api/social/media?user='+encodeURIComponent(getUser().id)+'&kind=sticker&catalog=1'));else requests.push(Promise.resolve({items:[]}));[personal,catalog]=await Promise.all(requests);}
+    catch(error){toast(error.message);return;}
+    const custom=[...(personal.items||[]),...(catalog.items||[])].filter((item,index,all)=>item.kind==='sticker'&&all.findIndex(other=>other.id===item.id)===index);
+    const content=`<p class="social-reaction-intro">Pick the feeling that fits. Your custom stickers can be used as reactions too.</p><div class="social-reaction-grid">${builtIns.map(([key,emoji,label])=>`<button type="button" data-social-reaction="${key}" data-social-post="${postId}" ${getUser()?'':'disabled'}><span>${emoji}</span><small>${label}</small></button>`).join('')}</div><div class="social-custom-emoji-section"><h3>Your and store emojis</h3>${custom.length?`<div class="social-custom-emoji-grid">${custom.map(item=>`<button type="button" data-social-reaction="media:${item.id}" data-social-post="${postId}" title="${escape(item.name)}${item.locked?' · '+escape(money(item)):''}" ${getUser()&&!item.locked?'':'disabled'}><img src="${escape(item.previewUrl||item.url)}" alt=""><small>${escape(item.name)}</small>${item.locked?'<i>Locked</i>':''}</button>`).join('')}</div>`:empty(getUser()?'Add stickers from your profile gallery to use them as reactions.':'Log in to use reactions.')}<p class="panel-help">Store emojis marked as locked need access before they can be used. Paid checkout is not connected yet.</p></div>${getUser()?'':'<a class="btn btn-primary" href="account.html?mode=login">Log in to react</a>'}`;
+    const dialog=shell(content,'React to this post');dialog.dataset.reactionPost=postId;
+  }
+  function socialReaction(postId,key){
+    if(!getUser()){location.assign('account.html?mode=login');return;}
+    api('/api/social/posts/'+encodeURIComponent(postId)+'/react','POST',{reaction:key}).then(result=>{
+      const old=$('#post-'+result.post.id);if(old){const openComments=!$('[data-comments]',old)?.hidden;old.outerHTML=postMarkup(result.post);if(openComments)$('[data-comments="'+result.post.id+'"]')?.removeAttribute('hidden');}
+      const dialog=$('.social-dialog');if(dialog?.dataset.reactionPost===postId)dialog.close();
+      if(socialState.posts.some(post=>post.id===postId)){const index=socialState.posts.findIndex(post=>post.id===postId);socialState.posts[index]=result.post;}
+    }).catch(error=>toast(error.message));
   }
 
   function galleryCard(item) {
@@ -265,11 +350,21 @@
     if(!event.target.closest('.content-options'))closeOptions();
     const button=event.target.closest('button,[data-cfc-open]');if(!button)return;
     try{
+      if(button.hasAttribute('data-social-new-post')){if(!getUser()){location.assign('account.html?mode=login');return;}await postEditor();return;}
+      if(button.dataset.socialFilter){socialState.filter=button.dataset.socialFilter;$$('[data-social-filter]',socialState.root).forEach(item=>item.setAttribute('aria-pressed',String(item===button)));paintSocialFeed();return;}
+      if(button.dataset.socialStory){socialState.filter='all';socialState.query='';const search=$('[data-social-search]',socialState.root);if(search)search.value='';$$('[data-social-filter]',socialState.root).forEach(item=>item.setAttribute('aria-pressed',String(item.dataset.socialFilter==='all')));if(!socialState.posts.some(post=>post.id===button.dataset.socialStory)){try{const result=await api('/api/social/posts/'+encodeURIComponent(button.dataset.socialStory));socialState.posts.unshift(result.post);}catch(error){toast('This post is unavailable or its audience is limited.');return;}}paintSocialFeed();setTimeout(()=>document.getElementById('post-'+button.dataset.socialStory)?.scrollIntoView({behavior:'smooth',block:'center'}),40);return;}
+      if(button.hasAttribute('data-social-load-more')){await fetchSocialFeed(true);return;}
+      if(button.hasAttribute('data-social-retry-feed')){await fetchSocialFeed();return;}
+      if(button.dataset.socialReactionPicker){await openReactionPicker(button.dataset.socialReactionPicker);return;}
+      if(button.dataset.socialReaction&&button.dataset.socialPost){socialReaction(button.dataset.socialPost,button.dataset.socialReaction);return;}
+      if(button.dataset.socialQuickReaction&&button.dataset.socialPost){socialReaction(button.dataset.socialPost,button.dataset.socialQuickReaction);return;}
+      if(button.dataset.socialCopyLink){await copyLink(button.dataset.socialCopyLink);const status=$('[data-social-share-status]',button.closest('.social-dialog'));if(status)status.textContent='Link copied. Anyone who opens it will still need to be in the post’s audience.';return;}
+      if(button.dataset.socialNativeShare){const post=cache.get(button.dataset.socialNativeShare),url=post&&shareUrl(post);if(!post||!url)return;if(navigator.share){try{await navigator.share({title:`Post by ${post.author.username} · Helunemi Social`,text:'Join the conversation on Helunemi.',url});}catch(error){if(error.name!=='AbortError')toast(error.message||'Sharing was cancelled.');}}else await copyLink(url);return;}
       if(button.dataset.profileTab){await selectTab(button.dataset.profileTab);return;}
       if(button.hasAttribute('data-social-new-post')){await postEditor();return;}
       if(button.dataset.socialEditPost){closeOptions();await postEditor(cache.get(button.dataset.socialEditPost),null,button.hasAttribute('data-focus-visibility'));return;}
-      if(button.dataset.socialShare){await copyLink(shareUrl(cache.get(button.dataset.socialShare)));return;}
-      if(button.dataset.socialDeletePost){if(!confirm('Delete this post and its comments?'))return;await api('/api/social/posts/'+button.dataset.socialDeletePost,'DELETE');$('#post-'+button.dataset.socialDeletePost)?.remove();toast('Post deleted.');return;}
+      if(button.dataset.socialShare){openShareDialog(button.dataset.socialShare);return;}
+      if(button.dataset.socialDeletePost){if(!confirm('Delete this post and its comments?'))return;await api('/api/social/posts/'+button.dataset.socialDeletePost,'DELETE');$('#post-'+button.dataset.socialDeletePost)?.remove();if(socialState.root?.isConnected&&socialState.posts.some(post=>post.id===button.dataset.socialDeletePost)){socialState.posts=socialState.posts.filter(post=>post.id!==button.dataset.socialDeletePost);socialState.stories=socialState.stories.filter(story=>story.id!==button.dataset.socialDeletePost);paintSocialStories();paintSocialFeed();}toast('Post deleted.');return;}
       if(button.dataset.socialLike){button.disabled=true;try{const result=await api('/api/social/posts/'+button.dataset.socialLike+'/like','POST',{});$('#post-'+result.post.id).outerHTML=postMarkup(result.post);}finally{button.disabled=false;}return;}
       if(button.dataset.socialComments){const panel=$('[data-comments="'+button.dataset.socialComments+'"]');panel.hidden=!panel.hidden;button.setAttribute('aria-expanded',String(!panel.hidden));return;}
       if(button.dataset.socialDeleteComment){const result=await api('/api/social/posts/'+button.dataset.parentPost+'/comments/'+button.dataset.socialDeleteComment,'DELETE');$('#post-'+result.post.id).outerHTML=postMarkup(result.post);$('[data-comments="'+result.post.id+'"]').hidden=false;return;}
@@ -292,7 +387,8 @@
       if(button.dataset.circleRespond||button.dataset.circleLeave||button.dataset.circleRemove){const id=button.dataset.circleRespond||button.dataset.circleLeave||button.dataset.circleRemove,action=button.dataset.circleRespond?'respond':button.dataset.circleRemove?'remove':'leave';if(action!=='respond'&&!confirm(action==='remove'?'Remove this member’s access?':'Leave or delete this party/group? Access is revoked immediately.'))return;await api('/api/social/circles/'+id+'/'+action,'POST',{accept:button.dataset.accept==='true',userId:button.dataset.user});await circlesPanel($('[data-social-circles]',mounted.root),mounted);return;}
     }catch(error){toast(error.message);}
   });
-  document.addEventListener('submit',async event=>{const form=event.target;if(!form.matches('[data-comment-form]'))return;event.preventDefault();formBusy(form,true);try{const result=await api('/api/social/posts/'+form.dataset.commentForm+'/comments','POST',{text:form.elements.text.value});$('#post-'+result.post.id).outerHTML=postMarkup(result.post);$('[data-comments="'+result.post.id+'"]').hidden=false;}catch(error){toast(error.message);}finally{formBusy(form,false);}});
+  document.addEventListener('input',event=>{if(event.target.matches('[data-social-search]')&&socialState.root){socialState.query=event.target.value;paintSocialFeed();}});
+  document.addEventListener('submit',async event=>{const form=event.target;if(!form.matches('[data-comment-form]'))return;event.preventDefault();formBusy(form,true);try{const result=await api('/api/social/posts/'+form.dataset.commentForm+'/comments','POST',{text:form.elements.text.value});$('#post-'+result.post.id).outerHTML=postMarkup(result.post);$('[data-comments="'+result.post.id+'"]').hidden=false;if(socialState.posts.some(post=>post.id===result.post.id)){const index=socialState.posts.findIndex(post=>post.id===result.post.id);socialState.posts[index]=result.post;}}catch(error){toast(error.message);}finally{formBusy(form,false);}});
   window.addEventListener('popstate',()=>{if(mounted&&mounted.root.isConnected)selectTab(new URLSearchParams(location.search).get('tab')||'general',false);});
-  window.SolarisSocial={configure(config){({api,getUser,toast,cardMarkup,captureCard,viewCard}=config);},mount,mountPostPage,options,copyLink};
+  window.SolarisSocial={configure(config){({api,getUser,toast,cardMarkup,captureCard,viewCard}=config);},mount,mountPostPage,mountSocialPage,options,copyLink};
 })();

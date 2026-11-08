@@ -35,7 +35,7 @@
   const app = $('#app');
   const page = document.body.dataset.page || 'home';
   const TERMS_VERSION = '2026-10-25';
-  const titles = {terms:'Terms & Privacy',home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat',publish:'Publish','create-post':'Create Post','shop-product':'Manage Product','explore-ais':'Explore AIs'};
+  const titles = {terms:'Terms & Privacy',home:'',list:'List',members:'Members',games:'Games',updates:'Updates',account:'Profile',arts:'Arts',groups:'Groups',download:'Download',shop:'Shop',project:'Project',artwork:'Artwork',chat:'Community Chat',social:'Social',publish:'Publish','create-post':'Create Post','shop-product':'Manage Product','explore-ais':'Explore AIs'};
   let currentUser = null;
   let ownerPosts = {games:[],arts:[],updates:[],downloads:[],gameBuilds:[],deletedBuiltins:[]};
   let contentPermissions={games:[],arts:[],updates:[]};
@@ -1691,7 +1691,7 @@
     if ($('#site-quick-menu')) return;
     const menu = document.createElement('div');
     menu.id = 'site-quick-menu'; menu.className = 'quick-menu';
-    menu.innerHTML = `<button class="quick-menu-toggle" id="quick-menu-toggle" type="button" data-quick-menu-toggle aria-label="Open quick menu" aria-expanded="false" aria-controls="quick-menu-panel" title="Menu"><span class="quick-menu-icon" aria-hidden="true"></span></button><nav class="quick-menu-panel" id="quick-menu-panel" aria-label="Quick links" hidden><a href="chat.html" data-quick-menu-link><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 2v-10a9 9 0 0 1 18 0Z"></path><path d="M7 11h8M7 15h5"></path></svg><span>Community</span></a><a href="explore-ais.html" data-quick-menu-link${page === 'explore-ais' ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8Z"></path></svg><span>Explore AIs</span></a><a href="terms.html" data-quick-menu-link${page === 'terms' ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6Z"></path><path d="M14 3v5h5M9 12h7M9 16h7"></path></svg><span>Terms of Service</span></a></nav>`;
+     menu.innerHTML = `<button class="quick-menu-toggle" id="quick-menu-toggle" type="button" data-quick-menu-toggle aria-label="Open quick menu" aria-expanded="false" aria-controls="quick-menu-panel" title="Menu"><span class="quick-menu-icon" aria-hidden="true"></span></button><nav class="quick-menu-panel" id="quick-menu-panel" aria-label="Quick links" hidden><a href="chat.html" data-quick-menu-link><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 2v-10a9 9 0 0 1 18 0Z"></path><path d="M7 11h8M7 15h5"></path></svg><span>Community</span></a><a href="social.html" data-quick-menu-link${page === 'social' ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5 12 3l7 2.5v6.2c0 4.3-3 7.1-7 9.3-4-2.2-7-5-7-9.3Z"></path><path d="M8 12h.01M12 12h.01M16 12h.01"></path></svg><span>Social</span></a><a href="explore-ais.html" data-quick-menu-link${page === 'explore-ais' ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8Z"></path></svg><span>Explore AIs</span></a><a href="terms.html" data-quick-menu-link${page === 'terms' ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6Z"></path><path d="M14 3v5h5M9 12h7M9 16h7"></path></svg><span>Terms of Service</span></a></nav>`;
     document.body.append(menu);
     $('#quick-menu-toggle', menu).addEventListener('keydown', event => {
       if (!['ArrowDown','ArrowUp'].includes(event.key)) return;
@@ -2282,6 +2282,7 @@
     chat() {
       return `<div class="community-shell community-page-shell messenger-shell"><div class="community-layout"><aside class="community-sidebar" data-community-sidebar></aside><main class="community-main" data-community-main></main></div></div>`;
     },
+    social() { return '<div class="social-loading-page" aria-live="polite"><div class="social-feed-skeleton"><i></i><i></i><i></i></div></div>'; },
     home() {
       const inDevelopment = DATA.games.filter(game => String(game.status || '').trim().toLowerCase() === 'in development');
       return `<section class="hero" aria-labelledby="hero-title"><div class="hero-in"><h1 id="hero-title">Helunemi</h1>
@@ -3178,14 +3179,16 @@
     if (page === 'chat') await initializeCommunityPage();
     if (page === 'create-post') await window.SolarisSocial.mountPostPage(app);
     if (page === 'shop-product') await window.SolarisShop.editor(app);
-    if (['home','games','project','arts','artwork','updates','download','shop','publish'].includes(page)) renderPage();
+    if (['home','games','project','arts','artwork','updates','download','shop','publish','social'].includes(page)) renderPage();
+    if (page === 'social') await window.SolarisSocial?.mountSocialPage(app);
     try { await resumePendingFirebaseSignup(); }
     catch (error) { if (page === 'account' && !currentUser) setMessage('#auth-message',error.message); }
-  }).catch(error => {
+  }).catch(async error => {
     currentUser = null;
     profilePreview();
     if (page === 'chat') renderCommunityUI();
     if (page === 'account') app.innerHTML = isGuest && !new URLSearchParams(location.search).has('mode') ? guestDashboard() : authView('signup','Could not reach the account server. Start the site with node server.js and reload.');
+    if (page === 'social') await window.SolarisSocial?.mountSocialPage(app);
   });
 
   let friendCardCanvasPointerHandled = false;
