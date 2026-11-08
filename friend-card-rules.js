@@ -14,6 +14,7 @@
     {id:'message',label:'Message',view:'full'}
   ].map(Object.freeze));
   const action=value=>actions.find(item=>item.id===value)||actions[0];
+  const visibilityMode=layer=>{if(layer?.type!=='button')return ['preview','full','both'].includes(layer?.visibilityMode)?layer.visibilityMode:'both';const selected=action(layer.buttonAction);return selected.id==='open-cfc'?'preview':['preview','full','both'].includes(layer.visibilityMode)?layer.visibilityMode:selected.view;};
   // Clip the rotated button to the card. Off-card or transparent buttons cannot satisfy navigation.
   function buttonOnCard(layer,design){
     if(layer.visible===false||Number(layer.opacity??100)<=0)return false;
@@ -40,5 +41,5 @@
     const found=layers.some(layer=>layer.type==='button'&&action(layer.buttonAction).id==='open-cfc'&&layer.visibilityMode==='preview'&&buttonOnCard(layer,design));
     return found?'':'Cannot save or post: add a visible Open CFC button inside the Preview card. Keep it on the card, turn on its visibility, and set its opacity above zero.';
   }
-  return Object.freeze({actions,action,buttonOnCard,openButtonIssue});
+  return Object.freeze({actions,action,visibilityMode,buttonOnCard,openButtonIssue});
 });
