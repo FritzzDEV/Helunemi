@@ -2050,7 +2050,7 @@ body[data-page="explore-ais"]>#app{position:fixed;inset:0;width:100%;max-width:n
 .cover-solar,.project-banner-solar{background:radial-gradient(circle at 72% 30%,#ffe16b 0 10%,#ff9d38 11% 20%,transparent 21%),linear-gradient(135deg,#9e351e,#ee763c 52%,#ffd36c)}
 .cover-lunar,.project-banner-lunar{background:radial-gradient(circle at 72% 32%,#f5f0d8 0 11%,transparent 11.5%),radial-gradient(circle at 75% 28%,#26304b 0 10%,transparent 10.5%),linear-gradient(135deg,#131d39,#465b82 58%,#b9c5d4)}
 .cover-eclipse,.project-banner-eclipse{background:radial-gradient(circle at 70% 32%,#10111c 0 13%,#eb894b 13.5% 15%,transparent 15.5%),linear-gradient(135deg,#171321,#43294d 56%,#ba554d)}
-.cover-lovely,.project-banner-lovely{background:radial-gradient(circle at 18% 25%,#fff7 0 4%,transparent 4.5%),radial-gradient(circle at 75% 70%,#fff6 0 6%,transparent 6.5%),linear-gradient(135deg,#f7a5bd,#b85a9b 60%,#704e93)}
+.cover-lovely,.project-banner-lovely{background:radial-gradient(circle at 18% 25%,#ffd9e6 0 4%,transparent 4.5%),radial-gradient(circle at 75% 70%,#ffbed2 0 6%,transparent 6.5%),linear-gradient(135deg,#ffc0d6,#ef558e 57%,#a51f58)}
 .cover-dark,.project-banner-dark{background:linear-gradient(135deg,#090a0d,#202329 55%,#3b3030)}
 .cover-fluids,.project-banner-fluids{background:radial-gradient(ellipse at 24% 78%,#56e8ce 0 15%,transparent 42%),radial-gradient(ellipse at 83% 22%,#9485ff 0 17%,transparent 43%),linear-gradient(135deg,#124f67,#312558)}
 .cover-slimey,.project-banner-slimey{background:radial-gradient(ellipse at 76% 20%,#beff48 0 10%,transparent 35%),radial-gradient(ellipse at 20% 85%,#63d743 0 18%,transparent 44%),linear-gradient(135deg,#16462d,#489d4f 55%,#b7dc58)}
@@ -2063,7 +2063,7 @@ body[data-page="explore-ais"]>#app{position:fixed;inset:0;width:100%;max-width:n
 .project-icon-solar{background:linear-gradient(145deg,#b64924,#ff9c3a 62%,#ffdc6b);color:#542510}
 .project-icon-lunar{background:linear-gradient(145deg,#17223f,#647899 62%,#d5d9dc);color:#fff}
 .project-icon-eclipse{background:linear-gradient(145deg,#171421,#56324e 62%,#df7a55);color:#fff}
-.project-icon-lovely{background:linear-gradient(145deg,#f6a5bd,#b85a9b 62%,#704e93);color:#fff}
+.project-icon-lovely{background:linear-gradient(145deg,#ffc0d6,#ef558e 62%,#a51f58);color:#fff}
 .project-icon-dark{background:linear-gradient(145deg,#090a0d,#3b3030);color:#fff}
 .project-icon-fluids{background:linear-gradient(145deg,#124f67,#397a7f 52%,#534783);color:#fff}
 .project-icon-slimey{background:linear-gradient(145deg,#16462d,#63b84f 58%,#c6e45a);color:#173716}
@@ -2087,3 +2087,22 @@ body[data-page="explore-ais"]>#app{position:fixed;inset:0;width:100%;max-width:n
 .site-intro-footer p{max-width:78ch;margin:0}
 .site-intro-actions{display:flex;flex:none;flex-wrap:wrap;gap:.5rem}
 @media(max-width:700px){.site-intro-grid{grid-template-columns:1fr}.site-intro-footer{align-items:flex-start;flex-direction:column}.site-intro{padding-top:1.8rem}}
+
+
+.cover.has-banner::before,.project-banner.has-banner::after{display:none}
+/* Make every fallback cover visibly match its selected project theme. */
+.cover::before,.project-banner::after{position:absolute;inset:0;content:"";z-index:0;pointer-events:none;opacity:.85}
+.project-banner::after{z-index:1}
+.cover-frost::before,.project-banner-frost::after{background-image:radial-gradient(circle at 18% 24%,#fff 0 1px,transparent 2px),radial-gradient(circle at 33% 66%,#dffaff 0 2px,transparent 3px),radial-gradient(circle at 82% 42%,#fff 0 1px,transparent 2px),linear-gradient(120deg,transparent 38%,#d9f7ff22 39% 40%,transparent 41%)}
+.cover-collide::before,.project-banner-collide::after{background:radial-gradient(circle at 70% 36%,transparent 0 8%,#ffc47788 8.2% 8.6%,transparent 8.9% 16%,#ff705677 16.2% 16.6%,transparent 16.9%),radial-gradient(circle at 70% 36%,#fff9 0 2px,transparent 3px)}
+.cover-starry::before,.project-banner-starry::after{background-image:radial-gradient(circle at 12% 20%,#fff 0 1.5px,transparent 2px),radial-gradient(circle at 28% 72%,#ffe7a8 0 1.5px,transparent 2px),radial-gradient(circle at 53% 34%,#fff 0 1px,transparent 2px),radial-gradient(circle at 81% 65%,#d7e5ff 0 2px,transparent 3px),radial-gradient(circle at 90% 18%,#fff 0 1px,transparent 2px)}
+.cover-clouds::before,.project-banner-clouds::after{background:radial-gradient(ellipse at 14% 86%,#fff9 0 8%,transparent 22%),radial-gradient(ellipse at 27% 82%,#fff9 0 10%,transparent 24%),radial-gradient(ellipse at 76% 88%,#fff9 0 12%,transparent 27%),radial-gradient(ellipse at 88% 83%,#fff9 0 9%,transparent 22%)}
+.cover-solar::before,.project-banner-solar::after{background:repeating-conic-gradient(from 0deg at 72% 30%,#fff5 0deg 2deg,transparent 2deg 18deg);mask-image:radial-gradient(circle at 72% 30%,#000 0 12%,transparent 48%)}
+.cover-lunar::before,.project-banner-lunar::after{background:radial-gradient(circle at 72% 32%,#fff8e4 0 10%,transparent 10.5%),radial-gradient(circle at 76% 27%,#26304b 0 9%,transparent 9.5%),radial-gradient(circle at 20% 28%,#fff 0 1.5px,transparent 2px),radial-gradient(circle at 44% 70%,#fff 0 1px,transparent 2px),radial-gradient(circle at 88% 64%,#fff 0 1.5px,transparent 2px)}
+.cover-eclipse::before,.project-banner-eclipse::after{background:radial-gradient(circle at 70% 32%,transparent 0 12%,#ffb16eaa 12.3% 13%,transparent 13.4% 19%,#ffc27655 19.3% 20%,transparent 20.4%),linear-gradient(110deg,transparent 48%,#ff9c6333 49% 50%,transparent 51%)}
+.cover-lovely::before,.project-banner-lovely::after{inset:auto;top:7%;right:8%;width:max-content;height:auto;color:#fff7;font:900 clamp(3.5rem,9vw,7rem)/1 Georgia,serif;content:"♥";text-shadow:-1.2em 1.15em 0 #fff4,-.45em 2.05em 0 #8e174833,.35em 1.55em 0 #fff3;transform:rotate(12deg)}
+.cover-dark::before,.project-banner-dark::after{background:repeating-linear-gradient(135deg,transparent 0 28px,#ffffff0b 29px 30px,transparent 31px 58px),radial-gradient(ellipse at 80% 15%,#bd394622,transparent 48%)}
+.cover-fluids::before,.project-banner-fluids::after{background:radial-gradient(ellipse at 18% 28%,#75f4df66 0 9%,transparent 32%),radial-gradient(ellipse at 78% 72%,#c2a4ff66 0 12%,transparent 36%),radial-gradient(ellipse at 49% 47%,#5ef0db22 0 15%,transparent 40%);filter:blur(2px)}
+.cover-slimey::before,.project-banner-slimey::after{background:radial-gradient(ellipse at 15% 0%,#d8ff7e 0 8%,transparent 8.5%),radial-gradient(ellipse at 18% 12%,#d8ff7e99 0 4%,transparent 4.5%),radial-gradient(ellipse at 78% 0%,#caff68 0 11%,transparent 11.5%),radial-gradient(ellipse at 80% 16%,#caff6899 0 5%,transparent 5.5%)}
+.cover-snowy::before,.project-banner-snowy::after{background-image:radial-gradient(circle at 15% 20%,#fff 0 2px,transparent 3px),radial-gradient(circle at 39% 56%,#fff 0 1.5px,transparent 2.5px),radial-gradient(circle at 67% 27%,#fff 0 2px,transparent 3px),radial-gradient(circle at 83% 72%,#fff 0 1.5px,transparent 2.5px),radial-gradient(circle at 26% 82%,#fff 0 1px,transparent 2px)}
+.cover-rainbow::before,.project-banner-rainbow::after{background:radial-gradient(ellipse at 50% 122%,transparent 0 29%,#fff7 29.2% 30%,transparent 30.3% 39%,#fff6 39.2% 40%,transparent 40.3% 49%,#fff5 49.2% 50%,transparent 50.3% 59%,#fff4 59.2% 60%,transparent 60.3%)}
