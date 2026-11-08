@@ -2069,3 +2069,21 @@ body[data-page="explore-ais"]>#app{position:fixed;inset:0;width:100%;max-width:n
 .project-icon-slimey{background:linear-gradient(145deg,#16462d,#63b84f 58%,#c6e45a);color:#173716}
 .project-icon-snowy{background:linear-gradient(145deg,#8fc9df,#edf9ff 58%,#83b4d5);color:#233e58}
 .project-icon-rainbow{background:linear-gradient(125deg,#ff6565,#ffb84c,#f3e85b,#70dc92,#63b5ff,#ac72e9);color:#332044}
+
+/* Homepage introduction: show visitors what they can explore and how to join. */
+.site-intro{padding-top:2.35rem}
+.site-intro-header{max-width:820px;margin:0 auto 1.35rem;text-align:center}
+.site-intro-eyebrow{display:inline-block;margin-bottom:.55rem;color:var(--ember);font-size:.74rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.site-intro-header h2{font-size:clamp(1.55rem,3.5vw,2.2rem);letter-spacing:-.025em}
+.site-intro-header p{max-width:72ch;margin:.65rem auto 0;color:var(--muted);line-height:1.65}
+.site-intro-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+.site-intro-card{min-width:0;padding:1.15rem;border:1px solid var(--line);border-radius:18px;background:var(--surface)}
+.site-intro-number{display:grid;place-items:center;width:1.85rem;height:1.85rem;margin-bottom:.65rem;border-radius:50%;background:color-mix(in srgb,var(--ember) 12%,var(--surface));color:var(--ember);font-size:.72rem;font-weight:800}
+.site-intro-card h3{margin:0 0 .45rem;font:700 1.03rem/1.25 var(--font-display)}
+.site-intro-card p,.site-intro-footer p{color:var(--muted);font-size:.9rem;line-height:1.65}
+.site-intro-link{display:inline-flex;gap:.35rem;margin-top:.65rem;color:var(--ember);font-size:.84rem;font-weight:750;text-decoration:none}
+.site-intro-link:hover{text-decoration:underline}
+.site-intro-footer{display:flex;align-items:center;justify-content:space-between;gap:1.1rem;margin-top:1rem;padding:1.1rem 1.2rem;border:1px solid var(--line);border-radius:18px;background:color-mix(in srgb,var(--ember) 5%,var(--surface))}
+.site-intro-footer p{max-width:78ch;margin:0}
+.site-intro-actions{display:flex;flex:none;flex-wrap:wrap;gap:.5rem}
+@media(max-width:700px){.site-intro-grid{grid-template-columns:1fr}.site-intro-footer{align-items:flex-start;flex-direction:column}.site-intro{padding-top:1.8rem}}

@@ -39,6 +39,8 @@ const PRIMARY_ROLES = {
   member: { label: 'Member', explanation: 'A member of the Helunemi community.' }
 };
 const PROJECT_TAGS = ['Gamma Frost', 'OmiWo: Collide'];
+const GAME_STATUSES = Object.freeze(['In Development','Future project','Prototype','Pre-production','Paused','On Hold','Reworking','Overhaul','Beta','Early Access','Released','Final','Abandoned']);
+const GAME_THEMES = new Set(['frost','collide','starry','clouds','solar','lunar','eclipse','lovely','dark','fluids','slimey','snowy','rainbow']);
 const FRIEND_CARD_STROKES = new Set(['solid', 'dashed', 'dotted', 'double', 'groove', 'ridge']);
 const FRIEND_CARD_EFFECTS = new Set(['none', 'glow', 'lift', 'shine']);
 
@@ -447,9 +449,9 @@ function cleanSitePost(section, value = {}) {
   if (!(id.startsWith(prefix) || (DEFAULT_CONTENT[section] || []).some(item => item.id === id)) || !/^[a-z0-9-]+$/.test(id)) throw Object.assign(new Error('This post has an invalid ID.'), { status: 400 });
   if (section === 'games') {
     const status = text(value.status, 32);
-    if (!['In Development', 'Future project', 'Beta', 'Released'].includes(status)) throw Object.assign(new Error('Choose a valid game status.'), { status: 400 });
+    if (!GAME_STATUSES.includes(status)) throw Object.assign(new Error('Choose a valid game status.'), { status: 400 });
     const textContainers = (Array.isArray(value.textContainers) ? value.textContainers : []).slice(0, 30).map(item => ({ title: text(item?.title, 100), body: text(item?.body, 10000) })).filter(item => item.title && item.body);
-    const game = { id, authorId:text(value.authorId,100), screenshots:(Array.isArray(value.screenshots)?value.screenshots:[]).slice(0,12).map(siteContentImage).filter(Boolean), name: text(value.name, 100), subtitle: text(value.subtitle, 100), genre: text(value.genre, 100), status, version: text(value.version, 40), cover: ['frost', 'collide'].includes(value.cover) ? value.cover : 'frost', icon: siteContentImage(value.icon), banner: siteContentImage(value.banner), blurb: text(value.blurb, 1200), details: text(value.details, 6000), worldIntro: text(value.worldIntro, 10000), playerIntro: text(value.playerIntro, 10000), releasePlan: text(value.releasePlan, 3000), textContainers };
+    const game = { id, authorId:text(value.authorId,100), screenshots:(Array.isArray(value.screenshots)?value.screenshots:[]).slice(0,12).map(siteContentImage).filter(Boolean), name: text(value.name, 100), subtitle: text(value.subtitle, 100), genre: text(value.genre, 100), status, version: text(value.version, 40), cover: GAME_THEMES.has(value.cover) ? value.cover : 'frost', icon: siteContentImage(value.icon), banner: siteContentImage(value.banner), blurb: text(value.blurb, 1200), details: text(value.details, 6000), worldIntro: text(value.worldIntro, 10000), playerIntro: text(value.playerIntro, 10000), releasePlan: text(value.releasePlan, 3000), textContainers };
     if (!game.name || !game.genre || !game.blurb || !game.details) throw Object.assign(new Error('Add the game name, genre, summary, and project details.'), { status: 400 });
     if ((value.icon && !game.icon) || (value.banner && !game.banner)) throw Object.assign(new Error('Choose valid imported game images.'), { status: 400 });
     return game;
