@@ -306,12 +306,30 @@ async function migrateGameBuilds() {
   })();
   try{return await gameMigration;}finally{gameMigration=null;}
 }
+function cleanFriendCardEngagement(value) {
+  const input=value&&typeof value==='object'?value:{};
+  const likes=[...new Set((Array.isArray(input.likes)?input.likes:[]).filter(id=>typeof id==='string'&&id.length<=100))].slice(0,100000);
+  const ratings=[],seen=new Set();
+  for(const item of Array.isArray(input.ratings)?input.ratings:[]) {
+    if(!item||typeof item.userId!=='string'||item.userId.length>100||seen.has(item.userId))continue;
+    const rating=Number(item.rating);
+    if(!Number.isInteger(rating)||rating<1||rating>5)continue;
+    seen.add(item.userId);ratings.push({userId:item.userId,rating});
+    if(ratings.length>=100000)break;
+  }
+  return {likes,ratings};
+}
+function friendCardEngagementSummary(account, viewerId='') {
+  const feedback=cleanFriendCardEngagement(account.friendCardEngagement),ratings=feedback.ratings;
+  const total=ratings.reduce((sum,item)=>sum+item.rating,0);
+  return {likes:feedback.likes.length,ratingCount:ratings.length,averageRating:ratings.length?Number((total/ratings.length).toFixed(1)):0,liked:Boolean(viewerId&&feedback.likes.includes(viewerId)),rating:ratings.find(item=>item.userId===viewerId)?.rating||0};
+}
 function publicProfile(account) {
   const { id, profile } = account;
   const friendCard = account.role !== 'owner' && profile.primaryRole === 'member' && profile.friendCard?.published === true
     ? cleanFriendCard(profile.friendCard, id)
     : emptyFriendCard();
-  return { id, ...profile, friendCard, accountRole: account.role || 'member' };
+  return { id, ...profile, friendCard, friendCardEngagement: friendCard.published ? friendCardEngagementSummary(account) : {likes:0,ratingCount:0,averageRating:0,liked:false,rating:0}, accountRole: account.role || 'member' };
 }
 function privateProfile(account) {
   const ownerUsername = text(process.env.SOLARIS_OWNER_USERNAME || 'Fritzz Xenon', 24);
@@ -359,6 +377,8 @@ function normalizeAccount(account) {
   let changed = false;
   if (!account.role) { account.role = 'member'; changed = true; }
   if (!account.tickets || typeof account.tickets !== 'object') { account.tickets = { namecard: 0, who: 0 }; changed = true; }
+  const friendCardEngagement=cleanFriendCardEngagement(account.friendCardEngagement);
+  if(JSON.stringify(friendCardEngagement)!==JSON.stringify(account.friendCardEngagement)){account.friendCardEngagement=friendCardEngagement;changed=true;}
   const personalInfo = cleanPersonalInfo(account.personalInfo);
   if (!account.personalInfo || JSON.stringify(personalInfo) !== JSON.stringify(account.personalInfo)) { account.personalInfo = personalInfo; changed = true; }
   for (const kind of ['namecard', 'who']) {
@@ -1031,13 +1051,38 @@ async function handleApi(req, res, pathname) {
     return send(res, 200, { members: team });
   }
   if (req.method === 'GET' && pathname === '/api/members') {
+    const viewer=await getAccount(req);
     const members = accounts.filter(account => account.role !== 'owner' && account.profile.primaryRole === 'member').map(account => ({
       id: account.id,
       username: account.profile.username,
       avatarImage: account.profile.avatarImage,
-      friendCard: account.profile.friendCard?.published === true ? cleanFriendCard(account.profile.friendCard, account.id) : null
+      friendCard: account.profile.friendCard?.published === true ? cleanFriendCard(account.profile.friendCard, account.id) : null,
+      engagement:friendCardEngagementSummary(account,viewer?.id),
+      canInteract:Boolean(viewer&&viewer.id!==account.id),
+      isOwnCard:Boolean(viewer&&viewer.id===account.id)
     }));
     return send(res, 200, { members });
+  }
+  if(req.method==='POST'&&pathname==='/api/member-friend-card/feedback'){
+    const viewer=await getAccount(req);
+    if(!viewer)return send(res,401,{error:'Log in to react to a Friend-Card.'});
+    const input=await readBody(req),target=accounts.find(account=>account.id===input.accountId);
+    if(!target||target.role==='owner'||target.profile.primaryRole!=='member'||target.profile.friendCard?.published!==true)return send(res,404,{error:'That posted Friend-Card could not be found.'});
+    if(target.id===viewer.id)return send(res,403,{error:'You cannot react to your own Friend-Card.'});
+    normalizeAccount(target);
+    const previous=JSON.parse(JSON.stringify(target.friendCardEngagement));
+    if(input.action==='like'){
+      const likes=target.friendCardEngagement.likes;
+      target.friendCardEngagement.likes=likes.includes(viewer.id)?likes.filter(id=>id!==viewer.id):[...likes,viewer.id];
+    }else if(input.action==='rate'){
+      const rating=Number(input.rating);
+      if(!Number.isInteger(rating)||rating<1||rating>5)return send(res,400,{error:'Choose a visual rating from 1 to 5 stars.'});
+      const ratings=target.friendCardEngagement.ratings.filter(item=>item.userId!==viewer.id);
+      target.friendCardEngagement.ratings=[...ratings,{userId:viewer.id,rating}];
+    }else return send(res,400,{error:'Choose like or visual rating.'});
+    try{await saveAccounts();}
+    catch(error){target.friendCardEngagement=previous;throw error;}
+    return send(res,200,{engagement:friendCardEngagementSummary(target,viewer.id)});
   }
   const friendCardFileRoute=/^\/api\/friend-card\/(assets|fonts)\/([a-f0-9-]{36})\/([a-f0-9-]{36})$/i.exec(pathname);
   if((req.method==='GET'||req.method==='HEAD')&&friendCardFileRoute){
@@ -1172,7 +1217,7 @@ async function handleApi(req, res, pathname) {
     const passwordHash = Buffer.from(await scrypt(password, salt, 64)).toString('hex');
     const id = crypto.randomUUID();
     if (claims && (accounts.some(item => item.firebaseUid === claims.uid) || pausedAccounts.some(item => item.account.firebaseUid === claims.uid || item.account.email?.toLowerCase() === String(claims.email).toLowerCase()))) return send(res, 409, { error: 'This verified email already has a Helunemi account. Log in instead.' });
-    const account = { id, salt, passwordHash, termsAcceptance: { version: TERMS_VERSION, acceptedAt: new Date().toISOString() }, ...(claims ? { firebaseUid: claims.uid, email: String(claims.email).toLowerCase(), emailVerified: true } : {}), role: 'member', tickets: { namecard: 0, who: 0 }, community: emptyCommunity(),
+    const account = { id, salt, passwordHash, termsAcceptance: { version: TERMS_VERSION, acceptedAt: new Date().toISOString() }, ...(claims ? { firebaseUid: claims.uid, email: String(claims.email).toLowerCase(), emailVerified: true } : {}), role: 'member', tickets: { namecard: 0, who: 0 }, friendCardEngagement:{likes:[],ratings:[]}, community: emptyCommunity(),
       profile: cleanProfile({ ...input.profile, username }, {}, true, id) };
     accounts.push(account);
     try { await saveAccounts(); }

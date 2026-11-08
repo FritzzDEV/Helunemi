@@ -200,13 +200,35 @@
     syncPause(); schedule();
   }
 
-  const memberFilterOptions = ['Assistant','AI Assistant','Developer','Member',...SECONDARY_ROLE_TAGS,...DATA.games.map(game => game.name)];
   function tagsForMember(member) {
-    return [...new Set([...(member.roles || []),...(member.projects || [])])];
+    return [...new Set([member.primaryRole,...(member.roles || []),...(member.projects || [])].filter(Boolean))];
+  }
+  const primaryMemberTags = ['Owner','Assistant','AI Assistant','Developer','Member'];
+  function memberTagCategories() {
+    const primary = uniqueSearchTags([...primaryMemberTags,...DATA.members.map(member=>member.primaryRole||'')]);
+    const secondary = uniqueSearchTags([...SECONDARY_ROLE_TAGS,...DATA.members.flatMap(member=>member.roles||[])].filter(tag=>!primary.includes(tag)));
+    const projects = uniqueSearchTags([...DATA.games.map(game=>game.name),...DATA.members.flatMap(member=>member.projects||[])]);
+    return [['Primary roles',primary],['Secondary roles',secondary],['Game projects',projects]];
+  }
+  function canonicalPersonalityTag(value) {
+    const raw=String(value||'').trim(),key=raw.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const aliases={cul:'Cool',cool:'Cool',bericul:'Cool',bericool:'Cool',kawaii:'Cute',cute:'Cute',cutie:'Cute',hapi:'Happy',happy:'Happy'};
+    if(aliases[key])return aliases[key];
+    return raw.replace(/\s+/g,' ').replace(/(^|[\s-])([a-z])/g,(_,space,letter)=>space+letter.toUpperCase());
+  }
+  function canonicalPersonalityTags(member) {
+    return [...new Set(normalizedFriendCard(member.friendCard).personalityTags.map(canonicalPersonalityTag).filter(Boolean))];
+  }
+  function friendCardMetricTags(member, category) {
+    const stats=member.engagement||{},likes=Number(stats.likes)||0,ratingCount=Number(stats.ratingCount)||0,average=Number(stats.averageRating)||0;
+    if(category==='likes')return [likes===0?'0 likes':likes<5?'1–4 likes':likes<10?'5–9 likes':'10+ likes'];
+    if(category==='popularity')return [likes>=10?'Popular':likes>0||ratingCount?'Rising':'New'];
+    if(category==='visualRate')return [ratingCount===0?'Unrated':average>=4?'4+ stars':average>=3?'3–3.9 stars':'Below 3 stars'];
+    return [];
   }
   const tagSearchCategories = {
     members:[['primary','Primary role'],['secondary','Secondary role'],['projects','Game projects']],
-    friends:[['personality','Personality'],['likes','Likes'],['dislikes','Dislikes'],['favorites','Favorites'],['lookingFor','Looking for']],
+    friends:[['personality','Personality'],['likes','Likes'],['popularity','Popularity'],['visualRate','Visual rating'],['dislikes','Dislikes'],['favorites','Favorites'],['lookingFor','Looking for']],
     projects:[['status','Project status'],['genre','Genre'],['theme','Card theme']],
     artwork:[['type','Artwork type'],['project','Project'],['mainTag','Main tag'],['tags','Artwork tags']],
     global:[['gameStatus','Game status'],['genre','Game genre'],['theme','Card theme'],['artType','Artwork type'],['artTag','Artwork tag'],['project','Game project'],['role','Member role'],['skill','Member skill'],['personality','Friend personality'],['favorite','Member favorite']]
@@ -224,7 +246,7 @@
     }
     if(scope==='friends') {
       const members=item?[item]:memberProfiles;
-      return members.map(member=>{const card=normalizedFriendCard(member.friendCard);return ({personality:card.personalityTags,likes:card.likes,dislikes:card.dislikes,favorites:card.favoriteThing,lookingFor:card.lookingFor})[category]||[];});
+      return members.map(member=>{const card=normalizedFriendCard(member.friendCard);if(category==='personality')return canonicalPersonalityTags(member);if(['likes','popularity','visualRate'].includes(category))return friendCardMetricTags(member,category);return ({dislikes:card.dislikes,favorites:card.favoriteThing,lookingFor:card.lookingFor})[category]||[];});
     }
     if(scope==='projects') { const games=item?[item]:DATA.games; return games.map(game=>({status:game.status,genre:game.genre,theme:game.cover})[category]||''); }
     if(scope==='artwork') { const arts=item?[item]:DATA.arts; return arts.map(art=>({type:art.type,project:gameById(art.projectId)?.name||'Helunemi',mainTag:art.mainTag,tags:art.tags})[category]||[]); }
@@ -245,29 +267,32 @@
   function tagSearchSelection(scope) { return {category:$(`[data-tag-search-category="${scope}"]`)?.value||'',tag:$(`[data-tag-search-value="${scope}"]`)?.value||''}; }
   function matchesTagSearch(scope,item,category,tag) { if(!category)return true; const values=uniqueSearchTags(valuesForTagSearch(scope,category,item)); return values.length>0&&(!tag||values.includes(tag)); }
   function runTagSearch(scope) { if(scope==='members')updateMemberResults(); else if(scope==='friends')filterFriendCards($('[data-friend-search]')?.value||''); else if(scope==='global')updateGlobalSearchResults(); else if(scope==='projects'||scope==='artwork')filterSwitchCards(scope); }
+  const selectedMemberTags = new Set();
   function renderMemberFilters() {
-    const bar = $('.member-filter-bar');
-    if (!bar) return;
-    const tags = [...new Set([...memberFilterOptions,...DATA.members.flatMap(member => tagsForMember(member))])];
-    if (activeMemberTag !== 'All' && !tags.includes(activeMemberTag)) activeMemberTag = 'All';
-    bar.innerHTML = `<button class="member-filter-chip" type="button" data-member-filter="All" aria-pressed="${activeMemberTag === 'All'}">All</button>${tags.map(tag => `<button class="member-filter-chip" type="button" data-member-filter="${esc(tag)}" aria-pressed="${activeMemberTag === tag}">${esc(tag)}</button>`).join('')}`;
+    const root=$('[data-member-tag-filter-root]');
+    if(!root)return;
+    const categories=memberTagCategories(),allTags=new Set(categories.flatMap(([,tags])=>tags));
+    for(const tag of selectedMemberTags)if(!allTags.has(tag))selectedMemberTags.delete(tag);
+    const panel=$('[data-member-tag-panel]',root),selected=$('[data-member-selected-tags]',root),count=$('[data-member-tag-count]',root);
+    if(panel)panel.innerHTML=categories.map(([label,tags])=>`<fieldset class="member-tag-group"><legend>${esc(label)}</legend><div>${tags.map(tag=>`<label class="member-tag-option"><input type="checkbox" data-member-filter value="${esc(tag)}"${selectedMemberTags.has(tag)?' checked':''}><span class="member-check-circle" aria-hidden="true"></span><span>${esc(tag)}</span></label>`).join('')}</div></fieldset>`).join('')||'<p class="member-tag-empty">No role or project tags are available yet.</p>';
+    if(selected){selected.innerHTML=[...selectedMemberTags].map(tag=>`<button class="member-selected-chip" type="button" data-remove-member-filter="${esc(tag)}" aria-label="Remove ${esc(tag)} filter"><span>${esc(tag)}</span><span aria-hidden="true">×</span></button>`).join('');selected.hidden=selectedMemberTags.size===0;}
+    if(count)count.textContent=selectedMemberTags.size?String(selectedMemberTags.size):'';
   }
   function memberCard(member) {
     const tags = tagsForMember(member);
     const photo = member.id ? `<a class="member-avatar-link" href="account.html?user=${encodeURIComponent(member.id)}" aria-label="Open ${esc(member.online)}’s full profile">${avatar(member.online,'',member.avatarImage)}</a>` : avatar(member.online,'',member.avatarImage);
     return `<article class="member" data-member-card data-tags="${esc(tags.join('|'))}" data-primary="${esc(member.primaryRole||'')}" data-secondary="${esc((member.roles||[]).join('|'))}" data-projects="${esc((member.projects||[]).join('|'))}" data-search="${esc([member.online,member.real,...member.roles,...member.projects].join(' '))}">${photo}<div><h3>${esc(member.online)}</h3><p><strong>Real name:</strong> ${esc(member.real)}</p><div class="member-tags" aria-label="Member roles and projects">${tags.map(tag => `<span class="tag member-tag${DATA.games.some(game => game.name === tag) ? ' member-tag-project' : ''}">${esc(tag)}</span>`).join('')}</div>${member.id ? `<a class="member-profile-link" href="account.html?user=${encodeURIComponent(member.id)}">View profile <span aria-hidden="true">↗</span></a>` : ''}</div></article>`;
   }
-  let activeMemberTag = 'All';
   function updateMemberResults() {
-    const query = ($('#member-search')?.value || '').trim().toLowerCase(),tagFilter=tagSearchSelection('members');
+    const query = ($('#member-search')?.value || '').trim().toLowerCase();
     const cards = $$('[data-member-card]');
+    const selectedGroups=memberTagCategories().map(([,available])=>available.filter(tag=>selectedMemberTags.has(tag))).filter(group=>group.length);
     let shown = 0;
     cards.forEach(card => {
       const tags = card.dataset.tags.split('|');
-      const matchesTag = activeMemberTag === 'All' || tags.includes(activeMemberTag);
+      const matchesTag = selectedGroups.every(group=>group.some(tag=>tags.includes(tag)));
       const matchesQuery = !query || `${card.dataset.search} ${card.dataset.tags}`.toLowerCase().includes(query);
-      const matchesCategory=matchesTagSearch('members',card,tagFilter.category,tagFilter.tag);
-      card.hidden = !(matchesTag && matchesQuery && matchesCategory);
+      card.hidden = !(matchesTag && matchesQuery);
       if (!card.hidden) shown++;
     });
     const empty = $('#member-no-results');
@@ -743,7 +768,7 @@
     if (layer.type === 'avatar') return `<span class="friend-layer-avatar">${avatar(member.username,'friend-card-avatar',member.avatarImage)}</span>`;
     if (layer.type === 'username') return `<span class="friend-layer-username">${esc(member.username || 'Helunemi Member')}</span>`;
     if (layer.type === 'likes' || layer.type === 'dislikes' || layer.type === 'favorite' || layer.type === 'lookingFor') return `<span class="friend-layer-caption"><small>${label}</small><span>${esc(value[layer.type] || 'Add this detail in your Friend-Card editor.')}</span></span>`;
-    if (layer.type === 'tags') return `<span class="friend-layer-tags">${card.personalityTags.map(tag => `<span class="friend-personality-tag">${esc(tag)}</span>`).join('') || '<small>Add personality tags in your Friend-Card editor.</small>'}</span>`;
+    if (layer.type === 'tags') return `<span class="friend-layer-tags">${card.personalityTags.map(tag => `<span class="friend-personality-tag">${esc(canonicalPersonalityTag(tag))}</span>`).join('') || '<small>Add personality tags in your Friend-Card editor.</small>'}</span>`;
     if (layer.type === 'button') return friendCardButtonContent(layer,card,member,editor,openAction);
     if (['image','sticker','frame-piece'].includes(layer.type)) return layer.image ? `<img class="friend-layer-image" decoding="async" src="${esc(layer.image)}" alt="${label}" draggable="false">` : `<span class="friend-layer-placeholder">${label || 'Choose an image'}</span>`;
     if (layer.type === 'shape') return friendCardShapeMarkup(layer);
@@ -897,7 +922,7 @@
     const aspect = friendCardRatios.includes(card.aspectRatio) ? card.aspectRatio : '1:1';
     const effect = ['none','glow','lift','shine'].includes(card.effect) ? card.effect : 'glow';
     const title = esc(member.username || 'Helunemi Member');
-    const searchData = !full && !editor ? esc([member.username,card.likes,card.dislikes,card.favoriteThing,card.lookingFor,...card.personalityTags].join(' ')) : '';
+    const searchData = !full && !editor ? esc([member.username,card.likes,card.dislikes,card.favoriteThing,card.lookingFor,...card.personalityTags.map(canonicalPersonalityTag)].join(' ')) : '';
     const action = openAction === 'own' ? 'data-open-own-friend-card' : `data-open-friend-card="${esc(member.id || '')}"`;
     const design = preparedDesign || normalizedFriendCardDesign(card.design,card);
     card.design=design;
@@ -1644,7 +1669,7 @@
   function filterFriendCards(value) {
     const query = String(value || '').trim().toLowerCase(),tagFilter=tagSearchSelection('friends');
     let shown = 0;
-    $$('[data-friend-entry]').forEach(entry => { const card=$('[data-friend-member]',entry),member=memberProfiles.find(item=>item.id===entry.dataset.memberId);const matchesQuery=!query||String(card?.dataset.friendSearch||'').toLowerCase().includes(query);const matchesCategory=member&&matchesTagSearch('friends',member,tagFilter.category,tagFilter.tag);entry.hidden=!(matchesQuery&&matchesCategory);if(!entry.hidden)shown++; });
+    $$('[data-friend-entry]').forEach(entry => { const card=$('[data-friend-member]',entry),member=memberProfiles.find(item=>item.id===entry.dataset.memberId);const searchable=[card?.dataset.friendSearch||'',...(member?.friendCard?.personalityTags||[]).map(canonicalPersonalityTag)].join(' ').toLowerCase();const matchesQuery=!query||searchable.includes(query);const matchesCategory=member&&matchesTagSearch('friends',member,tagFilter.category,tagFilter.tag);entry.hidden=!(matchesQuery&&matchesCategory);if(!entry.hidden)shown++; });
     const empty = $('#member-card-empty');
     if (empty) {
       empty.hidden = shown > 0;
@@ -1652,13 +1677,35 @@
       empty.textContent = postedCount ? 'No posted Friend-Cards match that search.' : 'No custom Friend-Cards have been posted yet.';
     }
   }
+  function friendCardFeedbackMarkup(member) {
+    const stats=member.engagement||{likes:0,ratingCount:0,averageRating:0,rating:0,liked:false},canInteract=member.canInteract===true;
+    const average=Number(stats.averageRating)||0,ratingCount=Number(stats.ratingCount)||0,likes=Number(stats.likes)||0;
+    const popularity=likes>=10?'Popular':likes||ratingCount?'Rising':'New';
+    const note=member.isOwnCard?'You cannot react to your own Friend-Card.':'Log in to react to a Friend-Card.';
+    return `<section class="friend-card-engagement" aria-label="Friend-Card reactions"><div class="friend-card-engagement-top"><button class="friend-card-like${stats.liked?' is-liked':''}" type="button" data-cfc-feedback="like" data-member-id="${esc(member.id)}" aria-pressed="${Boolean(stats.liked)}"${canInteract?'':' disabled'}><span aria-hidden="true">♥</span><strong>${likes}</strong><span>Likes</span></button><span class="friend-card-popularity"><span>${popularity}</span><small>Popularity</small></span><span class="friend-card-visual-rating"><strong>${ratingCount?average.toFixed(1):'—'}</strong><small>Visual rate · ${ratingCount} ${ratingCount===1?'rating':'ratings'}</small></span></div><div class="friend-card-rate-row"><span>Rate this card</span><div class="friend-card-rate-stars" role="group" aria-label="Rate this Friend-Card from 1 to 5 stars">${[1,2,3,4,5].map(value=>`<button type="button" data-cfc-feedback="rate" data-member-id="${esc(member.id)}" data-rating="${value}" aria-label="Rate ${value} out of 5"${canInteract?'':' disabled'} aria-pressed="${Number(stats.rating)===value}">${Number(stats.rating)>=value?'★':'☆'}</button>`).join('')}</div></div><p class="friend-card-feedback-note" data-cfc-feedback-note${canInteract?' hidden':''}>${canInteract?'':note}</p></section>`;
+  }
   function renderMemberCardGrid() {
     const viewer=$('#friend-card-dialog');if(viewer?.open){viewer.friendCardGridDirty=true;return;}
     const grid = $('#member-card-grid');
     if (!grid) return;
     const postedCards = memberProfiles.filter(member => member.friendCard?.published === true);
-    grid.innerHTML = postedCards.map(member => `<div class="friend-card-entry" data-friend-entry data-member-id="${esc(member.id)}">${friendCardMarkup(member)}<a class="friend-entry-identity" href="account.html?user=${encodeURIComponent(member.id)}">${avatar(member.username,'friend-entry-avatar',member.avatarImage)}<strong>${esc(member.username)}</strong><span aria-hidden="true">↗</span></a></div>`).join('');
+    grid.innerHTML = postedCards.map(member => `<div class="friend-card-entry" data-friend-entry data-member-id="${esc(member.id)}">${friendCardMarkup(member)}${friendCardFeedbackMarkup(member)}<a class="friend-entry-identity" href="account.html?user=${encodeURIComponent(member.id)}">${avatar(member.username,'friend-entry-avatar',member.avatarImage)}<strong>${esc(member.username)}</strong><span aria-hidden="true">↗</span></a></div>`).join('');
     refreshTagSearchOptions('friends'); filterFriendCards($('[data-friend-search]')?.value || '');
+  }
+  async function submitFriendCardFeedback(button) {
+    const member=memberProfiles.find(item=>item.id===button.dataset.memberId);
+    if(!member)return;
+    const engagement=button.closest('.friend-card-engagement'),note=$('[data-cfc-feedback-note]',engagement);
+    $$('[data-cfc-feedback]',engagement).forEach(control=>control.disabled=true);
+    try {
+      const result=await api('/api/member-friend-card/feedback','POST',{accountId:member.id,action:button.dataset.cfcFeedback,...(button.dataset.rating?{rating:Number(button.dataset.rating)}:{})});
+      member.engagement=result.engagement;
+      renderMemberCardGrid();
+    } catch(error) {
+      if(note){note.hidden=false;note.textContent=error.message;}
+      $$('[data-cfc-feedback]',engagement).forEach(control=>control.disabled=false);
+      toast(error.message);
+    }
   }
   function isCurrentUserStaff() {
     return currentUser?.accountRole === 'owner' || ['assistant','ai-assistant','developer'].includes(currentUser?.primaryRole);
@@ -2301,12 +2348,11 @@
     },
     list() {
       return `<div class="wrap"><div class="page-head"><h1>List</h1><p>Meet the active members of Helunemi.</p></div>
-        <section class="member-directory" aria-label="Search and filter members"><label class="member-search-wrap"><span class="visually-hidden">Search by member, role, or project</span><span class="member-search-icon" aria-hidden="true">⌕</span><input id="member-search" type="search" data-member-search placeholder="Search members, roles, or games…" autocomplete="off"></label>${tagSearchMarkup('members')}
-        <div class="member-filter-bar" role="group" aria-label="Filter members by role or project"><button class="member-filter-chip" type="button" data-member-filter="All" aria-pressed="true">All</button>${memberFilterOptions.map(tag => `<button class="member-filter-chip" type="button" data-member-filter="${esc(tag)}" aria-pressed="false">${esc(tag)}</button>`).join('')}</div></section>
+        <section class="member-directory" aria-label="Search and filter members"><label class="member-search-wrap"><span class="visually-hidden">Search by member, role, or project</span><span class="member-search-icon" aria-hidden="true">⌕</span><input id="member-search" type="search" data-member-search placeholder="Search members, roles, or games…" autocomplete="off"></label><div class="member-tag-filter" data-member-tag-filter-root><button type="button" class="member-tag-toggle" data-member-tags-toggle aria-expanded="false" aria-controls="member-tag-panel"><span class="member-tag-toggle-icon" aria-hidden="true">☷</span>Choose role or project tags<span class="member-tag-count" data-member-tag-count></span><span aria-hidden="true">⌄</span></button><div class="member-tag-panel" id="member-tag-panel" data-member-tag-panel hidden></div><div class="member-selected-tags" data-member-selected-tags aria-live="polite" hidden></div></div></section>
         <div class="members" id="member-results"></div><p class="empty member-empty" id="member-no-results">Studio team profiles appear here when the Owner assigns Assistant, AI Assistant, or Developer roles.</p><p class="form-message" id="member-load-message" role="status"></p><div class="page-end"></div></div>`;
     },
     members() {
-      return `<div class="wrap"><div class="page-head"><span class="section-eyebrow">MEET THE COMMUNITY</span><h1>Members</h1><p>Member accounts make a Friend-Card in their own style. Cards appear here only after the member chooses to post them. Studio roles have their own profiles on the List page.</p></div><section class="member-directory friend-directory" aria-label="Search member Friend-Cards"><label class="member-search-wrap"><span class="visually-hidden">Search member Friend-Cards</span><span class="member-search-icon" aria-hidden="true">⌕</span><input type="search" data-friend-search placeholder="Search posted cards…" autocomplete="off"></label>${tagSearchMarkup('friends')}</section><div class="friend-card-grid" id="member-card-grid"></div><p class="empty member-empty" id="member-card-empty">No custom Friend-Cards have been posted yet.</p><p class="form-message" id="member-card-message" role="status"></p><div class="page-end"></div></div>`;
+      return `<div class="wrap"><div class="page-head"><span class="section-eyebrow">MEET THE COMMUNITY</span><h1>Members</h1><p>Member accounts make a Friend-Card in their own style. Cards appear here only after the member chooses to post them. Studio roles have their own profiles on the List page. Filter by personality tags, CFC likes, popularity, and visual ratings.</p></div><section class="member-directory friend-directory" aria-label="Search member Friend-Cards"><label class="member-search-wrap"><span class="visually-hidden">Search member Friend-Cards</span><span class="member-search-icon" aria-hidden="true">⌕</span><input type="search" data-friend-search placeholder="Search posted cards…" autocomplete="off"></label>${tagSearchMarkup('friends')}</section><div class="friend-card-grid" id="member-card-grid"></div><p class="empty member-empty" id="member-card-empty">No custom Friend-Cards have been posted yet.</p><p class="form-message" id="member-card-message" role="status"></p><div class="page-end"></div></div>`;
     },
     games() { return `<div class="wrap">${ownerPageHeading('games','Games','Explore our releases, games in development, and plans for the future.')}<div class="grid">${DATA.games.map(projectCard).join('')}</div><div class="page-end"></div></div>`; },
     updates() {
@@ -3246,6 +3292,13 @@
   window.addEventListener('blur',cancelFriendCardPointerGesture);
 
   document.addEventListener('click', async event => {
+    if(!event.target.closest('[data-member-tag-filter-root]')){const panel=$('[data-member-tag-panel]'),toggle=$('[data-member-tags-toggle]');if(panel)panel.hidden=true;toggle?.setAttribute('aria-expanded','false');}
+    const memberTagToggle=event.target.closest('[data-member-tags-toggle]');
+    if(memberTagToggle){const panel=$('[data-member-tag-panel]');if(panel){panel.hidden=!panel.hidden;memberTagToggle.setAttribute('aria-expanded',String(!panel.hidden));}return;}
+    const removeMemberTag=event.target.closest('[data-remove-member-filter]');
+    if(removeMemberTag){selectedMemberTags.delete(removeMemberTag.dataset.removeMemberFilter);renderMemberFilters();updateMemberResults();return;}
+    const memberFeedback=event.target.closest('[data-cfc-feedback]');
+    if(memberFeedback){await submitFriendCardFeedback(memberFeedback);return;}
     const frameReset=event.target.closest('[data-frame-piece-reset]');
     if(frameReset&&friendCardDesignState){recordFriendCardHistory();friendCardDesignState.frame.pieces||={};friendCardDesignState.frame.pieces[frameReset.dataset.framePieceReset]={offsetX:0,offsetY:0,rotation:0};repaintFriendCardEditor();return;}
     const reportStatus=event.target.closest('[data-report-status]');
@@ -3399,7 +3452,6 @@
     const profileOptions = event.target.closest('[data-profile-options]');
     const accountAction = event.target.closest('[data-account-action]');
     const cancelDanger = event.target.closest('[data-cancel-danger]');
-    const memberFilterButton = event.target.closest('[data-member-filter]');
     const openImage = event.target.closest('[data-open-image]');
     const cropCancel = event.target.closest('[data-crop-cancel]');
     const cropSave = event.target.closest('[data-crop-save]');
@@ -3532,12 +3584,6 @@
       noteToggle.hidden = true;
       if (bubble) bubble.hidden = false;
       noteToggle.parentElement?.classList.add('is-expanded');
-      return;
-    }
-    if (memberFilterButton) {
-      activeMemberTag = memberFilterButton.dataset.memberFilter;
-      $$('[data-member-filter]').forEach(button => button.setAttribute('aria-pressed',String(button === memberFilterButton)));
-      updateMemberResults();
       return;
     }
     if (profileOptions) {
@@ -3776,6 +3822,8 @@
     }
   });
   document.addEventListener('change', async event => {
+    const memberFilter=event.target.closest('input[data-member-filter]');
+    if(memberFilter){if(memberFilter.checked)selectedMemberTags.add(memberFilter.value);else selectedMemberTags.delete(memberFilter.value);renderMemberFilters();updateMemberResults();return;}
     const tagCategory=event.target.closest('[data-tag-search-category]');
     if(tagCategory){const scope=tagCategory.dataset.tagSearchCategory;refreshTagSearchOptions(scope);runTagSearch(scope);return;}
     const tagValue=event.target.closest('[data-tag-search-value]');

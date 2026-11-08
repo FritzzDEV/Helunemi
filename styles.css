@@ -550,10 +550,44 @@ dialog::backdrop{background:var(--backdrop)}
 .member-search-icon{color:var(--muted);font-size:1.5rem;line-height:1}
 .member-search-wrap input{width:100%;padding:.72rem 0;border:0;outline:0;background:transparent;color:var(--ink);font:500 .95rem var(--font-body)}
 .member-search-wrap:focus-within{border-color:var(--ember);box-shadow:0 0 0 3px color-mix(in srgb,var(--ember) 18%,transparent)}
-.member-filter-bar{display:flex;flex-wrap:wrap;gap:.5rem}
-.member-filter-chip{padding:.4rem .75rem;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--ink);font:500 .82rem var(--font-body);cursor:pointer;transition:background .16s,border-color .16s,color .16s}
-.member-filter-chip:hover{border-color:var(--ember)}
-.member-filter-chip[aria-pressed="true"]{border-color:var(--btn);background:var(--btn);color:var(--btn-ink)}
+.member-tag-filter{display:grid;gap:.65rem;min-width:0}
+.member-tag-toggle{display:inline-flex;align-items:center;justify-self:start;gap:.55rem;min-height:42px;padding:.5rem .8rem;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:650 .84rem var(--font-body);cursor:pointer}
+.member-tag-toggle:hover,.member-tag-toggle[aria-expanded="true"]{border-color:var(--ember);background:color-mix(in srgb,var(--ember) 8%,var(--bg))}
+.member-tag-toggle-icon{color:var(--ember);font-size:1.05rem}
+.member-tag-count{display:grid;place-items:center;min-width:1.35rem;height:1.35rem;padding:0 .25rem;border-radius:999px;background:var(--btn);color:var(--btn-ink);font-size:.7rem}
+.member-tag-count:empty{display:none}
+.member-tag-panel{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem;max-height:min(52vh,25rem);overflow:auto;padding:.75rem;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
+.member-tag-panel[hidden]{display:none}
+.member-tag-group{min-width:0;margin:0;padding:.55rem;border:1px solid var(--line);border-radius:11px}
+.member-tag-group legend{padding:0 .25rem;color:var(--muted);font-size:.69rem;font-weight:750}
+.member-tag-group>div{display:grid;gap:.18rem}
+.member-tag-option{position:relative;display:flex;align-items:center;gap:.48rem;min-width:0;padding:.28rem .2rem;border-radius:7px;color:var(--ink);font-size:.76rem;cursor:pointer}
+.member-tag-option:hover{background:color-mix(in srgb,var(--ember) 8%,transparent)}
+.member-tag-option input{position:absolute;width:1px;height:1px;opacity:0}
+.member-check-circle{display:grid;place-items:center;width:1.05rem;height:1.05rem;flex:none;border:1.5px solid var(--line);border-radius:50%;color:transparent;transition:background .14s,border-color .14s,color .14s}
+.member-check-circle:after{content:'✓';font-size:.68rem;font-weight:800}
+.member-tag-option input:checked+.member-check-circle{border-color:var(--btn);background:var(--btn);color:var(--btn-ink)}
+.member-tag-option input:focus-visible+.member-check-circle{outline:2px solid var(--ember);outline-offset:2px}
+.member-tag-option>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.member-selected-tags{display:flex;flex-wrap:wrap;gap:.4rem}
+.member-selected-tags[hidden]{display:none}
+.member-selected-chip{display:inline-flex;align-items:center;gap:.5rem;min-height:1.85rem;padding:.25rem .55rem;border:1px solid color-mix(in srgb,var(--ember) 55%,var(--line));border-radius:999px;background:color-mix(in srgb,var(--ember) 12%,var(--bg));color:var(--ink);font:600 .75rem var(--font-body);cursor:pointer}
+.member-selected-chip>span:last-child{color:var(--ember);font-size:1.05rem;line-height:.8}
+.friend-card-engagement{display:grid;gap:.55rem;margin-top:.55rem;padding:.6rem .7rem;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink)}
+.friend-card-engagement-top{display:flex;align-items:center;gap:.65rem;min-width:0}
+.friend-card-like{display:flex;align-items:center;gap:.32rem;min-height:1.9rem;padding:.25rem .55rem;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--muted);font:650 .72rem var(--font-body);cursor:pointer}
+.friend-card-like>span:first-child{color:#e96885}
+.friend-card-like.is-liked{border-color:#e96885;background:color-mix(in srgb,#e96885 12%,var(--bg));color:var(--ink)}
+.friend-card-like:disabled,.friend-card-rate-stars button:disabled{cursor:not-allowed;opacity:.65}
+.friend-card-popularity,.friend-card-visual-rating{display:grid;gap:.05rem;min-width:0;color:var(--ink);font-size:.7rem;font-weight:700}
+.friend-card-popularity small,.friend-card-visual-rating small{color:var(--muted);font-size:.6rem;font-weight:500}
+.friend-card-visual-rating{margin-left:auto;text-align:right}
+.friend-card-rate-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding-top:.4rem;border-top:1px solid var(--line);color:var(--muted);font-size:.69rem}
+.friend-card-rate-stars{display:flex;gap:.08rem}
+.friend-card-rate-stars button{width:1.45rem;height:1.45rem;padding:0;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:1rem;cursor:pointer}
+.friend-card-rate-stars button[aria-pressed="true"],.friend-card-rate-stars button:hover{color:#e1a72e}
+.friend-card-feedback-note{margin:0;color:var(--muted);font-size:.65rem}
+.friend-card-feedback-note[hidden]{display:none}
 .member-tags{display:flex;flex-wrap:wrap;gap:.38rem;margin-top:.65rem}
 .member-tag{font-size:.74rem;line-height:1.2}
 .member-tag-project{border-color:color-mix(in srgb,var(--ember) 40%,var(--line));background:color-mix(in srgb,var(--ember) 8%,var(--bg))}
@@ -2043,6 +2077,8 @@ body[data-page="explore-ais"]>#app{position:fixed;inset:0;width:100%;max-width:n
 .friend-snap-controls button{min-height:1.5rem!important;padding:.1rem .24rem!important;font-size:.58rem!important}
 .friend-snap-controls button[aria-pressed="true"]{border-color:var(--ember)!important;background:color-mix(in srgb,var(--ember) 12%,var(--surface))!important;color:var(--ink)}
 @media(max-width:420px){.members{grid-template-columns:minmax(0,1fr)}.member{display:grid;grid-template-columns:48px minmax(0,1fr);align-items:start}.member>div{min-width:0}.member .member-tags{grid-column:1/-1}.tag-search-filters{grid-template-columns:1fr}}
+@media(max-width:700px){.member-tag-panel{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:420px){.member-tag-panel{grid-template-columns:1fr}.friend-card-engagement-top{gap:.4rem}.friend-card-like{gap:.2rem;padding-inline:.4rem}.friend-card-rate-row{align-items:flex-start;flex-direction:column}}
 
 /* Owner-selected project card themes are visible whenever a game has no banner art. */
 .cover-starry,.project-banner-starry{background:radial-gradient(circle at 18% 24%,#fff 0 1px,transparent 2px),radial-gradient(circle at 74% 18%,#f8df9e 0 2px,transparent 3px),radial-gradient(circle at 56% 72%,#d7e5ff 0 1px,transparent 2px),linear-gradient(135deg,#10152f,#252d5f 54%,#634b8d);background-size:auto,auto,auto,cover}
