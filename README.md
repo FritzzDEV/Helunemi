@@ -18,6 +18,12 @@ Game builds will be linked from their project pages. The Download page is for ex
 
 The site serves its separate HTML pages with shared `styles.css` and `app.js` files. Accounts use HTTP-only session cookies. PostgreSQL is used when `DATABASE_URL` is set; otherwise, the server writes to `data/accounts.json`.
 
+## Discord Game Parlor account
+
+The Discord Activity links to a Helunemi account with a five-minute, single-use code from `account.html?activity=connect`. Its Parlor Coin balance, ticket inventory, and shop inventory stay in the same account record and PostgreSQL/JSON account store as the website profile. Each Activity connection uses a 30-day bearer token stored as a hash; unlinking revokes that token. The Activity grants 50 Parlor Coins once every 24 hours. These coins are separate from PHP shop prices and do not enable paid purchases.
+
+Set `DISCORD_ACTIVITY_ORIGIN` in the Helunemi Render service to the exact HTTPS origin that hosts the Activity, for example `https://your-activity.onrender.com` (no path). If the Activity uses a custom Helunemi website host, set `VITE_HELUNEMI_ORIGIN` in the Activity build environment to that site origin; otherwise it uses `https://helunemi.onrender.com`.
+
 ## Accounts and Firebase email setup
 
 Firebase Authentication handles email verification, email/password sign-in, and password reset after the Firebase project is configured. The website remains in its existing username/password mode until the Firebase web settings and server credentials are all present. In that setup mode, every new account must verify its email before its Helunemi profile is created. Password reset emails are sent by Firebase; users sign in again with the new password afterward.
@@ -90,7 +96,7 @@ The shop’s three-dot menu lets the Owner open **Add a product**. Each product�
 
 Members can save their **Country / region of residence** in **Personal Profile Information → General information**, or in the shop’s **Your price display** section. Country stays private. Original prices are in PHP; the shop shows estimated local currency prices and the original peso amount. Conversion uses [Frankfurter’s daily reference-rate API](https://frankfurter.dev/), with server caching, timeouts, rate dates, and a peso fallback when a rate is unavailable. No API key is required. Country-to-currency mappings come from [Unicode CLDR](https://github.com/unicode-org/cldr-json), recorded as of October 24, 2026; its license is included in `country-currencies.LICENSE.txt`.
 
-**Payment processing is not configured.** Paid products show **Checkout coming soon**. Both the new product claim endpoint and the legacy ticket endpoint reject paid claims using the stored server price. Free products can be claimed up to 99 per product; ticket benefits add to the existing ticket inventory. No currency balance or simulated payment is used.
+**Payment processing is not configured.** Paid products show **Checkout coming soon**. Both the new product claim endpoint and the legacy ticket endpoint reject paid claims using the stored server price. Free products can be claimed up to 99 per product; ticket benefits add to the existing ticket inventory. Parlor Coins are a separate game reward and cannot be used for Shop checkout.
 
 At the bottom of a profile, a member can pause their account for 30 days or permanently delete it. Pausing removes the account from the active site, blocks login, and keeps a private backup that is restored after 30 days. Deletion removes the account and any Helunemi-managed pause backup. Backups retained separately by Git or the hosting/database provider follow their own retention policies.
 
@@ -248,6 +254,7 @@ Optional deployment settings:
 | Setting | Purpose |
 | --- | --- |
 | `SITE_ORIGIN` | Exact public origin, such as `https://your-site.onrender.com`, without a path. Recommended to pin browser origin checks. |
+| `DISCORD_ACTIVITY_ORIGIN` | Exact HTTPS origin hosting the Discord Game Parlor Activity. Limits the Activity account API's CORS access. |
 | `SECURITY_TRUST_PROXY_HOPS` | Optional number of trusted reverse-proxy hops for rate-limit IP extraction. Default `0` trusts only the socket address. Configure only after verifying the deployed proxy chain; never blindly trust user-provided forwarding headers. Without this setting, visitors sharing a proxy share the coarse rate limit. |
 
 Production is detected by `NODE_ENV=production` or Render's `RENDER=true`. These settings do not replace HTTPS at the hosting layer. Preserve secrets outside the repository, use the existing static-file allowlist, and review `SECURITY.md` before deployment. `LICENSE` reserves rights only in protected original Helunemi material and preserves third-party licenses and user ownership.

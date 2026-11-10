@@ -2699,6 +2699,13 @@
     const admin = isOwn && user.accountRole === 'owner' ? ownerTeamManager() : '';
     const viewedRoleManager = !isOwn ? viewedUserRoleManager(user) : '';
     const roleKey = user.accountRole === 'owner' ? 'owner' : user.primaryRole;
+    const gameStorage = user.activityStorage || {tickets:user.tickets || {},items:user.shopInventory || {}};
+    const storedItems = [
+      ...Object.entries(gameStorage.tickets || {}).map(([name,count]) => [`${name} ticket`,count]),
+      ...Object.entries(gameStorage.items || {}).map(([name,count]) => [name,count])
+    ].filter(([,count]) => Number(count) > 0);
+    const activityStorage = storedItems.length ? `<div class="tag-list">${storedItems.map(([name,count]) => `<span class="tag">${esc(name)} ×${Number(count)}</span>`).join('')}</div>` : '<p class="empty-inline">Your storage is empty.</p>';
+    const gameParlor = isOwn ? `<section class="account-panel account-panel-wide"><span class="section-eyebrow">GAME PARLOR ACCOUNT</span><h2>${(Number(user.parlorCoins) || 0).toLocaleString()} Parlor Coins</h2><p>Parlor Coins and your website inventory use this Helunemi account. Coins are a game reward and are not connected to paid Shop checkout.</p><h3>Storage</h3>${activityStorage}<div class="activity-link-controls"><div><strong>Connect your Discord Activity</strong><p>Generate a one-time code, then enter it in the Game Parlor. Each code expires in five minutes.</p></div><button class="btn btn-primary btn-sm" type="button" data-activity-link-code>Generate 8-digit code</button></div><output class="activity-link-code" id="activity-link-code" aria-live="polite">No code generated</output><p class="form-message" id="activity-link-message" role="status">Codes work once and expire after five minutes.</p></section>` : '';
     const profileRoles = ['owner','assistant','ai-assistant','developer'].includes(roleKey) ? `<section class="account-panel account-panel-wide profile-roles-panel"><h2>Roles</h2><div class="member-tags"><span class="tag member-tag">${roleKey === 'owner' ? 'Owner' : esc(PRIMARY_ROLE_LABELS[roleKey])}</span>${(user.secondaryRoles || []).map(tag => `<span class="tag member-tag">${esc(tag)}</span>`).join('')}</div><p>${esc(PRIMARY_ROLE_EXPLANATIONS[roleKey])}</p></section>` : '';
     const ownerClaim = isOwn && user.canClaimOwner ? `<section class="account-panel account-panel-wide owner-claim-panel"><span class="section-eyebrow">STUDIO SETUP</span><h2>Claim the Helunemi Owner role</h2><p>Your signed-in username is reserved for the Owner account. Enter the one-time setup code configured on the Helunemi server to manage registered account roles.</p><form id="owner-claim-form"><label>Owner setup code<input name="ownerSetupCode" type="password" maxlength="200" autocomplete="off" required></label><p class="form-message" id="owner-claim-message" role="status"></p><button class="btn btn-primary" type="submit">Claim Owner role</button></form></section>` : '';
     const security = isOwn ? accountSecurityPanel(user) : '';
@@ -2712,7 +2719,7 @@
         <section class="account-panel"><h2>Likes</h2><p>${esc(user.likes || 'No likes added yet.')}</p></section>
         <section class="account-panel"><h2>Dislikes</h2><p>${esc(user.dislikes || 'No dislikes added yet.')}</p></section>
         <section class="account-panel account-panel-wide"><h2>Favorites</h2>${favoriteCards.length ? `<div class="favorite-grid">${favoriteCards.join('')}</div>` : '<p class="empty-inline">No favorites added yet. Edit your profile to choose favorites.</p>'}</section>
-        <section class="account-panel account-panel-wide"><h2>Installed games</h2><p class="installed-games-note">Games this member added to their profile. The website cannot verify local installations.</p>${installed}</section>${ownFriendCard}${profileRoles}${security}${admin}${viewedRoleManager}${ownerClaim}
+        <section class="account-panel account-panel-wide"><h2>Installed games</h2><p class="installed-games-note">Games this member added to their profile. The website cannot verify local installations.</p>${installed}</section>${ownFriendCard}${gameParlor}${profileRoles}${security}${admin}${viewedRoleManager}${ownerClaim}
       </div>${isOwn ? `<p class="account-footnote">Your profile is saved by the Helunemi server. Real name and profile details are optional.</p>${dangerZone()}${dangerDialog()}` : ''}</div>`;
   }
   function installedGameCards(user) {
@@ -3292,6 +3299,19 @@
   window.addEventListener('blur',cancelFriendCardPointerGesture);
 
   document.addEventListener('click', async event => {
+    const activityLinkCode = event.target.closest('[data-activity-link-code]');
+    if (activityLinkCode) {
+      activityLinkCode.disabled = true;
+      setMessage('#activity-link-message','',false);
+      try {
+        const result = await api('/api/activity/link-code','POST',{});
+        const output = $('#activity-link-code');
+        if (output) output.textContent = result.code;
+        setMessage('#activity-link-message',`Enter this code in the Game Parlor within ${Math.floor(result.expiresInSeconds / 60)} minutes.`,false);
+      } catch (error) { setMessage('#activity-link-message',error.message); }
+      finally { activityLinkCode.disabled = false; }
+      return;
+    }
     if(!event.target.closest('[data-member-tag-filter-root]')){const panel=$('[data-member-tag-panel]'),toggle=$('[data-member-tags-toggle]');if(panel)panel.hidden=true;toggle?.setAttribute('aria-expanded','false');}
     const memberTagToggle=event.target.closest('[data-member-tags-toggle]');
     if(memberTagToggle){const panel=$('[data-member-tag-panel]');if(panel){panel.hidden=!panel.hidden;memberTagToggle.setAttribute('aria-expanded',String(!panel.hidden));}return;}

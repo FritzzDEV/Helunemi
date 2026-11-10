@@ -51,6 +51,10 @@ let siteContent = { ...EMPTY_SITE_CONTENT };
 let pool = null;
 let firebaseAuth = null;
 const sessions = new Map();
+const activityLinkCodes = new Map();
+const ACTIVITY_LINK_MS = 5 * 60 * 1000;
+const ACTIVITY_TOKEN_MS = 30 * 24 * 60 * 60 * 1000;
+const ACTIVITY_DAILY_REWARD = 50;
 let sessionsPrunedAt = 0;
 const communityPresence = new Map();
 let writeQueue = Promise.resolve();
@@ -335,7 +339,59 @@ function privateProfile(account) {
   const ownerUsername = text(process.env.SOLARIS_OWNER_USERNAME || 'Fritzz Xenon', 24);
   const ownerExists = accounts.some(item => item.role === 'owner') || pausedAccounts.some(item => item.account.role === 'owner');
   const canClaimOwner = Boolean(process.env.SOLARIS_OWNER_SETUP_TOKEN && !ownerExists && account.profile.username.toLowerCase() === ownerUsername.toLowerCase());
-  return { ...publicProfile(account), friendCard: cleanFriendCard(account.profile.friendCard, account.id), tickets: account.tickets || { namecard: 0, who: 0 }, shopInventory: account.shopInventory || {}, canClaimOwner, authEmail: account.email || '', emailVerified: account.emailVerified === true, personalInfo: cleanPersonalInfo(account.personalInfo) };
+  const activityStorage = {
+    tickets: { namecard: Number(account.tickets?.namecard) || 0, who: Number(account.tickets?.who) || 0 },
+    items: cleanActivityItems(account.shopInventory),
+  };
+  return { ...publicProfile(account), friendCard: cleanFriendCard(account.profile.friendCard, account.id), tickets: account.tickets || { namecard: 0, who: 0 }, shopInventory: account.shopInventory || {}, parlorCoins: Number(account.parlorCoins) || 0, activityStorage, canClaimOwner, authEmail: account.email || '', emailVerified: account.emailVerified === true, personalInfo: cleanPersonalInfo(account.personalInfo) };
+}
+function cleanActivityItems(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).slice(0, 200).map(([id, count]) => [id, Math.min(99, Math.max(0, Math.floor(Number(count) || 0)))]).filter(([id, count]) => /^[a-z0-9-]{1,100}$/.test(id) && count > 0));
+}
+function activityAccountSnapshot(account) {
+  const now = Date.now();
+  return {
+    username: account.profile.username,
+    balance: Number(account.parlorCoins) || 0,
+    canCollectDaily: now - (Number(account.parlorDailyRewardAt) || 0) >= 24 * 60 * 60 * 1000,
+    storage: {
+      tickets: { namecard: Number(account.tickets?.namecard) || 0, who: Number(account.tickets?.who) || 0 },
+      items: cleanActivityItems(account.shopInventory),
+    },
+  };
+}
+function activityOrigin() {
+  try {
+    const url = new URL(text(process.env.DISCORD_ACTIVITY_ORIGIN, 500));
+    const localHttp = url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname);
+    if ((url.protocol !== 'https:' && !localHttp) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) return '';
+    return url.origin;
+  } catch { return ''; }
+}
+function activityCors(req, res) {
+  const allowedOrigin = activityOrigin();
+  if (!allowedOrigin || req.headers.origin !== allowedOrigin) return false;
+  if (req.method === 'OPTIONS') {
+    const requested = String(req.headers['access-control-request-headers'] || '').toLowerCase().split(',').map(value => value.trim()).filter(Boolean);
+    const allowedHeaders = new Set(['authorization', 'content-type', 'x-helunemi-activity']);
+    if (!requested.includes('x-helunemi-activity') || requested.some(header => !allowedHeaders.has(header))) return false;
+  } else if (req.headers['x-helunemi-activity'] !== 'game-parlor') return false;
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Helunemi-Activity');
+  res.setHeader('Access-Control-Max-Age', '600');
+  res.setHeader('Vary', 'Origin');
+  return true;
+}
+function activityBearer(req) {
+  return /^Bearer ([A-Za-z0-9_-]{43})$/.exec(String(req.headers.authorization || ''))?.[1] || '';
+}
+function activityAccount(req) {
+  const token = activityBearer(req);
+  if (!token) return null;
+  const hash = sessionHash(token), now = Date.now();
+  return accounts.find(account => (account.activityTokens || []).some(item => item.hash === hash && Number(item.expiresAt) > now)) || null;
 }
 function emptyCommunity() {
   return { friends: [], friendRequestsSent: [], friendRequestsReceived: [], messages: [], bugReports: [] };
@@ -377,6 +433,12 @@ function normalizeAccount(account) {
   let changed = false;
   if (!account.role) { account.role = 'member'; changed = true; }
   if (!account.tickets || typeof account.tickets !== 'object') { account.tickets = { namecard: 0, who: 0 }; changed = true; }
+  const parlorCoins = Math.min(1000000000, Math.max(0, Math.floor(Number(account.parlorCoins) || 0)));
+  if (account.parlorCoins !== parlorCoins) { account.parlorCoins = parlorCoins; changed = true; }
+  const dailyRewardAt = Math.max(0, Math.floor(Number(account.parlorDailyRewardAt) || 0));
+  if (account.parlorDailyRewardAt !== dailyRewardAt) { account.parlorDailyRewardAt = dailyRewardAt; changed = true; }
+  const activityTokens = (Array.isArray(account.activityTokens) ? account.activityTokens : []).filter(item => item && /^[a-f0-9]{64}$/i.test(item.hash || '') && Number(item.expiresAt) > Date.now()).slice(-5).map(item => ({ hash: item.hash, createdAt: Math.max(0, Number(item.createdAt) || 0), expiresAt: Number(item.expiresAt) }));
+  if (JSON.stringify(activityTokens) !== JSON.stringify(account.activityTokens || [])) { account.activityTokens = activityTokens; changed = true; }
   const friendCardEngagement=cleanFriendCardEngagement(account.friendCardEngagement);
   if(JSON.stringify(friendCardEngagement)!==JSON.stringify(account.friendCardEngagement)){account.friendCardEngagement=friendCardEngagement;changed=true;}
   const personalInfo = cleanPersonalInfo(account.personalInfo);
@@ -795,7 +857,11 @@ async function removeAccountSessions(accountId, req, res) {
   await clearSession(req, res);
 }
 async function handleApi(req, res, pathname) {
-  if (!checkOrigin(req)) return send(res, 403, { error: 'This request was not accepted. Refresh Helunemi and try again.' });
+  const activityRoutes = new Set(['/api/activity/redeem', '/api/activity/account', '/api/activity/daily-reward', '/api/activity/revoke']);
+  if (activityRoutes.has(pathname)) {
+    if (!activityCors(req, res)) return send(res, 403, { error: 'The Game Parlor request is not allowed from this origin.' });
+    if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+  } else if (!checkOrigin(req)) return send(res, 403, { error: 'This request was not accepted. Refresh Helunemi and try again.' });
   if (req.method === 'POST' && ['/api/account/delete', '/api/account/pause', '/api/auth/link'].includes(pathname) && !allowAttempt(req, 'sensitive-action')) return send(res, 429, { error: 'Too many account security attempts. Try again in 15 minutes.' }, { 'Retry-After': '900' });
   await restoreExpiredAccounts();
   if (await friendCardLibrary.handle(req,res,pathname)) return;
@@ -808,6 +874,59 @@ async function handleApi(req, res, pathname) {
   if (req.method === 'GET' && pathname === '/api/me') {
     const account = await getAccount(req);
     return send(res, 200, { user: account ? privateProfile(account) : null });
+  }
+  if (req.method === 'POST' && pathname === '/api/activity/link-code') {
+    const account = await getAccount(req);
+    if (!account) return send(res, 401, { error: 'Log in to connect your Game Parlor account.' });
+    if (!activityOrigin()) return send(res, 503, { error: 'The Game Parlor origin is not configured on the Helunemi server.' });
+    if (!allowAttempt(req, 'activity-link-code')) return send(res, 429, { error: 'Too many link codes requested. Try again in 15 minutes.' }, { 'Retry-After': '900' });
+    const now = Date.now();
+    for (const [code, item] of activityLinkCodes) if (item.expiresAt <= now || item.accountId === account.id) activityLinkCodes.delete(code);
+    const code = String(crypto.randomInt(10000000, 100000000));
+    activityLinkCodes.set(code, { accountId: account.id, expiresAt: now + ACTIVITY_LINK_MS });
+    return send(res, 200, { code, expiresInSeconds: ACTIVITY_LINK_MS / 1000 });
+  }
+  if (req.method === 'POST' && pathname === '/api/activity/redeem') {
+    if (!allowAttempt(req, 'activity-redeem')) return send(res, 429, { error: 'Too many link attempts. Try again in 15 minutes.' }, { 'Retry-After': '900' });
+    const input = await readBody(req), code = typeof input.code === 'string' ? input.code.trim() : '';
+    if (!/^\d{8}$/.test(code)) return send(res, 400, { error: 'Enter the 8-digit code from your Helunemi account.' });
+    const link = activityLinkCodes.get(code);
+    if (!link || link.expiresAt <= Date.now()) return send(res, 401, { error: 'That code is invalid or expired. Generate a fresh code on Helunemi.' });
+    activityLinkCodes.delete(code);
+    const account = accounts.find(item => item.id === link.accountId);
+    if (!account) return send(res, 401, { error: 'That Helunemi account is no longer available.' });
+    const token = crypto.randomBytes(32).toString('base64url'), now = Date.now();
+    const previous = account.activityTokens || [];
+    account.activityTokens = [...previous.filter(item => Number(item.expiresAt) > now), { hash: sessionHash(token), createdAt: now, expiresAt: now + ACTIVITY_TOKEN_MS }].slice(-5);
+    try { await saveAccounts(); }
+    catch (error) { account.activityTokens = previous; throw error; }
+    return send(res, 201, { token, account: activityAccountSnapshot(account) });
+  }
+  if (req.method === 'GET' && pathname === '/api/activity/account') {
+    const account = activityAccount(req);
+    return account ? send(res, 200, { account: activityAccountSnapshot(account) }) : send(res, 401, { error: 'Reconnect your Helunemi account to continue.' });
+  }
+  if (req.method === 'POST' && pathname === '/api/activity/daily-reward') {
+    const account = activityAccount(req);
+    if (!account) return send(res, 401, { error: 'Reconnect your Helunemi account to collect Parlor Coins.' });
+    if (!allowAttempt(req, `activity-reward:${account.id}`)) return send(res, 429, { error: 'Too many reward attempts. Try again later.' }, { 'Retry-After': '900' });
+    const now = Date.now();
+    if (now - (Number(account.parlorDailyRewardAt) || 0) < 24 * 60 * 60 * 1000) return send(res, 409, { error: 'Your daily Parlor Coin reward is already collected.' });
+    const previous = { balance: account.parlorCoins, rewardedAt: account.parlorDailyRewardAt };
+    account.parlorCoins = Math.min(1000000000, (Number(account.parlorCoins) || 0) + ACTIVITY_DAILY_REWARD);
+    account.parlorDailyRewardAt = now;
+    try { await saveAccounts(); }
+    catch (error) { account.parlorCoins = previous.balance; account.parlorDailyRewardAt = previous.rewardedAt; throw error; }
+    return send(res, 200, { account: activityAccountSnapshot(account), reward: ACTIVITY_DAILY_REWARD });
+  }
+  if (req.method === 'POST' && pathname === '/api/activity/revoke') {
+    const account = activityAccount(req), token = activityBearer(req);
+    if (!account || !token) return send(res, 401, { error: 'Reconnect your Helunemi account before unlinking.' });
+    const previous = account.activityTokens || [], hash = sessionHash(token);
+    account.activityTokens = previous.filter(item => item.hash !== hash);
+    try { await saveAccounts(); }
+    catch (error) { account.activityTokens = previous; throw error; }
+    return send(res, 200, { message: 'This Game Parlor connection has been removed.' });
   }
   if (req.method === 'GET' && pathname === '/api/site-content') {
     const viewer = await getAccount(req);
@@ -1217,7 +1336,7 @@ async function handleApi(req, res, pathname) {
     const passwordHash = Buffer.from(await scrypt(password, salt, 64)).toString('hex');
     const id = crypto.randomUUID();
     if (claims && (accounts.some(item => item.firebaseUid === claims.uid) || pausedAccounts.some(item => item.account.firebaseUid === claims.uid || item.account.email?.toLowerCase() === String(claims.email).toLowerCase()))) return send(res, 409, { error: 'This verified email already has a Helunemi account. Log in instead.' });
-    const account = { id, salt, passwordHash, termsAcceptance: { version: TERMS_VERSION, acceptedAt: new Date().toISOString() }, ...(claims ? { firebaseUid: claims.uid, email: String(claims.email).toLowerCase(), emailVerified: true } : {}), role: 'member', tickets: { namecard: 0, who: 0 }, friendCardEngagement:{likes:[],ratings:[]}, community: emptyCommunity(),
+    const account = { id, salt, passwordHash, termsAcceptance: { version: TERMS_VERSION, acceptedAt: new Date().toISOString() }, ...(claims ? { firebaseUid: claims.uid, email: String(claims.email).toLowerCase(), emailVerified: true } : {}), role: 'member', tickets: { namecard: 0, who: 0 }, parlorCoins: 0, parlorDailyRewardAt: 0, activityTokens: [], friendCardEngagement:{likes:[],ratings:[]}, community: emptyCommunity(),
       profile: cleanProfile({ ...input.profile, username }, {}, true, id) };
     accounts.push(account);
     try { await saveAccounts(); }
